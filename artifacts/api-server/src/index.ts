@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { autoSeedIfEmpty, autoFixExpiredAllocations } from "./lib/auto-seed";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +16,26 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
+async function start() {
+  try {
+    await autoSeedIfEmpty();
+  } catch (err) {
+    logger.error({ err }, "[auto-seed] Seed failed — continuing server startup");
   }
 
-  logger.info({ port }, "Server listening");
-});
+  try {
+    await autoFixExpiredAllocations();
+  } catch (err) {
+    logger.error({ err }, "[auto-fix] Allocation date fix failed — continuing");
+  }
+
+  app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+    logger.info({ port }, "Server listening");
+  });
+}
+
+start();

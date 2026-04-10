@@ -1,0 +1,303 @@
+import { useState, useEffect } from "react";
+
+export const ROLES = [
+  "admin",
+  "executive",
+  "delivery_director",
+  "project_manager",
+  "consultant",
+  "resource_manager",
+  "finance_lead",
+  "sales",
+  "account_manager",
+  "client_stakeholder",
+] as const;
+
+export type Role = typeof ROLES[number];
+
+export const ROLE_LABELS: Record<Role, string> = {
+  admin:              "System Admin",
+  executive:          "Partner / Executive",
+  delivery_director:  "Delivery Director",
+  project_manager:    "Project Manager",
+  consultant:         "Consultant",
+  resource_manager:   "Resource Manager",
+  finance_lead:       "Finance Manager",
+  sales:              "Business Development",
+  account_manager:    "Account Manager",
+  client_stakeholder: "Client Contact",
+};
+
+export const ROLE_DESCRIPTIONS: Record<Role, string> = {
+  admin:              "System configuration, audit log, data health",
+  executive:          "Portfolio KPIs, revenue, account health",
+  delivery_director:  "Project escalations, overdue milestones, team capacity",
+  project_manager:    "Active projects, tasks, milestones, timesheets",
+  consultant:         "Log time, view assigned projects, update task status",
+  resource_manager:   "Staffing, utilization, capacity forecasting",
+  finance_lead:       "Invoices, contracts, finance, change orders",
+  sales:              "Opportunities, pipeline, renewal signals",
+  account_manager:    "Account health, CSAT, renewals, relationship management",
+  client_stakeholder: "Project updates, milestone status, invoices",
+};
+
+export interface DemoUser {
+  id: string;
+  name: string;
+  title: string;
+  role: Role;
+  initials: string;
+  resourceId?: number;
+}
+
+export const DEMO_USERS: DemoUser[] = [
+  // ── Admin (1) ───────────────────────────────────────────────────────────
+  { id: "rachel.nguyen",   name: "Rachel Nguyen",    title: "System Administrator",        role: "admin",              initials: "RN" },
+
+  // ── Executive (1) ───────────────────────────────────────────────────────
+  { id: "james.whitfield", name: "James Whitfield",  title: "Managing Partner",             role: "executive",          initials: "JW" },
+
+  // ── Delivery Director (1) ───────────────────────────────────────────────
+  { id: "jana.kovac",      name: "Jana Kovac",        title: "VP of Delivery",               role: "delivery_director",  initials: "JK", resourceId: 2 },
+
+  // ── Project Manager (3) ─────────────────────────────────────────────────
+  { id: "alex.okafor",     name: "Alex Okafor",       title: "Principal Project Manager",    role: "project_manager",    initials: "AO", resourceId: 1 },
+  { id: "priya.mehta",     name: "Priya Mehta",        title: "Senior Project Manager",       role: "project_manager",    initials: "PM" },
+  { id: "tom.kirkland",    name: "Tom Kirkland",       title: "Project Manager",              role: "project_manager",    initials: "TK" },
+
+  // ── Consultant (3) ──────────────────────────────────────────────────────
+  { id: "derek.tran",      name: "Derek Tran",         title: "QA Lead",                      role: "consultant",         initials: "DT", resourceId: 3 },
+  { id: "aisha.johnson",   name: "Aisha Johnson",      title: "Senior OTM Developer",         role: "consultant",         initials: "AJ", resourceId: 8 },
+  { id: "kevin.hart",      name: "Kevin Hart",         title: "Data Migration Specialist",    role: "consultant",         initials: "KH", resourceId: 5 },
+
+  // ── Resource Manager (2) ────────────────────────────────────────────────
+  { id: "maria.santos",    name: "Maria Santos",       title: "Resource Manager",             role: "resource_manager",   initials: "MS", resourceId: 4 },
+  { id: "ben.patterson",   name: "Ben Patterson",      title: "Staffing Coordinator",         role: "resource_manager",   initials: "BP" },
+
+  // ── Finance Manager (2) ─────────────────────────────────────────────────
+  { id: "sandra.liu",      name: "Sandra Liu",         title: "Finance Director",             role: "finance_lead",       initials: "SL" },
+  { id: "brendan.walsh",   name: "Brendan Walsh",      title: "Finance Analyst",              role: "finance_lead",       initials: "BW", resourceId: 9 },
+
+  // ── Business Development (2) ────────────────────────────────────────────
+  { id: "diana.flores",    name: "Diana Flores",       title: "Business Development Manager", role: "sales",              initials: "DF", resourceId: 10 },
+  { id: "chris.morgan",    name: "Chris Morgan",       title: "Senior Account Executive",     role: "sales",              initials: "CM" },
+
+  // ── Account Manager (2) ─────────────────────────────────────────────────
+  { id: "yuki.tanaka",     name: "Yuki Tanaka",        title: "Senior Account Manager",       role: "account_manager",    initials: "YT", resourceId: 6 },
+  { id: "carlos.rivera",   name: "Carlos Rivera",      title: "Account Manager",              role: "account_manager",    initials: "CR", resourceId: 7 },
+
+  // ── Client Stakeholder (2) ──────────────────────────────────────────────
+  { id: "robert.chen",     name: "Robert Chen",        title: "IT Director",                  role: "client_stakeholder", initials: "RC" },
+  { id: "angela.torres",   name: "Angela Torres",      title: "Supply Chain VP",              role: "client_stakeholder", initials: "AT" },
+];
+
+// Demo resource mapping — derived from DEMO_USERS for backward compat
+export const ROLE_DEMO_RESOURCE: Partial<Record<Role, { id: number; name: string }>> = {
+  admin:             { id: 1, name: "Alex Okafor" },
+  delivery_director: { id: 2, name: "Jana Kovac" },
+  project_manager:   { id: 1, name: "Alex Okafor" },
+  consultant:        { id: 3, name: "Derek Tran" },
+  resource_manager:  { id: 4, name: "Maria Santos" },
+};
+
+// ─── Permission Map ──────────────────────────────────────────────────────────
+
+export const PERMISSIONS = {
+  // Projects
+  createProject:            ["admin","delivery_director","project_manager"],
+  editProject:              ["admin","delivery_director","project_manager"],
+  deleteProject:            ["admin"],
+  changeProjectStatus:      ["admin","delivery_director","project_manager"],
+  viewProjectFinancials:    ["admin","executive","delivery_director","finance_lead","project_manager"],
+  // Milestones
+  createMilestone:          ["admin","delivery_director","project_manager"],
+  completeMilestone:        ["admin","delivery_director","project_manager"],
+  viewMilestoneBilling:     ["admin","finance_lead","executive","project_manager"],
+  // Tasks
+  createTask:               ["admin","delivery_director","project_manager"],
+  assignTask:               ["admin","delivery_director","project_manager"],
+  updateAnyTaskStatus:      ["admin","delivery_director","project_manager"],
+  // Timesheets
+  logTime:                  ["admin","delivery_director","project_manager","consultant","resource_manager"],
+  approveTimesheets:        ["admin","delivery_director","project_manager","resource_manager"],
+  viewAllTimesheets:        ["admin","delivery_director","resource_manager","finance_lead"],
+  // Accounts
+  createAccount:            ["admin","sales","account_manager"],
+  editAccount:              ["admin","sales","account_manager"],
+  viewAccountACV:           ["admin","executive","finance_lead","sales","account_manager"],
+  // Opportunities
+  createOpportunity:        ["admin","sales","account_manager"],
+  editOpportunity:          ["admin","sales","account_manager"],
+  markOpportunityWon:       ["admin","sales","delivery_director"],
+  executeHandoff:           ["admin","sales","delivery_director"],
+  // Contracts
+  createContract:           ["admin","finance_lead","account_manager"],
+  editContract:             ["admin","finance_lead"],
+  viewContractValue:        ["admin","executive","finance_lead","account_manager","project_manager"],
+  // Finance
+  viewWIPData:              ["admin","executive","finance_lead","delivery_director"],
+  viewMarginData:           ["admin","executive","finance_lead"],
+  viewLeakageData:          ["admin","finance_lead"],
+  viewReceivables:          ["admin","executive","finance_lead","delivery_director"],
+  // Invoices
+  createInvoice:            ["admin","finance_lead"],
+  markInvoicePaid:          ["admin","finance_lead"],
+  // Change Orders
+  createChangeOrder:        ["admin","delivery_director","project_manager","account_manager"],
+  approveChangeOrder:       ["admin","executive","delivery_director","finance_lead"],
+  advanceChangeOrderStage:  ["admin","delivery_director","account_manager","project_manager"],
+  // Resources
+  createResource:           ["admin","resource_manager","delivery_director"],
+  editResource:             ["admin","resource_manager","delivery_director"],
+  viewResourceRates:        ["admin","finance_lead","resource_manager"],
+  viewUtilization:          ["admin","delivery_director","resource_manager","project_manager"],
+  // Allocations
+  createAllocation:         ["admin","resource_manager","delivery_director","project_manager"],
+  removeAllocation:         ["admin","resource_manager","delivery_director"],
+  resolveConflicts:         ["admin","resource_manager","delivery_director"],
+  // Staffing Requests
+  createStaffingRequest:    ["admin","resource_manager","delivery_director","project_manager"],
+  approveStaffingRequest:   ["admin","resource_manager","delivery_director"],
+  cancelStaffingRequest:    ["admin","resource_manager","delivery_director","project_manager"],
+  // Templates (Project Blueprints)
+  createTemplate:           ["admin","delivery_director"],
+  editTemplate:             ["admin","delivery_director"],
+  useTemplate:              ["admin","delivery_director","project_manager"],
+  // Automations
+  enableAutomation:         ["admin","delivery_director"],
+  triggerAutomation:        ["admin"],
+  // Forms
+  createForm:               ["admin","delivery_director","project_manager","account_manager"],
+  viewFormResponses:        ["admin","delivery_director","project_manager","account_manager"],
+  // Portfolio
+  viewPortfolio:            ["admin","executive","delivery_director","sales","account_manager"],
+  viewDirectorView:         ["admin","executive","delivery_director"],
+  // Renewal Signals
+  actOnRenewalSignal:       ["admin","sales","account_manager"],
+  // Handover / Closure
+  editHandover:             ["admin","delivery_director","project_manager"],
+  signOffHandover:          ["admin","delivery_director"],
+  executeProjectClosure:    ["admin","delivery_director","project_manager"],
+  // Admin
+  viewAdminPanel:           ["admin"],
+  // Capacity
+  viewCapacityForecast:     ["admin","delivery_director","resource_manager","project_manager"],
+} as const satisfies Record<string, readonly Role[]>;
+
+export type Permission = keyof typeof PERMISSIONS;
+
+export function hasPermission(role: Role | null, permission: Permission): boolean {
+  if (!role) return false;
+  return (PERMISSIONS[permission] as readonly string[]).includes(role);
+}
+
+export function usePermission(permission: Permission): boolean {
+  const { role } = useAuthRole();
+  return hasPermission(role, permission);
+}
+
+// ─── Route-level role allowlists ─────────────────────────────────────────────
+
+export const ROUTE_ROLES: Record<string, readonly Role[]> = {
+  "/admin":               ["admin"],
+  "/dashboard/admin":     ["admin"],
+  "/dashboard/sales":     ["sales","admin"],
+  "/dashboard/am":        ["account_manager","admin"],
+  "/dashboard/pm":        ["project_manager","admin","delivery_director"],
+  "/portfolio":           ["admin","executive","delivery_director","sales","account_manager"],
+  "/finance":             ["admin","executive","finance_lead","delivery_director","project_manager"],
+  "/contracts":           ["admin","finance_lead","project_manager","account_manager"],
+  "/changes":             ["admin","finance_lead","project_manager","delivery_director","account_manager"],
+  "/invoices":            ["admin","executive","finance_lead","delivery_director","project_manager","account_manager"],
+  "/renewal-signals":     ["admin","sales","account_manager","delivery_director"],
+  "/staffing-requests":   ["admin","resource_manager","delivery_director","project_manager"],
+  "/capacity":            ["admin","resource_manager","delivery_director","project_manager"],
+  "/allocations":         ["admin","resource_manager","delivery_director","project_manager"],
+  "/automations":         ["admin","delivery_director"],
+  "/templates":           ["admin","delivery_director","project_manager"],
+  "/resources":           ["admin","delivery_director","resource_manager","project_manager","consultant"],
+  "/resources/:id":       ["admin","delivery_director","resource_manager","project_manager"],
+};
+
+const ROLE_KEY = "otmnow_role";
+const USER_KEY  = "otmnow_user_id";
+
+function readRoleFromStorage(): Role | null {
+  try {
+    const saved = localStorage.getItem(ROLE_KEY);
+    return ROLES.includes(saved as Role) ? (saved as Role) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readUserFromStorage(): DemoUser | null {
+  try {
+    const saved = localStorage.getItem(USER_KEY);
+    return DEMO_USERS.find(u => u.id === saved) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+let _role: Role | null = readRoleFromStorage();
+let _user: DemoUser | null = readUserFromStorage();
+const _listeners = new Set<() => void>();
+
+function notifyAll() {
+  _listeners.forEach(fn => fn());
+}
+
+export function setRoleGlobal(newRole: Role | null) {
+  _role = newRole;
+  try {
+    if (newRole) {
+      localStorage.setItem(ROLE_KEY, newRole);
+    } else {
+      localStorage.removeItem(ROLE_KEY);
+    }
+  } catch { }
+  notifyAll();
+}
+
+export function setUserGlobal(user: DemoUser | null) {
+  _user = user;
+  _role = user?.role ?? null;
+  try {
+    if (user) {
+      localStorage.setItem(USER_KEY, user.id);
+      localStorage.setItem(ROLE_KEY, user.role);
+    } else {
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(ROLE_KEY);
+    }
+  } catch { }
+  notifyAll();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === ROLE_KEY) {
+      _role = readRoleFromStorage();
+      notifyAll();
+    }
+    if (e.key === USER_KEY) {
+      _user = readUserFromStorage();
+      notifyAll();
+    }
+  });
+}
+
+export function useAuthRole() {
+  const [role, setLocalRole] = useState<Role | null>(() => _role);
+  const [user, setLocalUser] = useState<DemoUser | null>(() => _user);
+
+  useEffect(() => {
+    const sync = () => { setLocalRole(_role); setLocalUser(_user); };
+    _listeners.add(sync);
+    sync();
+    return () => { _listeners.delete(sync); };
+  }, []);
+
+  return { role, user, setRole: setRoleGlobal, setUser: setUserGlobal };
+}

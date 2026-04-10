@@ -1,22 +1,47 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: OTMNow Delivery Command Center API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: User management
+  - name: accounts
+    description: Account management
+  - name: projects
+    description: Project management
+  - name: resources
+    description: Resource management
+  - name: allocations
+    description: Resource allocations
+  - name: timesheets
+    description: Timesheet management
+  - name: milestones
+    description: Milestone tracking
+  - name: tasks
+    description: Task management
+  - name: invoices
+    description: Invoice management
+  - name: opportunities
+    description: Opportunities and pipeline
+  - name: dashboard
+    description: Dashboard aggregates and summaries
+  - name: changeRequests
+    description: Change request management
+  - name: notifications
+    description: Notification management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +49,933 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [accounts]
+      summary: List all accounts
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: segment
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+    post:
+      operationId: createAccount
+      tags: [accounts]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccountBody"
+      responses:
+        "201":
+          description: Created account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /accounts/{id}:
+    get:
+      operationId: getAccount
+      tags: [accounts]
+      summary: Get an account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+    put:
+      operationId: updateAccount
+      tags: [accounts]
+      summary: Update an account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountBody"
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: accountId
+          in: query
+          schema:
+            type: integer
+        - name: pmId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectBody"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectBody"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /milestones:
+    get:
+      operationId: listMilestones
+      tags: [milestones]
+      summary: List milestones
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: overdue
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of milestones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Milestone"
+    post:
+      operationId: createMilestone
+      tags: [milestones]
+      summary: Create a milestone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMilestoneBody"
+      responses:
+        "201":
+          description: Created milestone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+
+  /milestones/{id}:
+    get:
+      operationId: getMilestone
+      tags: [milestones]
+      summary: Get a milestone
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Milestone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+    put:
+      operationId: updateMilestone
+      tags: [milestones]
+      summary: Update a milestone
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMilestoneBody"
+      responses:
+        "200":
+          description: Updated milestone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: milestoneId
+          in: query
+          schema:
+            type: integer
+        - name: assignedTo
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskBody"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /resources:
+    get:
+      operationId: listResources
+      tags: [resources]
+      summary: List resources/consultants
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: skill
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Resource"
+    post:
+      operationId: createResource
+      tags: [resources]
+      summary: Create a resource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateResourceBody"
+      responses:
+        "201":
+          description: Created resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+
+  /resources/{id}:
+    get:
+      operationId: getResource
+      tags: [resources]
+      summary: Get a resource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+
+  /allocations:
+    get:
+      operationId: listAllocations
+      tags: [allocations]
+      summary: List resource allocations
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: resourceId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Allocation"
+    post:
+      operationId: createAllocation
+      tags: [allocations]
+      summary: Create an allocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAllocationBody"
+      responses:
+        "201":
+          description: Created allocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocation"
+
+  /timesheets:
+    get:
+      operationId: listTimesheets
+      tags: [timesheets]
+      summary: List timesheets
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: resourceId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: weekStart
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of timesheets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Timesheet"
+    post:
+      operationId: createTimesheet
+      tags: [timesheets]
+      summary: Create a timesheet entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTimesheetBody"
+      responses:
+        "201":
+          description: Created timesheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timesheet"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List invoices
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: accountId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    put:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /opportunities:
+    get:
+      operationId: listOpportunities
+      tags: [opportunities]
+      summary: List opportunities
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            type: string
+        - name: accountId
+          in: query
+          schema:
+            type: integer
+        - name: ownerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opportunity"
+    post:
+      operationId: createOpportunity
+      tags: [opportunities]
+      summary: Create an opportunity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOpportunityBody"
+      responses:
+        "201":
+          description: Created opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Opportunity"
+
+  /change-requests:
+    get:
+      operationId: listChangeRequests
+      tags: [changeRequests]
+      summary: List change requests
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of change requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChangeRequest"
+    post:
+      operationId: createChangeRequest
+      tags: [changeRequests]
+      summary: Create a change request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChangeRequestBody"
+      responses:
+        "201":
+          description: Created change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeRequest"
+
+  /change-requests/{id}:
+    get:
+      operationId: getChangeRequest
+      tags: [changeRequests]
+      summary: Get a change request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeRequest"
+    put:
+      operationId: updateChangeRequest
+      tags: [changeRequests]
+      summary: Update a change request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChangeRequestBody"
+      responses:
+        "200":
+          description: Updated change request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeRequest"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications for a user
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    put:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /dashboard/executive:
+    get:
+      operationId: getExecutiveDashboard
+      tags: [dashboard]
+      summary: Executive dashboard summary
+      responses:
+        "200":
+          description: Executive dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutiveDashboard"
+
+  /dashboard/delivery:
+    get:
+      operationId: getDeliveryDashboard
+      tags: [dashboard]
+      summary: Delivery director dashboard
+      responses:
+        "200":
+          description: Delivery dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryDashboard"
+
+  /dashboard/resources:
+    get:
+      operationId: getResourcesDashboard
+      tags: [dashboard]
+      summary: Resource manager dashboard
+      responses:
+        "200":
+          description: Resources dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourcesDashboard"
+
+  /dashboard/finance:
+    get:
+      operationId: getFinanceDashboard
+      tags: [dashboard]
+      summary: Finance lead dashboard
+      responses:
+        "200":
+          description: Finance dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceDashboard"
+
+  /dashboard/pipeline:
+    get:
+      operationId: getPipelineDashboard
+      tags: [dashboard]
+      summary: Sales pipeline dashboard
+      responses:
+        "200":
+          description: Pipeline dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineDashboard"
+
+  /dashboard/project/{projectId}:
+    get:
+      operationId: getProjectDashboard
+      tags: [dashboard]
+      summary: PM project dashboard
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDashboard"
+
+  /dashboard/utilization:
+    get:
+      operationId: getUtilizationSummary
+      tags: [dashboard]
+      summary: Resource utilization summary
+      responses:
+        "200":
+          description: Utilization data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UtilizationSummary"
+
+  /dashboard/activity:
+    get:
+      operationId: getActivityFeed
+      tags: [dashboard]
+      summary: Recent activity feed
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +986,1372 @@ components:
       required:
         - status
 
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, executive, delivery_director, project_manager, resource_manager, finance_lead, sales, solution_architect, technical_consultant, qa_analyst, ams_lead, client_stakeholder, partner]
+        title:
+          type: string
+        avatarUrl:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - role
+        - active
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        title:
+          type: string
+        avatarUrl:
+          type: string
+        active:
+          type: boolean
+      required:
+        - name
+        - email
+        - role
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        title:
+          type: string
+        avatarUrl:
+          type: string
+        active:
+          type: boolean
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        industry:
+          type: string
+        segment:
+          type: string
+          enum: [enterprise, mid_market, smb]
+        status:
+          type: string
+          enum: [active, inactive, prospect, at_risk, churned]
+        healthScore:
+          type: integer
+        annualContractValue:
+          type: number
+        accountOwnerId:
+          type: integer
+        region:
+          type: string
+        otmVersion:
+          type: string
+        cloudDeployment:
+          type: boolean
+        createdAt:
+          type: string
+        renewalDate:
+          type: string
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+
+    CreateAccountBody:
+      type: object
+      properties:
+        name:
+          type: string
+        industry:
+          type: string
+        segment:
+          type: string
+        status:
+          type: string
+        healthScore:
+          type: integer
+        annualContractValue:
+          type: number
+        accountOwnerId:
+          type: integer
+        region:
+          type: string
+        otmVersion:
+          type: string
+        cloudDeployment:
+          type: boolean
+        renewalDate:
+          type: string
+      required:
+        - name
+        - status
+
+    UpdateAccountBody:
+      type: object
+      properties:
+        name:
+          type: string
+        industry:
+          type: string
+        segment:
+          type: string
+        status:
+          type: string
+        healthScore:
+          type: integer
+        annualContractValue:
+          type: number
+        accountOwnerId:
+          type: integer
+        region:
+          type: string
+        otmVersion:
+          type: string
+        cloudDeployment:
+          type: boolean
+        renewalDate:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        type:
+          type: string
+          enum: [implementation, cloud_migration, ams, certification, rate_maintenance, data_acceleration]
+        status:
+          type: string
+          enum: [active, on_hold, completed, cancelled, at_risk, planning]
+        healthScore:
+          type: integer
+        pmId:
+          type: integer
+        pmName:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        goLiveDate:
+          type: string
+        budgetHours:
+          type: number
+        consumedHours:
+          type: number
+        budgetValue:
+          type: number
+        billedValue:
+          type: number
+        completionPct:
+          type: integer
+        visibility:
+          type: string
+          enum: [internal_only, shared_with_client, partner_limited]
+        description:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - accountId
+        - type
+        - status
+        - createdAt
+
+    CreateProjectBody:
+      type: object
+      properties:
+        name:
+          type: string
+        accountId:
+          type: integer
+        type:
+          type: string
+        status:
+          type: string
+        pmId:
+          type: integer
+        startDate:
+          type: string
+        endDate:
+          type: string
+        goLiveDate:
+          type: string
+        budgetHours:
+          type: number
+        budgetValue:
+          type: number
+        visibility:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+        - accountId
+        - type
+
+    UpdateProjectBody:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        healthScore:
+          type: integer
+        pmId:
+          type: integer
+        startDate:
+          type: string
+        endDate:
+          type: string
+        goLiveDate:
+          type: string
+        budgetHours:
+          type: number
+        budgetValue:
+          type: number
+        completionPct:
+          type: integer
+        visibility:
+          type: string
+        description:
+          type: string
+
+    Milestone:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        completedDate:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, completed, overdue, at_risk, blocked]
+        isBillable:
+          type: boolean
+        billableAmount:
+          type: number
+        invoiced:
+          type: boolean
+        visibility:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - name
+        - status
+        - createdAt
+
+    CreateMilestoneBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        status:
+          type: string
+        isBillable:
+          type: boolean
+        billableAmount:
+          type: number
+        visibility:
+          type: string
+      required:
+        - projectId
+        - name
+
+    UpdateMilestoneBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        dueDate:
+          type: string
+        completedDate:
+          type: string
+        status:
+          type: string
+        isBillable:
+          type: boolean
+        billableAmount:
+          type: number
+        invoiced:
+          type: boolean
+        visibility:
+          type: string
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        milestoneId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        assignedToId:
+          type: integer
+        assignedToName:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, review, done, blocked, cancelled]
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        dueDate:
+          type: string
+        estimatedHours:
+          type: number
+        loggedHours:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - name
+        - status
+        - priority
+        - createdAt
+
+    CreateTaskBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        milestoneId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        assignedToId:
+          type: integer
+        status:
+          type: string
+        priority:
+          type: string
+        dueDate:
+          type: string
+        estimatedHours:
+          type: number
+      required:
+        - projectId
+        - name
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        name:
+          type: string
+        title:
+          type: string
+        practiceArea:
+          type: string
+          enum: [implementation, cloud_migration, ams, qa_certification, integration, development, data_migration, rate_maintenance, pre_sales]
+        skills:
+          type: array
+          items:
+            type: string
+        utilizationTarget:
+          type: integer
+        currentUtilization:
+          type: integer
+        status:
+          type: string
+          enum: [available, allocated, over_allocated, bench, soft_booked, on_leave]
+        hourlyRate:
+          type: number
+        location:
+          type: string
+        isContractor:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - practiceArea
+        - status
+        - createdAt
+
+    CreateResourceBody:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        title:
+          type: string
+        practiceArea:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        utilizationTarget:
+          type: integer
+        hourlyRate:
+          type: number
+        location:
+          type: string
+        isContractor:
+          type: boolean
+        status:
+          type: string
+      required:
+        - name
+        - practiceArea
+
+    Allocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        resourceId:
+          type: integer
+        resourceName:
+          type: string
+        role:
+          type: string
+        allocationPct:
+          type: integer
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+          enum: [confirmed, soft_booked, tentative, ended]
+        hoursPerWeek:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - resourceId
+        - allocationPct
+        - status
+        - createdAt
+
+    CreateAllocationBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        resourceId:
+          type: integer
+        role:
+          type: string
+        allocationPct:
+          type: integer
+        startDate:
+          type: string
+        endDate:
+          type: string
+        status:
+          type: string
+        hoursPerWeek:
+          type: number
+      required:
+        - projectId
+        - resourceId
+        - allocationPct
+
+    Timesheet:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        resourceId:
+          type: integer
+        resourceName:
+          type: string
+        weekStart:
+          type: string
+        hoursLogged:
+          type: number
+        billableHours:
+          type: number
+        status:
+          type: string
+          enum: [draft, submitted, approved, rejected]
+        notes:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - resourceId
+        - weekStart
+        - hoursLogged
+        - status
+        - createdAt
+
+    CreateTimesheetBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        resourceId:
+          type: integer
+        weekStart:
+          type: string
+        hoursLogged:
+          type: number
+        billableHours:
+          type: number
+        status:
+          type: string
+        notes:
+          type: string
+      required:
+        - projectId
+        - resourceId
+        - weekStart
+        - hoursLogged
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        milestoneId:
+          type: integer
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [draft, sent, paid, overdue, disputed, cancelled]
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        paidDate:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - invoiceNumber
+        - projectId
+        - accountId
+        - amount
+        - status
+        - createdAt
+
+    CreateInvoiceBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        accountId:
+          type: integer
+        milestoneId:
+          type: integer
+        amount:
+          type: number
+        status:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        notes:
+          type: string
+      required:
+        - projectId
+        - accountId
+        - amount
+
+    UpdateInvoiceBody:
+      type: object
+      properties:
+        status:
+          type: string
+        dueDate:
+          type: string
+        paidDate:
+          type: string
+        notes:
+          type: string
+        amount:
+          type: number
+
+    Opportunity:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        stage:
+          type: string
+          enum: [prospect, qualification, proposal, negotiation, closed_won, closed_lost]
+        type:
+          type: string
+          enum: [implementation, cloud_migration, ams, certification, rate_maintenance, data_acceleration, custom_development]
+        value:
+          type: number
+        probability:
+          type: integer
+        expectedStartDate:
+          type: string
+        expectedCloseDate:
+          type: string
+        ownerId:
+          type: integer
+        ownerName:
+          type: string
+        staffingRisk:
+          type: string
+          enum: [none, low, medium, high]
+        notes:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - accountId
+        - stage
+        - type
+        - createdAt
+
+    CreateOpportunityBody:
+      type: object
+      properties:
+        name:
+          type: string
+        accountId:
+          type: integer
+        stage:
+          type: string
+        type:
+          type: string
+        value:
+          type: number
+        probability:
+          type: integer
+        expectedStartDate:
+          type: string
+        expectedCloseDate:
+          type: string
+        ownerId:
+          type: integer
+        staffingRisk:
+          type: string
+        notes:
+          type: string
+      required:
+        - name
+        - accountId
+        - stage
+        - type
+
+    ChangeRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        requestedById:
+          type: integer
+        requestedByName:
+          type: string
+        status:
+          type: string
+          enum: [draft, pending_review, approved, rejected, implemented]
+        impactHours:
+          type: number
+        impactCost:
+          type: number
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        submittedDate:
+          type: string
+        approvedDate:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - title
+        - status
+        - priority
+        - createdAt
+
+    CreateChangeRequestBody:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        requestedById:
+          type: integer
+        status:
+          type: string
+        impactHours:
+          type: number
+        impactCost:
+          type: number
+        priority:
+          type: string
+      required:
+        - projectId
+        - title
+        - priority
+
+    UpdateChangeRequestBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        impactHours:
+          type: number
+        impactCost:
+          type: number
+        priority:
+          type: string
+        approvedDate:
+          type: string
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [info, warning, error, success, action_required]
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        read:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - title
+        - message
+        - type
+        - read
+        - createdAt
+
+    ExecutiveDashboard:
+      type: object
+      properties:
+        totalActiveProjects:
+          type: integer
+        totalRevenue:
+          type: number
+        revenueAtRisk:
+          type: number
+        averageUtilization:
+          type: integer
+        upcomingGoLives:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        portfolioHealthBreakdown:
+          $ref: "#/components/schemas/HealthBreakdown"
+        revenueByMonth:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyRevenue"
+        marginWatch:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarginWatchItem"
+      required:
+        - totalActiveProjects
+        - totalRevenue
+        - revenueAtRisk
+        - averageUtilization
+        - upcomingGoLives
+        - portfolioHealthBreakdown
+        - revenueByMonth
+        - marginWatch
+
+    DeliveryDashboard:
+      type: object
+      properties:
+        activeProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        overdueMilestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        blockedProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        staffingConflicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffingConflict"
+        certificationCalendar:
+          type: array
+          items:
+            $ref: "#/components/schemas/CertificationEvent"
+      required:
+        - activeProjects
+        - overdueMilestones
+        - blockedProjects
+        - staffingConflicts
+        - certificationCalendar
+
+    ResourcesDashboard:
+      type: object
+      properties:
+        utilizationByConsultant:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourceUtilization"
+        overAllocated:
+          type: array
+          items:
+            $ref: "#/components/schemas/Resource"
+        onBench:
+          type: array
+          items:
+            $ref: "#/components/schemas/Resource"
+        softBooked:
+          type: array
+          items:
+            $ref: "#/components/schemas/Resource"
+        skillsGaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillsGap"
+      required:
+        - utilizationByConsultant
+        - overAllocated
+        - onBench
+        - softBooked
+        - skillsGaps
+
+    FinanceDashboard:
+      type: object
+      properties:
+        milestoneBillingQueue:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        uninvoicedHours:
+          type: number
+        uninvoicedValue:
+          type: number
+        receivables:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        marginVariance:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarginVariance"
+        contractStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractStatus"
+      required:
+        - milestoneBillingQueue
+        - uninvoicedHours
+        - uninvoicedValue
+        - receivables
+        - marginVariance
+        - contractStatus
+
+    PipelineDashboard:
+      type: object
+      properties:
+        pipelineByStage:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineStage"
+        totalPipelineValue:
+          type: number
+        opportunities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Opportunity"
+        tentativeStarts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Opportunity"
+        staffingRiskByOpp:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffingRiskItem"
+        proposalsPending:
+          type: integer
+      required:
+        - pipelineByStage
+        - totalPipelineValue
+        - opportunities
+        - tentativeStarts
+        - staffingRiskByOpp
+        - proposalsPending
+
+    ProjectDashboard:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+        pendingApprovals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChangeRequest"
+        allocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Allocation"
+        budgetBurn:
+          $ref: "#/components/schemas/BudgetBurn"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+      required:
+        - project
+        - milestones
+        - pendingApprovals
+        - allocations
+        - budgetBurn
+        - recentActivity
+
+    UtilizationSummary:
+      type: object
+      properties:
+        averageUtilization:
+          type: integer
+        byPracticeArea:
+          type: array
+          items:
+            $ref: "#/components/schemas/PracticeAreaUtilization"
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/UtilizationTrendPoint"
+        headcountByStatus:
+          type: object
+          properties:
+            allocated:
+              type: integer
+            available:
+              type: integer
+            bench:
+              type: integer
+            overAllocated:
+              type: integer
+      required:
+        - averageUtilization
+        - byPracticeArea
+        - trend
+        - headcountByStatus
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        message:
+          type: string
+        userId:
+          type: integer
+        userName:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        entityName:
+          type: string
+        timestamp:
+          type: string
+      required:
+        - id
+        - type
+        - message
+        - timestamp
+
+    HealthBreakdown:
+      type: object
+      properties:
+        green:
+          type: integer
+        yellow:
+          type: integer
+        red:
+          type: integer
+      required:
+        - green
+        - yellow
+        - red
+
+    MonthlyRevenue:
+      type: object
+      properties:
+        month:
+          type: string
+        billed:
+          type: number
+        collected:
+          type: number
+        target:
+          type: number
+      required:
+        - month
+        - billed
+        - collected
+        - target
+
+    MarginWatchItem:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        budgetedMargin:
+          type: number
+        actualMargin:
+          type: number
+        variance:
+          type: number
+      required:
+        - projectId
+        - projectName
+        - budgetedMargin
+        - actualMargin
+        - variance
+
+    StaffingConflict:
+      type: object
+      properties:
+        resourceId:
+          type: integer
+        resourceName:
+          type: string
+        projects:
+          type: array
+          items:
+            type: string
+        overAllocationPct:
+          type: integer
+      required:
+        - resourceId
+        - resourceName
+        - projects
+        - overAllocationPct
+
+    CertificationEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        releaseVersion:
+          type: string
+        scheduledDate:
+          type: string
+        accountName:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - name
+        - scheduledDate
+        - status
+
+    ResourceUtilization:
+      type: object
+      properties:
+        resourceId:
+          type: integer
+        resourceName:
+          type: string
+        title:
+          type: string
+        utilization:
+          type: integer
+        target:
+          type: integer
+        status:
+          type: string
+        projects:
+          type: array
+          items:
+            type: string
+      required:
+        - resourceId
+        - resourceName
+        - utilization
+        - target
+        - status
+
+    SkillsGap:
+      type: object
+      properties:
+        skill:
+          type: string
+        demand:
+          type: integer
+        supply:
+          type: integer
+        gap:
+          type: integer
+      required:
+        - skill
+        - demand
+        - supply
+        - gap
+
+    MarginVariance:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        budgeted:
+          type: number
+        actual:
+          type: number
+        variance:
+          type: number
+      required:
+        - projectId
+        - projectName
+        - budgeted
+        - actual
+        - variance
+
+    ContractStatus:
+      type: object
+      properties:
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        contractValue:
+          type: number
+        renewalDate:
+          type: string
+        status:
+          type: string
+      required:
+        - accountId
+        - accountName
+        - contractValue
+        - renewalDate
+        - status
+
+    PipelineStage:
+      type: object
+      properties:
+        stage:
+          type: string
+        count:
+          type: integer
+        value:
+          type: number
+      required:
+        - stage
+        - count
+        - value
+
+    StaffingRiskItem:
+      type: object
+      properties:
+        opportunityId:
+          type: integer
+        opportunityName:
+          type: string
+        risk:
+          type: string
+        missingSkills:
+          type: array
+          items:
+            type: string
+      required:
+        - opportunityId
+        - opportunityName
+        - risk
+
+    BudgetBurn:
+      type: object
+      properties:
+        budgetHours:
+          type: number
+        consumedHours:
+          type: number
+        budgetValue:
+          type: number
+        billedValue:
+          type: number
+        burnRate:
+          type: number
+        projectedOverrun:
+          type: number
+      required:
+        - budgetHours
+        - consumedHours
+        - budgetValue
+        - billedValue
+        - burnRate
+        - projectedOverrun
+
+    PracticeAreaUtilization:
+      type: object
+      properties:
+        practiceArea:
+          type: string
+        utilization:
+          type: integer
+        headcount:
+          type: integer
+      required:
+        - practiceArea
+        - utilization
+        - headcount
+
+    UtilizationTrendPoint:
+      type: object
+      properties:
+        week:
+          type: string
+        utilization:
+          type: integer
+      required:
+        - week
+        - utilization
