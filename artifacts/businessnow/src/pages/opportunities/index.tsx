@@ -4,6 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useListOpportunities } from "@workspace/api-client-react";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, AlertTriangle, TrendingUp, Users, DollarSign, Plus, GripVertical } from "lucide-react";
@@ -167,6 +171,159 @@ function DroppableStageColumn({
   );
 }
 
+const OPP_TYPES = [
+  { value: "implementation",    label: "Implementation" },
+  { value: "cloud_migration",   label: "Cloud Migration" },
+  { value: "ams",               label: "AMS" },
+  { value: "certification",     label: "Certification" },
+  { value: "rate_maintenance",  label: "Rate Maintenance" },
+  { value: "custom_development",label: "Custom Development" },
+  { value: "data_services",     label: "Data Services" },
+];
+
+function NewOpportunityDialog({ open, onClose, onCreated }: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const [form, setForm] = useState({
+    name: "",
+    accountId: "",
+    type: "implementation",
+    value: "",
+    probability: "50",
+    expectedCloseDate: "",
+    ownerId: "",
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/accounts").then(r => r.json()).then(setAccounts).catch(() => {});
+    fetch("/api/users").then(r => r.json()).then(setUsers).catch(() => {});
+  }, [open]);
+
+  function set(key: string, val: string) {
+    setForm(f => ({ ...f, [key]: val }));
+    setError("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Name is required."); return; }
+    if (!form.accountId) { setError("Please select an account."); return; }
+
+    const account = accounts.find(a => String(a.id) === form.accountId);
+    const owner = users.find(u => String(u.id) === form.ownerId);
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          accountId: parseInt(form.accountId),
+          accountName: account?.name ?? undefined,
+          type: form.type,
+          value: form.value ? parseFloat(form.value) : undefined,
+          probability: form.probability ? parseInt(form.probability) : 50,
+          expectedCloseDate: form.expectedCloseDate || undefined,
+          ownerId: form.ownerId && form.ownerId !== "__none__" ? parseInt(form.ownerId) : undefined,
+          ownerName: owner?.name ?? undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error ?? "Failed to create opportunity.");
+        return;
+      }
+      onCreated();
+      onClose();
+      setForm({ name: "", accountId: "", type: "implementation", value: "", probability: "50", expectedCloseDate: "", ownerId: "" });
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>New Opportunity</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="opp-name">Opportunity Name <span className="text-destructive">*</span></Label>
+            <Input id="opp-name" placeholder="e.g. Apex TMS Phase 2 Implementation" value={form.name} onChange={e => set("name", e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Account <span className="text-destructive">*</span></Label>
+            <Select value={form.accountId} onValueChange={v => set("accountId", v)}>
+              <SelectTrigger><SelectValue placeholder="Select account…" /></SelectTrigger>
+              <SelectContent>
+                {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={form.type} onValueChange={v => set("type", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {OPP_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="opp-prob">Probability (%)</Label>
+              <Input id="opp-prob" type="number" min={0} max={100} value={form.probability} onChange={e => set("probability", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="opp-value">Estimated Value ($)</Label>
+              <Input id="opp-value" type="number" min={0} placeholder="e.g. 250000" value={form.value} onChange={e => set("value", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="opp-close">Expected Close Date</Label>
+              <Input id="opp-close" type="date" value={form.expectedCloseDate} onChange={e => set("expectedCloseDate", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Owner (optional)</Label>
+            <Select value={form.ownerId} onValueChange={v => set("ownerId", v)}>
+              <SelectTrigger><SelectValue placeholder="Assign owner…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— No owner —</SelectItem>
+                {users.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.role?.replace(/_/g, " ")})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Opportunity"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function OpportunitiesPipeline() {
   const { data: oppsData, isLoading, refetch } = useListOpportunities();
   const { role } = useAuthRole();
@@ -174,6 +331,7 @@ export default function OpportunitiesPipeline() {
   const [filter, setFilter] = useState<"all" | "active" | "won">("active");
   const [localOpps, setLocalOpps] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [showNewOpp, setShowNewOpp] = useState(false);
 
   useEffect(() => {
     if (oppsData) setLocalOpps(oppsData);
@@ -238,6 +396,7 @@ export default function OpportunitiesPipeline() {
   }
 
   return (
+    <>
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="p-6 space-y-5 max-w-[1800px] mx-auto">
         <div className="flex items-center justify-between">
@@ -258,7 +417,7 @@ export default function OpportunitiesPipeline() {
               ))}
             </div>
             {canCreate && (
-              <Button size="sm" className="gap-1.5">
+              <Button size="sm" className="gap-1.5" onClick={() => setShowNewOpp(true)}>
                 <Plus className="h-3.5 w-3.5" /> New Opportunity
               </Button>
             )}
@@ -301,5 +460,12 @@ export default function OpportunitiesPipeline() {
         ) : null}
       </DragOverlay>
     </DndContext>
+
+    <NewOpportunityDialog
+      open={showNewOpp}
+      onClose={() => setShowNewOpp(false)}
+      onCreated={() => refetch()}
+    />
+    </>
   );
 }

@@ -5,10 +5,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { format, addMonths, startOfMonth, differenceInDays, parseISO } from "date-fns";
 import { Link, useLocation } from "wouter";
-import { LayoutGrid, List, GanttChartSquare, Search, X, GripVertical } from "lucide-react";
+import { LayoutGrid, List, GanttChartSquare, Search, X, GripVertical, Plus } from "lucide-react";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
@@ -506,12 +510,201 @@ function ConsolidatedGanttView({ filterStatus, search }: { filterStatus: string;
   );
 }
 
+const PROJECT_TYPES = [
+  { value: "implementation",     label: "Implementation" },
+  { value: "cloud_migration",    label: "Cloud Migration" },
+  { value: "ams",                label: "AMS" },
+  { value: "certification",      label: "Certification" },
+  { value: "rate_maintenance",   label: "Rate Maintenance" },
+  { value: "data_acceleration",  label: "Data Acceleration" },
+];
+
+function NewProjectDialog({ open, onClose, onCreated }: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [, navigate] = useLocation();
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [pms, setPms] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const [form, setForm] = useState({
+    name: "",
+    accountId: "",
+    type: "implementation",
+    status: "active",
+    startDate: "",
+    endDate: "",
+    budgetHours: "",
+    budgetValue: "",
+    pmId: "",
+    description: "",
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/accounts").then(r => r.json()).then(setAccounts).catch(() => {});
+    fetch("/api/users").then(r => r.json())
+      .then((users: any[]) => setPms(users.filter(u => ["project_manager", "delivery_director", "admin"].includes(u.role))))
+      .catch(() => {});
+  }, [open]);
+
+  function set(key: string, val: string) {
+    setForm(f => ({ ...f, [key]: val }));
+    setError("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Project name is required."); return; }
+    if (!form.accountId) { setError("Please select an account."); return; }
+
+    const account = accounts.find(a => String(a.id) === form.accountId);
+    const pm = pms.find(u => String(u.id) === form.pmId);
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          accountId: parseInt(form.accountId),
+          accountName: account?.name ?? undefined,
+          type: form.type,
+          status: form.status,
+          startDate: form.startDate || undefined,
+          endDate: form.endDate || undefined,
+          budgetHours: form.budgetHours || undefined,
+          budgetValue: form.budgetValue || undefined,
+          pmId: form.pmId && form.pmId !== "__none__" ? parseInt(form.pmId) : undefined,
+          pmName: pm?.name ?? undefined,
+          description: form.description || undefined,
+          completionPct: 0,
+          healthScore: 80,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error ?? "Failed to create project.");
+        return;
+      }
+      const project = await res.json();
+      onCreated();
+      onClose();
+      setForm({ name: "", accountId: "", type: "implementation", status: "active", startDate: "", endDate: "", budgetHours: "", budgetValue: "", pmId: "", description: "" });
+      navigate(`/projects/${project.id}`);
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>New Project</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          <div className="space-y-1.5">
+            <Label htmlFor="proj-name">Project Name <span className="text-destructive">*</span></Label>
+            <Input id="proj-name" placeholder="e.g. GlobalTrans Phase 3 Implementation" value={form.name} onChange={e => set("name", e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Account <span className="text-destructive">*</span></Label>
+            <Select value={form.accountId} onValueChange={v => set("accountId", v)}>
+              <SelectTrigger><SelectValue placeholder="Select account…" /></SelectTrigger>
+              <SelectContent>
+                {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <Select value={form.type} onValueChange={v => set("type", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PROJECT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Initial Status</Label>
+              <Select value={form.status} onValueChange={v => set("status", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="proj-start">Start Date</Label>
+              <Input id="proj-start" type="date" value={form.startDate} onChange={e => set("startDate", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="proj-end">End Date</Label>
+              <Input id="proj-end" type="date" value={form.endDate} onChange={e => set("endDate", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="proj-hours">Budget Hours</Label>
+              <Input id="proj-hours" type="number" min={0} placeholder="e.g. 1200" value={form.budgetHours} onChange={e => set("budgetHours", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="proj-value">Budget Value ($)</Label>
+              <Input id="proj-value" type="number" min={0} placeholder="e.g. 350000" value={form.budgetValue} onChange={e => set("budgetValue", e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Project Manager (optional)</Label>
+            <Select value={form.pmId} onValueChange={v => set("pmId", v)}>
+              <SelectTrigger><SelectValue placeholder="Assign PM…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— No PM assigned —</SelectItem>
+                {pms.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="proj-desc">Description (optional)</Label>
+            <Textarea id="proj-desc" placeholder="Brief scope or project overview…" rows={3} value={form.description} onChange={e => set("description", e.target.value)} />
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Project"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ProjectsList() {
   const { data: projectsData, isLoading, refetch } = useListProjects();
   const [localProjects, setLocalProjects] = useState<any[]>([]);
   const [view, setView] = useState<"kanban" | "table" | "gantt">("kanban");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [showNewProject, setShowNewProject] = useState(false);
   useEffect(() => {
     if (projectsData) setLocalProjects(projectsData);
   }, [projectsData]);
@@ -564,6 +757,7 @@ export default function ProjectsList() {
   }
 
   return (
+    <>
     <div className="p-6 space-y-5 max-w-[1600px] mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -574,16 +768,21 @@ export default function ProjectsList() {
             {view === "kanban" && <span className="ml-2 text-xs text-muted-foreground/70">· drag cards to change status</span>}
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1 shrink-0">
-          <Button variant={view === "kanban" ? "default" : "ghost"} size="sm" onClick={() => setView("kanban")} className="h-7 px-2.5">
-            <LayoutGrid className="h-3.5 w-3.5 mr-1.5" /> Kanban
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" className="gap-1.5" onClick={() => setShowNewProject(true)}>
+            <Plus className="h-3.5 w-3.5" /> New Project
           </Button>
-          <Button variant={view === "table" ? "default" : "ghost"} size="sm" onClick={() => setView("table")} className="h-7 px-2.5">
-            <List className="h-3.5 w-3.5 mr-1.5" /> Table
-          </Button>
-          <Button variant={view === "gantt" ? "default" : "ghost"} size="sm" onClick={() => setView("gantt")} className="h-7 px-2.5">
-            <GanttChartSquare className="h-3.5 w-3.5 mr-1.5" /> Gantt
-          </Button>
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <Button variant={view === "kanban" ? "default" : "ghost"} size="sm" onClick={() => setView("kanban")} className="h-7 px-2.5">
+              <LayoutGrid className="h-3.5 w-3.5 mr-1.5" /> Kanban
+            </Button>
+            <Button variant={view === "table" ? "default" : "ghost"} size="sm" onClick={() => setView("table")} className="h-7 px-2.5">
+              <List className="h-3.5 w-3.5 mr-1.5" /> Table
+            </Button>
+            <Button variant={view === "gantt" ? "default" : "ghost"} size="sm" onClick={() => setView("gantt")} className="h-7 px-2.5">
+              <GanttChartSquare className="h-3.5 w-3.5 mr-1.5" /> Gantt
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -648,5 +847,12 @@ export default function ProjectsList() {
       )}
 
     </div>
+
+    <NewProjectDialog
+      open={showNewProject}
+      onClose={() => setShowNewProject(false)}
+      onCreated={() => refetch()}
+    />
+    </>
   );
 }
