@@ -197,14 +197,12 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4">
-                  <ResponsiveContainer width={120} height={120}>
-                    <PieChart>
-                      <Pie data={statusGroups} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={2} dataKey="value" strokeWidth={0}>
-                        {statusGroups.map((s, i) => <Cell key={i} fill={s.color} />)}
-                      </Pie>
-                      <RTooltip formatter={(v: any, name: any) => [v, name]} contentStyle={{ fontSize: 11, padding: "4px 8px" }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <PieChart width={120} height={120}>
+                    <Pie data={statusGroups} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={2} dataKey="value" strokeWidth={0}>
+                      {statusGroups.map((s, i) => <Cell key={i} fill={s.color} />)}
+                    </Pie>
+                    <RTooltip formatter={(v: any, name: any) => [v, name]} contentStyle={{ fontSize: 11, padding: "4px 8px" }} />
+                  </PieChart>
                   <div className="flex flex-col gap-2 flex-1">
                     {statusGroups.map(s => (
                       <div key={s.name} className="flex items-center justify-between">
