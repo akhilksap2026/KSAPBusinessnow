@@ -91,13 +91,16 @@ export const DEMO_USERS: DemoUser[] = [
   { id: "angela.torres",   name: "Angela Torres",      title: "Supply Chain VP",              role: "client_stakeholder", initials: "AT" },
 ];
 
-// Demo resource mapping — derived from DEMO_USERS for backward compat
+// Demo resource mapping — IDs match the auto-seed insertion order (1-indexed).
+// Seed order: [0]=Rachel(id 1), [1]=Jana(id 2), [2]=Sandra(id 3), [3]=Ben(id 4),
+// [4]=Maria(id 5), [5]=Alex(id 6), [6]=Priya(id 7), [7]=Tom(id 8),
+// [8]=Derek Tran(id 9), [9]=Aisha(id 10), ... [18]=Kevin Hart(id 19)
 export const ROLE_DEMO_RESOURCE: Partial<Record<Role, { id: number; name: string }>> = {
-  admin:             { id: 1, name: "Alex Okafor" },
-  delivery_director: { id: 2, name: "Jana Kovac" },
-  project_manager:   { id: 1, name: "Alex Okafor" },
-  consultant:        { id: 3, name: "Derek Tran" },
-  resource_manager:  { id: 4, name: "Maria Santos" },
+  admin:             { id: 1,  name: "Rachel Nguyen" },
+  delivery_director: { id: 2,  name: "Jana Kovac" },
+  project_manager:   { id: 6,  name: "Alex Okafor" },
+  consultant:        { id: 9,  name: "Derek Tran" },
+  resource_manager:  { id: 5,  name: "Maria Santos" },
 };
 
 // ─── Permission Map ──────────────────────────────────────────────────────────

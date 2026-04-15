@@ -1,0 +1,60 @@
+You are an expert senior full-stack engineer maintaining the KSAP RPM internal platform (Next.js / React + Tailwind + TypeScript).
+The project already exists in this Replit. Your task is NOT to rebuild from scratch. Instead:
+
+Analyze the current codebase thoroughly (all files, components, state management, routing, localStorage usage, etc.).
+Validate whether the existing implementation correctly matches the exact end-to-end consultant time entry journey described below.
+If anything is missing, incorrect, incomplete, or violates the rules → modify/fix it incrementally with minimal breaking changes. Preserve all working parts.
+After changes, confirm what was fixed and suggest the next test steps.
+
+Exact Required Journey (Consultant Role Only)
+User: Consultant "Alex Rivera" (Employee role)
+Strict Rules to Enforce (all must be working):
+
+Consultant can only see and select projects he is assigned to (hard-coded: "OTM WMS Implementation – Acme Corp" and "Staff Aug – Beta Retail").
+Project "Legacy Migration – Gamma Bank" must be completely invisible to him.
+Timesheet is a weekly grid (Mon–Sun columns, weekends grayed).
+Hours input: only 0.25 increments (reject 1.3, 2.7, etc. with clear error).
+Daily total ≤ 24 hours (hard block).
+Clicking a cell opens a context modal containing:
+Mandatory Description field (block save/submit if empty).
+Billable toggle (defaults from project type).
+Time Category dropdown (Development, Project Management, Travel, Training, Admin).
+
+New Milestone / Task Proportionality Guardrail (critical):
+Time must be linked to a specific Task under a Phase.
+Consultant can only log hours ≤ remaining hours on that task (Estimated_Hours – Actual_Hours logged so far).
+Show clear red error if exceeded: “Hours exceed remaining work on this task. Remaining: X.XX hrs”.
+
+Other hard validations:
+Project must be Active status.
+Entry date within consultant’s Hire/Termination dates.
+All blocks must show inline or modal error messages (never silent).
+
+Submit Timesheet button changes status from Draft → Submitted with success toast.
+
+Approval Chain Simulation (must work via role switch):
+
+Top-right “Switch Role” button to become PM "Sarah Chen".
+PM sees Approval Queue with Alex’s submitted timesheet.
+PM can Approve or Reject (rejection requires mandatory reason text).
+On Approve → status becomes PM Approved.
+Switch to Finance role → approved hours appear in Pending Billing Queue.
+Finance can generate a Draft Invoice showing calculated billing amount (use mock rate e.g. $125/hr).
+
+Additional Requirements
+
+Use existing styling, components, and patterns already in the project.
+Persist all data in localStorage (or current state solution) so progress survives refresh.
+Sidebar should show real-time weekly capacity preview with color coding (green/yellow/red).
+All guardrails from the original KSAP Feature Spec and Architecture must be respected (no time on non-team projects, description mandatory, etc.).
+
+Instructions for You
+
+First, explore and summarize what currently exists for the timesheet grid, context modal, validations, project filtering, task linking, approval flow, and invoice generation.
+Then, list gaps or incorrect behaviors you find.
+Fix them one by one (or in small logical groups) with clear comments in the code explaining the changes.
+After fixes, provide a short validation checklist of what now works correctly.
+Finally, suggest the exact next test steps I should perform in the browser.
+
+Do not rewrite large unrelated parts. Keep changes focused and incremental.
+Start by analyzing the current code, then proceed with validation and fixes.
