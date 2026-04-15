@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { format, addDays, startOfWeek } from "date-fns";
-import { User, Users, AlertTriangle, TrendingDown, Briefcase, MapPin, Star, Search, Plus, X } from "lucide-react";
+import { User, Users, AlertTriangle, TrendingDown, Briefcase, MapPin, Star, Search, Plus, X, UserPlus } from "lucide-react";
 import { useAuthRole } from "@/lib/auth";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -372,6 +379,206 @@ function RiskView({ resources }: { resources: Resource[] }) {
   );
 }
 
+// ─── Add Employee Modal ───────────────────────────────────────────────────────
+
+type EmpForm = {
+  name: string; title: string; practiceArea: string; employmentType: string;
+  status: string; location: string; hourlyRate: string; utilizationTarget: string;
+  skills: string; bio: string;
+};
+
+const defaultEmpForm = (): EmpForm => ({
+  name: "", title: "", practiceArea: "implementation", employmentType: "employee",
+  status: "available", location: "", hourlyRate: "", utilizationTarget: "80",
+  skills: "", bio: "",
+});
+
+function AddEmployeeModal({ open, onClose, onCreated }: {
+  open: boolean; onClose: () => void; onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [form, setForm] = useState<EmpForm>(defaultEmpForm());
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof EmpForm, string>>>({});
+
+  useEffect(() => { if (open) { setForm(defaultEmpForm()); setErrors({}); } }, [open]);
+
+  const set = <K extends keyof EmpForm>(k: K, v: EmpForm[K]) => setForm(f => ({ ...f, [k]: v }));
+
+  const validate = () => {
+    const e: typeof errors = {};
+    if (!form.name.trim()) e.name = "Name is required";
+    if (form.hourlyRate && isNaN(parseFloat(form.hourlyRate))) e.hourlyRate = "Must be a valid number";
+    const ut = parseInt(form.utilizationTarget);
+    if (isNaN(ut) || ut < 0 || ut > 200) e.utilizationTarget = "Must be 0–200";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const skillsArr = form.skills.trim()
+        ? form.skills.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        practiceArea: form.practiceArea,
+        employmentType: form.employmentType,
+        status: form.status,
+        utilizationTarget: parseInt(form.utilizationTarget) || 80,
+        isContractor: form.employmentType !== "employee",
+        skills: skillsArr,
+      };
+      if (form.title)      payload.title = form.title.trim();
+      if (form.location)   payload.location = form.location.trim();
+      if (form.hourlyRate) payload.hourlyRate = parseFloat(form.hourlyRate);
+      if (form.bio)        payload.bio = form.bio.trim();
+
+      const res = await fetch(`${API}/resources`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Failed to create employee"); }
+      const created = await res.json();
+      toast({ title: `${created.name} added to the team` });
+      onCreated(); onClose();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const STATUSES = [
+    { value: "available", label: "Available" },
+    { value: "allocated", label: "Allocated" },
+    { value: "bench", label: "On Bench" },
+    { value: "on_leave", label: "On Leave" },
+  ];
+
+  const EMP_TYPES = [
+    { value: "employee", label: "Employee" },
+    { value: "contractor", label: "Contractor" },
+    { value: "partner", label: "Partner" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-primary" /> Add Team Member
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="emp-name">Full Name <span className="text-red-500">*</span></Label>
+            <Input id="emp-name" placeholder="e.g. Jordan Lee" value={form.name}
+              onChange={e => set("name", e.target.value)}
+              className={errors.name ? "border-red-500" : ""} autoFocus />
+            {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+          </div>
+
+          {/* Title */}
+          <div className="space-y-1.5">
+            <Label htmlFor="emp-title">Job Title</Label>
+            <Input id="emp-title" placeholder="e.g. Senior OTM Consultant"
+              value={form.title} onChange={e => set("title", e.target.value)} />
+          </div>
+
+          {/* Employment Type + Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Employment Type</Label>
+              <Select value={form.employmentType} onValueChange={v => set("employmentType", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {EMP_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={v => set("status", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Practice Area */}
+          <div className="space-y-1.5">
+            <Label>Practice Area</Label>
+            <Select value={form.practiceArea} onValueChange={v => set("practiceArea", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(PRACTICE_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Location + Hourly Rate */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="emp-location">Location</Label>
+              <Input id="emp-location" placeholder="e.g. Toronto, ON"
+                value={form.location} onChange={e => set("location", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="emp-rate">Hourly Rate ($)</Label>
+              <Input id="emp-rate" placeholder="e.g. 125"
+                value={form.hourlyRate} onChange={e => set("hourlyRate", e.target.value)}
+                className={errors.hourlyRate ? "border-red-500" : ""} />
+              {errors.hourlyRate && <p className="text-xs text-red-500">{errors.hourlyRate}</p>}
+            </div>
+          </div>
+
+          {/* Utilization Target */}
+          <div className="space-y-1.5">
+            <Label htmlFor="emp-util">Utilization Target (%)</Label>
+            <Input id="emp-util" placeholder="80" value={form.utilizationTarget}
+              onChange={e => set("utilizationTarget", e.target.value)}
+              className={errors.utilizationTarget ? "border-red-500" : ""} />
+            {errors.utilizationTarget && <p className="text-xs text-red-500">{errors.utilizationTarget}</p>}
+          </div>
+
+          {/* Skills */}
+          <div className="space-y-1.5">
+            <Label htmlFor="emp-skills">Skills <span className="text-muted-foreground text-xs">(comma-separated)</span></Label>
+            <Input id="emp-skills" placeholder="e.g. OTM, Oracle Cloud, SQL, Rate Management"
+              value={form.skills} onChange={e => set("skills", e.target.value)} />
+          </div>
+
+          {/* Bio */}
+          <div className="space-y-1.5">
+            <Label htmlFor="emp-bio">Bio / Notes</Label>
+            <Textarea id="emp-bio" placeholder="Brief background on this team member…"
+              value={form.bio} onChange={e => set("bio", e.target.value)} rows={3} className="resize-none" />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={saving} className="gap-1.5">
+            {saving ? (
+              <span className="flex items-center gap-1.5">
+                <span className="animate-spin inline-block w-3.5 h-3.5 border border-t-transparent border-white rounded-full" />
+                Adding…
+              </span>
+            ) : <><UserPlus className="h-4 w-4" /> Add Team Member</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ResourcesList() {
   const [, navigate] = useLocation();
@@ -380,10 +587,14 @@ export default function ResourcesList() {
   const [tab, setTab] = useState<"roster" | "heatmap" | "risks">("heatmap");
   const [heatmapWeeks, setHeatmapWeeks] = useState(12);
   const [heatmapGranularity, setHeatmapGranularity] = useState<"week" | "month">("week");
+  const [addOpen, setAddOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchResources = () => {
+    setLoading(true);
     fetch(`${API}/resources`).then(r => r.json()).then(setResources).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchResources(); }, []);
 
   const totalUtil = resources.length > 0 ? Math.round(resources.reduce((s, r) => s + r.currentUtilization, 0) / resources.length) : 0;
   const bench = resources.filter(r => r.currentUtilization < 20).length;
@@ -400,7 +611,7 @@ export default function ResourcesList() {
             <h1 className="text-xl font-bold tracking-tight">People</h1>
             <p className="text-sm text-muted-foreground">{resources.length} team members · {employees} employees · {contractors} contractors/partners</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             {[
               { val: `${totalUtil}%`, label: "Avg Utilization", color: totalUtil > 90 ? "text-red-600" : totalUtil < 40 ? "text-amber-600" : "text-blue-600" },
               { val: overbooked, label: "Overbooked", color: "text-red-600" },
@@ -411,6 +622,9 @@ export default function ResourcesList() {
                 <p className="text-xs text-muted-foreground">{kpi.label}</p>
               </div>
             ))}
+            <Button onClick={() => setAddOpen(true)} className="gap-2 ml-2">
+              <UserPlus className="h-4 w-4" /> Add Employee
+            </Button>
           </div>
         </div>
 
@@ -463,6 +677,13 @@ export default function ResourcesList() {
           </>
         )}
       </div>
+
+      {/* Add Employee Modal */}
+      <AddEmployeeModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={() => fetchResources()}
+      />
     </div>
   );
 }
