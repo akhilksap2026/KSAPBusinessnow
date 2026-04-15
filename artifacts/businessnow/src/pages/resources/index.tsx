@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { format, addDays, startOfWeek } from "date-fns";
 import { User, Users, AlertTriangle, TrendingDown, Briefcase, MapPin, Star, Search, Plus, X } from "lucide-react";
-import { useAuthRole, hasPermission } from "@/lib/auth";
+import { useAuthRole } from "@/lib/auth";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -321,140 +321,6 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
   );
 }
 
-// ─── Staffing Requests ───────────────────────────────────────────────────────
-function StaffingView() {
-  const { role } = useAuthRole();
-  const canCreate = hasPermission(role, "createStaffingRequest");
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ requestedRole: "", projectName: "", hoursPerWeek: 40, allocationPct: 100, startDate: "", priority: "medium", notes: "" });
-
-  const load = () => fetch(`${API}/staffing-requests`).then(r => r.json()).then(setRequests).catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
-
-  const submit = async () => {
-    await fetch(`${API}/staffing-requests`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, projectId: 1 }) });
-    setShowForm(false);
-    load();
-  };
-
-  const PRIORITY_COLORS: Record<string, string> = { critical: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400", high: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400", medium: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", low: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" };
-
-  const STAFFING_COLS = [
-    { id: "open",        label: "Open",       colClass: "border-b-blue-500",    dot: "bg-blue-500",    cardBorder: "border-blue-500/20" },
-    { id: "in_progress", label: "In Review",  colClass: "border-b-purple-500",  dot: "bg-purple-500",  cardBorder: "border-purple-500/20" },
-    { id: "filled",      label: "Filled",     colClass: "border-b-emerald-500", dot: "bg-emerald-500", cardBorder: "border-emerald-500/20" },
-    { id: "cancelled",   label: "Cancelled",  colClass: "border-b-zinc-500",    dot: "bg-zinc-400",    cardBorder: "border-border" },
-  ];
-
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{requests.filter(r => r.status === "open").length} open · {requests.filter(r => r.status === "in_progress").length} in review</p>
-        {canCreate && (
-          <button onClick={() => setShowForm(s => !s)} className="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg font-medium hover:bg-primary/90 transition-colors">+ New Request</button>
-        )}
-      </div>
-
-      {showForm && (
-        <div className="border rounded-xl p-4 bg-muted/20 space-y-3">
-          <h3 className="font-semibold text-sm">New Staffing Request</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Role Needed *</label>
-              <select value={form.requestedRole} onChange={e => setForm(f => ({ ...f, requestedRole: e.target.value }))}
-                className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background">
-                <option value="">Select role...</option>
-                {["OTM Functional Consultant","OTM Technical Consultant","Solution Architect","Integration Developer","QA Automation Analyst","Release Certification Analyst","AMS Support Consultant","Data Migration Lead","Project Manager"].map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Project</label>
-              <input value={form.projectName} onChange={e => setForm(f => ({ ...f, projectName: e.target.value }))} placeholder="Project name" className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Start Date</label>
-              <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Priority</label>
-              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background">
-                {["critical","high","medium","low"].map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Hrs/Week</label>
-              <input type="number" value={form.hoursPerWeek} onChange={e => setForm(f => ({ ...f, hoursPerWeek: parseInt(e.target.value) }))} className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Allocation %</label>
-              <input type="number" value={form.allocationPct} onChange={e => setForm(f => ({ ...f, allocationPct: parseInt(e.target.value) }))} className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background" />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Notes</label>
-            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full mt-1 border rounded px-2 py-1.5 text-sm bg-background resize-none" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={submit} className="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded font-medium">Submit</button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 border text-xs rounded">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex gap-3">
-          {[1,2,3,4].map(i => <div key={i} className="w-56 h-40 animate-pulse bg-muted rounded-lg shrink-0"/>)}
-        </div>
-      ) : (
-        <div className="overflow-x-auto pb-2">
-          <div className="flex gap-3 min-w-max">
-            {STAFFING_COLS.map(col => {
-              const items = requests.filter(r => r.status === col.id);
-              return (
-                <div key={col.id} className="w-60 shrink-0">
-                  <div className={`flex items-center justify-between mb-3 pb-2 border-b-2 ${col.colClass}`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${col.dot}`} />
-                      <span className="text-xs font-semibold">{col.label}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{items.length}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {items.map(r => (
-                      <div key={r.id} className={`rounded-lg border p-3 space-y-2 bg-card ${col.cardBorder}`}>
-                        <p className="text-xs font-semibold leading-snug">{r.requestedRole}</p>
-                        {r.projectName && <p className="text-xs text-muted-foreground truncate">{r.projectName}</p>}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[r.priority] || PRIORITY_COLORS.medium}`}>{r.priority}</span>
-                          {r.hoursPerWeek && <span className="text-[10px] text-muted-foreground">{r.hoursPerWeek}h/wk</span>}
-                          {r.allocationPct && <span className="text-[10px] text-muted-foreground">{r.allocationPct}%</span>}
-                        </div>
-                        {r.startDate && (
-                          <p className="text-[10px] text-muted-foreground border-t border-border/50 pt-1.5">
-                            Starts {format(new Date(r.startDate), "MMM d, yyyy")}
-                          </p>
-                        )}
-                        {r.notes && <p className="text-[10px] text-muted-foreground italic line-clamp-2">{r.notes}</p>}
-                      </div>
-                    ))}
-                    {items.length === 0 && (
-                      <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                        <p className="text-xs text-muted-foreground">No requests</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Risk Alerts ──────────────────────────────────────────────────────────────
 function RiskView({ resources }: { resources: Resource[] }) {
   const risks = [];
@@ -511,7 +377,7 @@ export default function ResourcesList() {
   const [, navigate] = useLocation();
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"roster" | "heatmap" | "risks" | "staffing">("heatmap");
+  const [tab, setTab] = useState<"roster" | "heatmap" | "risks">("heatmap");
   const [heatmapWeeks, setHeatmapWeeks] = useState(12);
   const [heatmapGranularity, setHeatmapGranularity] = useState<"week" | "month">("week");
 
@@ -554,7 +420,6 @@ export default function ResourcesList() {
             { key: "heatmap", label: "Utilization Heatmap" },
             { key: "roster", label: "Resource Roster" },
             { key: "risks", label: "Staffing Risks" },
-            { key: "staffing", label: "Staffing Requests" },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
@@ -595,7 +460,6 @@ export default function ResourcesList() {
             {tab === "heatmap" && <HeatmapView weeks={heatmapWeeks} granularity={heatmapGranularity} />}
             {tab === "roster" && <RosterView resources={resources} onSelect={id => navigate(`/resources/${id}`)} />}
             {tab === "risks" && <RiskView resources={resources} />}
-            {tab === "staffing" && <StaffingView />}
           </>
         )}
       </div>
