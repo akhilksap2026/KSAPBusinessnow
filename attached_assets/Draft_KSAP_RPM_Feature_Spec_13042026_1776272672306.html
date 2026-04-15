@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KSAP RPM — Internal Platform Feature Specification</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #12151c;
+    --border: #1e2330;
+    --accent-must: #00e5a0;
+    --accent-needed: #4ea8ff;
+    --accent-nice: #f59e42;
+    --text: #e8eaf0;
+    --muted: #5a6278;
+    --label-must: #003d2a;
+    --label-needed: #0d2a4a;
+    --label-nice: #3d2700;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 40px 60px 32px;
+    background: linear-gradient(135deg, #0d1017 0%, #0a1020 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,160,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-tag {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-must);
+    border: 1px solid var(--accent-must);
+    padding: 3px 10px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    opacity: 0.8;
+  }
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  header h1 span { color: var(--accent-must); }
+  header p {
+    color: var(--muted);
+    font-size: 12px;
+    max-width: 600px;
+    margin-top: 12px;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 24px;
+    padding: 16px 60px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-must { background: var(--accent-must); }
+  .dot-needed { background: var(--accent-needed); }
+  .dot-nice { background: var(--accent-nice); }
+
+  /* LAYOUT */
+  main {
+    padding: 40px 60px;
+    max-width: 1200px;
+  }
+
+  /* MODULE BLOCK */
+  .module {
+    margin-bottom: 56px;
+    position: relative;
+  }
+  .module-header {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .module-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+  .module-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+  .module-subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* SECTION (e.g. Visibility, Forecasting) */
+  .section {
+    margin-bottom: 28px;
+    padding-left: 20px;
+    border-left: 2px solid var(--border);
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-needed);
+    margin-bottom: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* FEATURE CARD */
+  .features-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .feature {
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 12px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    transition: border-color 0.2s;
+  }
+  .feature:hover { border-color: #2a3040; }
+  .feature.must { border-left: 3px solid var(--accent-must); }
+  .feature.needed { border-left: 3px solid var(--accent-needed); }
+  .feature.nice { border-left: 3px solid var(--accent-nice); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 2px;
+  }
+  .badge-must { background: var(--label-must); color: var(--accent-must); border: 1px solid var(--accent-must); }
+  .badge-needed { background: var(--label-needed); color: var(--accent-needed); border: 1px solid var(--accent-needed); }
+  .badge-nice { background: var(--label-nice); color: var(--accent-nice); border: 1px solid var(--accent-nice); }
+
+  .feature-content h4 {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #d0d4e0;
+    margin-bottom: 4px;
+  }
+  .feature-content p {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+  .feature-content p strong {
+    color: #8a93aa;
+    font-weight: 500;
+  }
+
+  .vibe-tag {
+    font-size: 10px;
+    color: #3a4258;
+    white-space: nowrap;
+    text-align: right;
+    align-self: start;
+    margin-top: 3px;
+  }
+
+  /* DIVIDER */
+  hr.section-div {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 12px 0;
+  }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 60px;
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-tag">Internal Build · KSAP Technologies</div>
+  <h1>KSAP <span>RPM</span> Platform<br/>Feature Specification</h1>
+  <p>Internal-use Professional Services Management platform. Built via vibe coding. Not for resale. Structured to replace Rocketlane, Smartsheet, and manual Google Sheet workflows. Every feature below maps to KSAP's PRD, evaluation scores, and end-to-end billing lifecycle.</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot dot-must"></div> MUST — Blocking. MVP cannot ship without it.</div>
+  <div class="legend-item"><div class="dot dot-needed"></div> NEEDED — Required within first release cycle.</div>
+  <div class="legend-item"><div class="dot dot-nice"></div> NICE TO HAVE — Future roadmap. Add when stable.</div>
+</div>
+
+<main>
+
+<!-- ═══════════════════════════════════════ MODULE 1: RESOURCE MANAGEMENT -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">01</span>
+    <span class="module-title">Resource Management</span>
+    <span class="module-subtitle">Mirrors: Visibility · Forecasting & Planning · Constraints</span>
+  </div>
+
+  <!-- VISIBILITY -->
+  <div class="section">
+    <div class="section-title">↳ Visibility</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Resource Profile CRUD</h4>
+          <p>Create, read, update, and soft-delete a resource record. Fields: <strong>Employee Number, First/Last Name, Department (picklist), Role (picklist), Region (NA/LATAM/APAC), Email, Hourly Cost, Currency of Employment (USD/INR/MXN Peso), Start Date, Engagement Type (Employee/Contractor), Status (Pending/Active/Offboarded).</strong> System auto-revokes login and releases future allocations on Offboarded status. Preserves all historical time logs on offboard.</p>
+        </div>
+        <span class="vibe-tag">Resource table + modal form</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Holistic Bench View</h4>
+          <p>A full-screen grid showing every active resource, their current project assignments, and <strong>real-time available hours this week</strong>. Color-coded rows: Green = under 80% allocated, Yellow = 80–100%, Red = over 100%. No pagination — designed for a TV-style PMO dashboard wallboard view.</p>
+        </div>
+        <span class="vibe-tag">Grid table + color rows</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Role-Based Grouping in Bench View</h4>
+          <p>Bench view can be grouped by <strong>Department or Role</strong> with collapsible group headers showing subtotal available hours per group. Allows PMO to scan headcount by practice area instantly.</p>
+        </div>
+        <span class="vibe-tag">Collapsible group rows</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Individual Contributor Detail Panel</h4>
+          <p>Clicking any resource opens a side panel showing: current project assignments with hours/%, weekly available hours, pending time-off, and lifecycle status. <strong>Hourly cost is hidden from all roles except Finance and Super Admin.</strong> Consulting Managers see allocation %, not dollar cost.</p>
+        </div>
+        <span class="vibe-tag">Slide-in side panel</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Capacity Arithmetic Engine</h4>
+          <p>System continuously calculates each resource's <strong>Available_Capacity = 40 hrs/week − Allocated_Hours − Approved_PTO_Hours</strong>. This value feeds the Bench View, the Heatmap, and blocks time entry when a date falls outside hire/term dates. A Google Calendar PTO sync reduces capacity to 0 for that day automatically.</p>
+        </div>
+        <span class="vibe-tag">Backend calculation engine</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FORECASTING & PLANNING -->
+  <div class="section">
+    <div class="section-title">↳ Forecasting & Planning</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Allocation Heatmap (Resource vs Time)</h4>
+          <p>A scrollable grid: <strong>rows = resources, columns = weeks</strong>. Each cell shows the allocation % for that week. Cell click reveals which projects contribute. Green/Yellow/Red thresholds enforced. Users can enter allocation as % OR hours — the system bi-directionally converts: <em>Hours = (% ÷ 100) × 8</em>. Over-allocation is allowed with a visible warning badge, never a hard block.</p>
+        </div>
+        <span class="vibe-tag">Heatmap grid + tooltips</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Future Project Soft Allocation</h4>
+          <p>Allow PMs to allocate resources against <strong>Pipeline or Proposed projects</strong> (not yet active) to model future capacity impact. These show as a distinct "Forecasted" color in the heatmap vs hard committed allocations. When a project moves to Active, soft allocations auto-convert to hard allocations.</p>
+        </div>
+        <span class="vibe-tag">Allocation type toggle</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Availability Search</h4>
+          <p>A search/filter on the bench view: "Show me all resources with Role = OTM Specialist who have ≥ 20 hours available in the week of [date]." Returns a ranked list of matching resources. Used by PMs when staffing new projects.</p>
+        </div>
+        <span class="vibe-tag">Filter panel + ranked results</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Skills Matrix / Role Filtering</h4>
+          <p>Each resource profile has a <strong>multi-select Skills/Certifications field</strong> (e.g., OTM, WMS, QA, Java). The availability search and heatmap can filter by skill tags. Maintained manually by the Super Admin — no complex taxonomy required for MVP.</p>
+        </div>
+        <span class="vibe-tag">Tag field + filter chip UI</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Organizational Hierarchy</h4>
+          <p>Each resource has a <strong>Reports To</strong> field (user lookup). This creates the approval chain: Employee → their Manager → PMO. Used to route time approval to the correct manager for non-project time (Admin, PTO). The hierarchy is visible in a simple org tree view.</p>
+        </div>
+        <span class="vibe-tag">Reports-to field + tree view</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CONSTRAINTS -->
+  <div class="section">
+    <div class="section-title">↳ Constraints</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>PTO Tracking</h4>
+          <p>Resources or managers can log <strong>Time Off entries</strong> (Vacation, Sick, Holiday) directly in the platform. A PTO entry for a day sets that day's capacity to 0 and grays it out in the timesheet grid. Contractors cannot log time off. Future: sync with Google Calendar Out-of-Office events automatically.</p>
+        </div>
+        <span class="vibe-tag">Time-off modal + calendar block</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Holiday Calendars</h4>
+          <p>Admin configures <strong>regional holiday calendars</strong> (US Federal, India National, Mexico). Holidays automatically block capacity for resources in that region. Holiday days are visually distinct (purple shade) in timesheets and heatmaps.</p>
+        </div>
+        <span class="vibe-tag">Admin holiday config table</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Over-Allocation Warning (Not a Block)</h4>
+          <p>When a resource is allocated beyond 100% (8 hrs/day), the system <strong>saves the allocation with a red warning badge</strong> rather than preventing the save. This is intentional — KSAP requires the ability to staff aggressively and manage the conflict manually. A toast notification alerts the PM at save time.</p>
+        </div>
+        <span class="vibe-tag">Warning toast + red badge</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 2: PROJECT MANAGEMENT -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">02</span>
+    <span class="module-title">Project Management</span>
+    <span class="module-subtitle">Mirrors: Portfolio View · Internal Experience</span>
+  </div>
+
+  <!-- PORTFOLIO VIEW -->
+  <div class="section">
+    <div class="section-title">↳ Portfolio View</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Project Object CRUD</h4>
+          <p>Full create/edit/delete for a Project. Core fields: <strong>Project Name, Customer (lookup), Contract Type (T&M / Fixed Price / Hybrid), Project Type (Staff Aug / OTM Implementation / Migration), SOW Signed Date, SOW Start/End Date, Actual Start/End Date, Project Status (Pipeline / Active / On Hold / Completed / Cancelled), Engagement Model, Payment Terms, Max Hours Cap, Max Amount Cap, Currency, Assigned PM (user lookup), Project Team (team lookup).</strong></p>
+        </div>
+        <span class="vibe-tag">Form modal + list table</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Portfolio List View</h4>
+          <p>A master table of all projects showing: <strong>Project Name, Customer, Status (color pill), PM, Start/End Date, Contract Type, Burn % of budget.</strong> Filterable by Status, Customer, PM, Date Range. Default view for Executives shows all; PM default shows only their projects. Each row is clickable to open the Project detail.</p>
+        </div>
+        <span class="vibe-tag">Filterable data table</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Project Lifecycle State Machine</h4>
+          <p>Projects move through <strong>Pipeline → Active → On Hold → Completed / Cancelled.</strong> Rules: A project cannot move to Active unless Billing Email and Payment Terms are set on the Customer. A project cannot move to Completed until all time is approved, Actual Completion Date is logged, and a Performance Rating (1–5) is entered. Status changes are audit-logged.</p>
+        </div>
+        <span class="vibe-tag">Status dropdown + gate validation</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Project Team Assignment</h4>
+          <p>A Project has exactly <strong>one Team</strong> assigned (Project Team object: Team ID, Project ID, list of Resource IDs). Creating or editing a team is done from within the Project record. Only resources on the team can log time against the project. This is the primary access control for time entry.</p>
+        </div>
+        <span class="vibe-tag">Team picker multi-select</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Project Health Status Card</h4>
+          <p>Each project has a health summary showing at minimum: <strong>Budget Health (Burn % vs plan), Timeline Health (days ahead/behind), % Complete, Open Risks count, Open Issues count.</strong> Health is surfaced as a colored indicator (Green/Yellow/Red) on the portfolio list for executive scan. PM manually sets the narrative status; metrics are auto-calculated.</p>
+        </div>
+        <span class="vibe-tag">Status card widget</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Customizable Project Statuses</h4>
+          <p>Super Admin and PMO Manager can add/rename Project Status values (beyond the defaults) to fit evolving KSAP process. For example adding "Hypercare" or "Warranty" stages post-go-live. Status changes always preserve the audit log entry.</p>
+        </div>
+        <span class="vibe-tag">Admin status config page</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INTERNAL EXPERIENCE -->
+  <div class="section">
+    <div class="section-title">↳ Internal Experience (Work Breakdown Structure)</div>
+    <div class="features-grid">
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Phase Management</h4>
+          <p>A project is broken into <strong>Phases</strong> (Discovery, Design, Build, Test, Deploy, Hypercare — or custom). Each Phase has: phase_id, name, sequence, start/end date, status (Not Started / In Progress / Blocked / Complete), entry criteria, exit criteria. Phase status auto-rolls up from child Tasks. Phases display as container rows in the WBS grid with a gray background and bold text.</p>
+        </div>
+        <span class="vibe-tag">Phase rows in WBS grid</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Task Management</h4>
+          <p>Atomic work unit under a Phase. Fields: <strong>task_name, task_type (Configuration/Integration/Data/Testing/Training), owner (user), accountable_role (Internal/Customer), start/due date, estimated_hours, actual_hours, status, dependency_ids, customer_visible flag.</strong> Tasks are indented below Phase rows. Users can drag-and-drop a task from one Phase to another. "Log Time" action links directly to the time entry for that task.</p>
+        </div>
+        <span class="vibe-tag">Nested draggable task rows</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Milestone Tracking</h4>
+          <p>Contractual checkpoints tied to a project. Fields: <strong>name, due_date, approval_required, approved_by, approval_date, status (Pending/Approved/Rejected), Milestone % of Total Cost.</strong> For Fixed Price projects, a Milestone reaching Approved status triggers an invoice creation notification to the PM and PMO. Milestones appear on the Gantt as diamond markers.</p>
+        </div>
+        <span class="vibe-tag">Diamond markers on Gantt</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>WBS Collapsible Tree Grid</h4>
+          <p>The primary project planning UI: a smart spreadsheet where <strong>Level 1 = Project header, Level 2 = Phase (gray row, bold), Level 3 = Task (indented, white).</strong> Each phase has a chevron to expand/collapse. Budget and hours columns roll up: Task inputs sum into Phase read-only totals. Phase dates auto-derive from earliest task start / latest task end. Planned vs Actual columns side by side.</p>
+        </div>
+        <span class="vibe-tag">Collapsible tree grid UI</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Gantt / Timeline View</h4>
+          <p>Split-screen: WBS grid on left, Gantt on right. <strong>Phase bars are thick brackets spanning the phase duration. Task bars are thinner, nested under their phase bar.</strong> Dependency arrows connect tasks (Finish-to-Start default). Timeline adjusts automatically as actual hours are logged. Zooms: Day / Week / Month. This view is read-heavy — editing happens in the WBS grid.</p>
+        </div>
+        <span class="vibe-tag">Split-screen Gantt chart</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>RAID Log (Risk, Issue, Change Request)</h4>
+          <p>Three linked objects on every project. <strong>Risk:</strong> description, probability (1–5), impact (1–5), auto-computed risk_score, mitigation plan, status (Open/Mitigated/Closed). <strong>Issue:</strong> description, severity (Low/Med/High/Critical), status (Open/In Progress/Resolved). Critical Issue auto-sets Project Health to Red. <strong>Change Request:</strong> change_type (Scope/Timeline/Cost), impact_analysis, approval workflow. Approved CRs rebaseline the project plan.</p>
+        </div>
+        <span class="vibe-tag">Tabbed RAID panel per project</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Financial P&L per Project</h4>
+          <p>A read-only panel on each project showing: <strong>Contract Value, Invoiced to Date, Revenue Recognized, Total Labor Cost (resource hours × cost rate in USD via exchange table), Gross Margin % = (Revenue − Cost) / Revenue.</strong> Labor costs stored in local currency, converted to USD via Monthly_Exchange_Rate table. Visible to Finance and PM only — hidden from Employee role.</p>
+        </div>
+        <span class="vibe-tag">P&L read-only panel</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Project Templates</h4>
+          <p>PMO creates reusable project templates (Phase + Task hierarchy, estimated hours, resource roles, dependencies). When creating a new project, selecting a template pre-populates the full WBS. Resource role placeholders are replaced with actual resource names at assignment time. Templates support up to 5 levels deep for KSAP's typical project structures.</p>
+        </div>
+        <span class="vibe-tag">Template library + apply-to-project</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Baseline vs Actuals Tracking</h4>
+          <p>PM can "Baseline" a project at any point in time, taking a snapshot of all planned hours, dates, and budget. The WBS and Gantt then show <strong>Baseline vs Current vs ETC</strong> in overlay mode. % Complete is auto-calculated from actual hours burned vs planned hours. PM can independently update Estimated-to-Complete (ETC) without altering the baseline.</p>
+        </div>
+        <span class="vibe-tag">Baseline snapshot + overlay columns</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 3: CUSTOMER -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">03</span>
+    <span class="module-title">Customer Management</span>
+    <span class="module-subtitle">No external portal needed — internal record only</span>
+  </div>
+
+  <div class="section">
+    <div class="section-title">↳ Customer Record</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Customer Object CRUD</h4>
+          <p>Manage the master customer record. Fields: <strong>Customer ID (UUID), Customer Name (unique — duplicate prevention enforced), DBA Name, Status (Active/Inactive/Credit Hold), Billing Address, Tax ID/EIN (encrypted), Payment Terms (Net 15/30/45/Due on Receipt), Currency (USD/MXN/INR), Invoice Delivery Method (Email/Portal/Mail), Billing Email (validated, mandatory before project activation).</strong></p>
+        </div>
+        <span class="vibe-tag">Customer form + list table</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Contact Management with Functional Roles</h4>
+          <p>Each customer has multiple contacts, each tagged with a <strong>Functional Role: Primary Business Contact, Billing/AP Contact (required for QB export), Customer Sponsor/Signatory Authority.</strong> At least one Billing/AP Contact must exist before invoicing is enabled. Contacts store: Name, Email, Phone, Role, Status (Active/Inactive).</p>
+        </div>
+        <span class="vibe-tag">Contact sub-table with role tags</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Financial Governance Rules</h4>
+          <p>Any change to <strong>Payment Terms or Billing Address</strong> is audit-logged with User ID and timestamp — this is non-negotiable for financial audit compliance. Billing Email and Payment Terms are mandatory before any linked project can move to Active status. The system blocks the project status change and surfaces a clear error message pointing to the missing customer field.</p>
+        </div>
+        <span class="vibe-tag">Audit log + gate validation</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Customer-to-Project Linkage</h4>
+          <p>Every Project must be linked to exactly one Customer. The Customer record displays a <strong>Projects tab</strong> showing all associated projects, their statuses, and total invoiced amount. Deactivating a customer (Credit Hold or Inactive) does not delete historical project data — it only prevents new project creation under that customer.</p>
+        </div>
+        <span class="vibe-tag">Customer detail with projects tab</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>QuickBooks Customer Sync</h4>
+          <p>Bi-directional sync: <strong>Customers in QB ↔ Customer records in RPM.</strong> When a new Customer is created in RPM, it pushes to QB. When a Customer is updated in QB, it pulls back. The Billing Email and Payment Terms fields are the source of truth in RPM and flow into the QB invoice template. Sync failures surface as an admin alert.</p>
+        </div>
+        <span class="vibe-tag">QB API integration layer</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 4: TIME & REPORTING -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">04</span>
+    <span class="module-title">Time & Reporting</span>
+    <span class="module-subtitle">Mirrors: Time Tracking · Insights</span>
+  </div>
+
+  <!-- TIME TRACKING -->
+  <div class="section">
+    <div class="section-title">↳ Time Tracking</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Weekly Timesheet Grid (The Core UI)</h4>
+          <p>Primary time entry interface: a <strong>grid with rows = Customer + Project combinations, columns = Mon–Sun (weekend columns shaded gray), cells = hours per day.</strong> Consultants only see projects they are assigned to via the Project Team object. Users can add rows to select additional projects. Hours must be entered in <strong>0.25-hour increments</strong>; any other value is rejected. Daily max = 24 hours hard validation. Standard work week = Mon–Fri, 8 hrs/day, 40 hrs/week.</p>
+        </div>
+        <span class="vibe-tag">Timesheet grid — core screen</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Description & Billable Flag per Entry</h4>
+          <p>Each time entry cell, when clicked, opens a <strong>context panel</strong> (side modal) capturing: <strong>Description (mandatory text field)</strong> and <strong>Billable Y/N flag</strong> (defaults from project/task config; T&M projects default to Billable = Yes). Submitting or saving without a description is blocked. If the user overrides the default Billable flag, a visual indicator appears for the Approver's attention.</p>
+        </div>
+        <span class="vibe-tag">Context panel slide-in</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Time Entry Validation Rules</h4>
+          <p>Hard-blocked scenarios: <strong>(1)</strong> Time logged against a project with status Closed, On Hold, or Archived. <strong>(2)</strong> Entries on dates before the user's Hire_Date. <strong>(3)</strong> Entries on dates after the user's Termination_Date. <strong>(4)</strong> Missing Description on any entry. <strong>(5)</strong> Hours not in 0.25 increments. <strong>(6)</strong> More than 24 hours in a single day. All blocks surface a clear inline error message — never a silent failure.</p>
+        </div>
+        <span class="vibe-tag">Inline validation errors</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Smart Pre-population</h4>
+          <p>When a consultant opens a new week's timesheet, the system <strong>auto-populates rows with the same Customer + Project combinations from the previous week, with 0.00 hours.</strong> This eliminates repetitive row selection for ongoing projects. The consultant can delete pre-populated rows they won't use this week. New project rows can still be added manually.</p>
+        </div>
+        <span class="vibe-tag">Auto-pre-populate from prior week</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Approval Workflow State Machine</h4>
+          <p>Timesheet states: <strong>Draft → Submitted → Manager Approved → Finalized (Finance) → Locked/Invoiced. Rejected</strong> returns to Draft. Rejection requires a mandatory Rejection Reason text from the manager — displayed in Red with a tooltip on the consultant's grid. Contractors cannot log PTO. Locked timesheets require Super Admin override to edit, which writes to the System Audit Log.</p>
+        </div>
+        <span class="vibe-tag">State machine + approval queue</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>PMO-Sanctioned Time Entry Categories</h4>
+          <p>A PMO Manager–maintained list of approved time categories (e.g., "Development," "Project Management," "Travel," "Training"). Each category has a default Billable/Non-Billable flag. Consultants select from this list when logging time. The list is managed via an admin config screen, not hardcoded. Consultants can override the default flag on individual entries.</p>
+        </div>
+        <span class="vibe-tag">Admin category config + dropdown</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Timesheet Compliance Workflow</h4>
+          <p>Automated non-compliance enforcement: <strong>Friday reminder</strong> notification to all consultants who have not submitted their timesheet. If not submitted by Monday noon, a notification goes to the consultant, their PM, and PMO. A "Non-Compliance" flag appears on the resource's profile for that week. This replaces the current manual follow-up process entirely.</p>
+        </div>
+        <span class="vibe-tag">Scheduled notification engine</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INSIGHTS -->
+  <div class="section">
+    <div class="section-title">↳ Insights & Reporting</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Time Explorer Export (CSV)</h4>
+          <p>A dedicated export tool for Finance and PMs. <strong>Filters:</strong> Date Range, Group By (Employee or Project), Status Filter (Draft/Approved/Locked/All). <strong>CSV output columns:</strong> Entry_ID, Date (YYYY-MM-DD), Project_Name, Task_Name, Resource_Name, Hours (0.00 format), Billable_Flag, Description, Status, Approver_Name. This directly replaces the current Google Sheet time import workflow.</p>
+        </div>
+        <span class="vibe-tag">Export modal + CSV download</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Project Burn Report</h4>
+          <p>Per-project view showing: <strong>Total Budget vs Actual Spend (hours × bill rate for T&M; milestone value for Fixed Price), weekly burn rate, projected completion date based on current velocity.</strong> Triggered burn rate alert: if Actual_Burn exceeds Planned_Burn by >15% for two consecutive weeks, a red alert badge appears and the PM receives a notification.</p>
+        </div>
+        <span class="vibe-tag">Burn chart + alert badge</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Utilization Reports</h4>
+          <p>Two key metrics for the executive dashboard: <strong>Total Utilization = Total Logged Hours / Total Available Hours. Billable Utilization = Billable Hours / Total Available Hours.</strong> Filterable by date range, department, region, and resource. Displayed as both a summary stat card and a trend line chart over time. Data source = locked/approved timesheet records only for accuracy.</p>
+        </div>
+        <span class="vibe-tag">Stat cards + trend chart</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Planned vs Actual vs ETC Dashboard</h4>
+          <p>A cross-project view comparing <strong>Planned Hours (from project WBS), Actual Hours (from approved timesheets), and Estimated-to-Complete (PM-maintained field)</strong> per project. Shown as a bar chart with three grouped bars per project. Filter by PM, Status, Date. This answers the executive question: "Are we on track across the portfolio?"</p>
+        </div>
+        <span class="vibe-tag">Grouped bar chart + table</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Project Margin Report</h4>
+          <p>Finance-only view: <strong>Gross Margin % = (Revenue − Labor Cost) / Revenue</strong> per project, aggregated across the portfolio. Labor cost uses local currency converted to USD via Monthly_Exchange_Rate table. Shows historical margin trend by project. Exportable to CSV. This is the primary financial health signal for leadership.</p>
+        </div>
+        <span class="vibe-tag">Margin table + export</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Role-Based Default Dashboard Views</h4>
+          <p>When a user logs in, they land on a dashboard pre-configured for their role: <strong>Executive sees portfolio health + margin. PM sees their projects + team allocation. Consultant sees their timesheet + tasks. Finance sees pending billing queue + invoices.</strong> Users can customize and save multiple additional dashboard views without losing their role default.</p>
+        </div>
+        <span class="vibe-tag">Configurable widget dashboard</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Scheduled Report Distribution</h4>
+          <p>PMO can configure a report (e.g., Weekly Project Status, Timesheet Compliance) to be automatically emailed on a schedule (every Friday at 5pm) to a defined list of users or user groups. Reports are delivered as PDF attachments or inline HTML emails. This replaces Brian's manual weekly oversight spreadsheet distribution.</p>
+        </div>
+        <span class="vibe-tag">Scheduled email engine</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 5: INVOICING -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">05</span>
+    <span class="module-title">Invoicing & Financial Management</span>
+    <span class="module-subtitle">End-to-end billing lifecycle — QB is the AR system of record</span>
+  </div>
+
+  <div class="section">
+    <div class="section-title">↳ Invoice Lifecycle</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>T&M Invoice Generation from Approved Time</h4>
+          <p>PM can generate a <strong>Draft Invoice</strong> from all approved, un-invoiced time entries for a project within a billing period. Invoice line items display: <strong>Task Name, Resource Name, Date, Hours, Rate, Amount, Description</strong> (PM can edit/sanitize descriptions before sending). Invoice can be regenerated (deleted and recreated) until it is formally Approved. Once Approved, it locks.</p>
+        </div>
+        <span class="vibe-tag">Invoice builder from time entries</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Fixed Price / Milestone Invoice Creation</h4>
+          <p>For Fixed Price projects, invoices are <strong>manually created by PM</strong> when a Milestone is Approved. The system auto-populates: Customer, Billing Address, Payment Terms, Milestone Name, Milestone Amount (% of contract value). PM reviews, approves, and pushes to QB. Completion of a Milestone triggers a notification to PM and PMO that an invoice is ready to be cut.</p>
+        </div>
+        <span class="vibe-tag">Manual invoice + milestone trigger</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Invoice Approval Workflow</h4>
+          <p>Invoice states: <strong>Draft → PM Approved → Finance Approved → Sent to QB → Paid.</strong> PM approves their own invoices. PMO/Finance can approve any invoice. Once Finance Approved, invoice pushes one-way to QuickBooks for AR. Payment status flows back from QB (Paid/Partially Paid/Overdue) into the platform's invoice record. Locked invoices require Super Admin to unlock.</p>
+        </div>
+        <span class="vibe-tag">Invoice state machine + QB sync</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>QuickBooks Invoice Push (One-way)</h4>
+          <p>Upon Finance Approval, the invoice is <strong>automatically pushed to QuickBooks Online</strong> as an Invoice record, mapped to the correct QB Customer and GL accounts. No manual re-entry. Finance does not need to touch QB for standard invoices — the platform handles the push. Failed pushes surface as an admin alert with the QB error message for manual resolution.</p>
+        </div>
+        <span class="vibe-tag">QB API one-way push</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Payment Tracking on Invoice</h4>
+          <p>Once an invoice is sent, the platform tracks <strong>payment records</strong> against it: Payment Date, Amount Paid, Check/Reference Number. Supports partial payments (multiple payment entries per invoice). Outstanding balance is calculated automatically. Invoice status updates: Paid / Partially Paid / Overdue. Payment data syncs back from QB or can be entered manually.</p>
+        </div>
+        <span class="vibe-tag">Payment sub-records on invoice</span>
+      </div>
+
+      <div class="feature needed">
+        <span class="badge badge-needed">Needed</span>
+        <div class="feature-content">
+          <h4>Pending Billing Queue</h4>
+          <p>A Finance-specific view listing all projects with approved, un-invoiced time that is ready for billing. Columns: <strong>Customer, Project, Billing Period, Unbilled Hours, Estimated Invoice Amount, Days Since Last Invoice.</strong> Finance uses this to prioritize monthly billing runs. Clicking a row initiates invoice generation for that project.</p>
+        </div>
+        <span class="vibe-tag">Finance billing queue view</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 6: SECURITY & ACCESS -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">06</span>
+    <span class="module-title">Security & Access Control</span>
+    <span class="module-subtitle">Mirrors: Customer Collaboration → Security · Role-based Access Control</span>
+  </div>
+
+  <div class="section">
+    <div class="section-title">↳ Role-Based Access Control (RBAC)</div>
+    <div class="features-grid">
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Role Definitions & Permission Matrix</h4>
+          <p>Six roles enforced across the system: <strong>Super Admin</strong> (system-wide config, user management, unlock records), <strong>Executive</strong> (read-all, dashboards, profitability), <strong>Consulting Manager</strong> (manage resources, approve PTO — cannot see salary/cost unless authorized), <strong>Project Manager</strong> (write own projects, approve time, manage budget), <strong>Employee/Consultant</strong> (log own time, view own assignments), <strong>Finance</strong> (invoicing, cost rates, QB sync, reconciliation).</p>
+        </div>
+        <span class="vibe-tag">Role config + permission matrix</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Data-Level Security by Role</h4>
+          <p>Critical data isolation: <strong>Hourly Cost Rate</strong> — visible to Finance and Super Admin only. <strong>Rate Cards and billing rates</strong> — visible to PM and above only. <strong>Project financials (margin, P&L)</strong> — visible to Executive, Finance, Super Admin. <strong>Other consultants' time entries</strong> — PM sees only their assigned projects; Employee sees only their own. All restrictions enforced at the API level, not just the UI.</p>
+        </div>
+        <span class="vibe-tag">Row/field level data isolation</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>System Audit Log</h4>
+          <p>Every sensitive action is written to an immutable audit log: <strong>Payment Terms changes, Billing Address changes, record unlocks, Admin overrides, invoice status changes, user role changes.</strong> Each log entry records: User ID, Timestamp, Action Type, Old Value, New Value, Entity ID. Finance and Super Admin can search and export the audit log. Log entries cannot be deleted.</p>
+        </div>
+        <span class="vibe-tag">Audit log table + search</span>
+      </div>
+
+      <div class="feature must">
+        <span class="badge badge-must">Must</span>
+        <div class="feature-content">
+          <h4>Multi-Tenancy (Customer Data Isolation)</h4>
+          <p>If external customer users are ever granted access (future), they can only see data explicitly shared with them. For now (internal use), this means <strong>project data scoped by Project Team membership</strong>: a consultant sees only projects they are assigned to. A PM sees only their own projects unless granted cross-project access by Super Admin. No consultant can ever browse another consultant's time entries.</p>
+        </div>
+        <span class="vibe-tag">Scoped data access by team</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODULE 7: IMPROVEMENT AREAS / FUTURE -->
+<div class="module">
+  <div class="module-header">
+    <span class="module-num">07</span>
+    <span class="module-title">Improvement Areas & Future Roadmap</span>
+    <span class="module-subtitle">Mirrors: Manual Process Reduction · System Consolidation · AI Integration</span>
+  </div>
+
+  <div class="section">
+    <div class="section-title">↳ Manual Process Reduction (Phase 2)</div>
+    <div class="features-grid">
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>CRM / Opportunity Management</h4>
+          <p>Track opportunities from inception through closing. Fields: Stage (Lead → Proposal → Won → Lost), win probability %, estimated revenue, expected start date. <strong>Won opportunity converts directly into a Customer + Project record without re-entry.</strong> Contact → Opportunity → Customer conversion lifecycle. A won opportunity can seed an initial project plan from the sales intake details. Replaces Zoho for pipeline visibility.</p>
+        </div>
+        <span class="vibe-tag">CRM pipeline + conversion flow</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Google Calendar PTO Sync</h4>
+          <p>System ingests Google Calendar "Out of Office" events for each resource. An 8-hour OOO event on a day reduces Available_Capacity to 0 for that day, automatically updating the heatmap. Prevents a PM from scheduling a resource against a project on a day they're OOO. PTO events created in the platform optionally push back to Google Calendar.</p>
+        </div>
+        <span class="vibe-tag">Google Calendar API integration</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Document Attachments</h4>
+          <p>Attach SOWs, Change Requests, design documents, and emails directly to a Project or Customer record. Stored links to Google Drive or SharePoint (not file storage within the platform). Attachment entry records: File name, Link URL, Uploaded By, Upload Timestamp, Document Type. Viewing requires the linked Google/SharePoint permission — the platform only stores the reference.</p>
+        </div>
+        <span class="vibe-tag">Attachment records + Drive links</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>Multi-Currency Exchange Rate Table</h4>
+          <p>Admin-maintained Monthly_Exchange_Rate table: Currency pair (INR→USD, MXN→USD), Month, Rate. System uses this table to convert all resource cost rates to USD for unified margin reporting. Exchange rates are entered manually by Finance once per month. All financial reports display in USD regardless of the resource's local currency of employment.</p>
+        </div>
+        <span class="vibe-tag">Exchange rate config table</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">↳ AI Integration (Phase 3 — Vibe-coded add-ons)</div>
+    <div class="features-grid">
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>AI Burn Rate Alert Engine</h4>
+          <p>Daily evaluation: if <strong>Actual_Burn exceeds Planned_Burn by >15% for two consecutive weeks</strong>, the system automatically flags the project as "At Risk - Budget" and sends a structured alert to the PM and Executive: "Project X burn rate is 22% over plan for 2 consecutive weeks. Predicted budget exhaustion: [date]." No manual monitoring required.</p>
+        </div>
+        <span class="vibe-tag">Automated alert + prediction text</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>AI Stagnation Alert</h4>
+          <p>If a project with Active status has <strong>zero hours logged for 14 consecutive days</strong>, the system triggers a stagnation alert to the PM and PMO: "Project Y has had no time logged for 14 days. Action required." This catches forgotten or abandoned projects before they become a billing or compliance issue.</p>
+        </div>
+        <span class="vibe-tag">14-day inactivity detection</span>
+      </div>
+
+      <div class="feature nice">
+        <span class="badge badge-nice">Nice</span>
+        <div class="feature-content">
+          <h4>AI Executive Status Summary</h4>
+          <p>A weekly auto-generated plain-English summary per project: "Project A — 73% complete, on budget, 2 open risks (medium). On track for go-live March 31." Aggregated into a portfolio-level brief for the Executive role. Generated by calling the Anthropic API with structured project data as context. PM reviews and can override/supplement the AI narrative before it is distributed.</p>
+        </div>
+        <span class="vibe-tag">LLM-generated status brief</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <span>KSAP RPM — Internal Platform Feature Specification v1.0</span>
+  <span>Not for distribution · Built for internal vibe coding reference</span>
+</footer>
+
+</body>
+</html>
