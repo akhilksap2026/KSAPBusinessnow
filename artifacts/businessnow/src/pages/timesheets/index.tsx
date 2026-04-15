@@ -424,13 +424,26 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
     setPendingRows(prev => prev.filter(p => !groupedRows.some(r => r.key === p.key)));
   }, [groupedRows]);
 
-  // Combined display rows: real DB rows + pending (not yet persisted)
+  // Combined display rows: always show every allocated project, then task-specific extras, then pending
   const allRows = useMemo<GroupedRow[]>(() => {
+    // One row per allocated project (base, no-task rows)
+    const baseRows: GroupedRow[] = filteredProjects.map(p => {
+      const key = `${p.id}-`;
+      const existing = groupedRows.find(r => r.key === key);
+      return existing ?? {
+        key, projectId: p.id, projectName: p.name,
+        taskId: undefined, taskName: undefined,
+        categoryId: undefined, isBillable: true, byDay: {},
+      };
+    });
+    // Task-specific rows from DB that aren't covered by base rows
+    const extraRows = groupedRows.filter(r => r.taskId && !baseRows.some(b => b.key === r.key));
+    // Pending rows not yet persisted
     const pendingAsRows = pendingRows
-      .filter(p => !groupedRows.some(r => r.key === p.key))
+      .filter(p => !baseRows.some(b => b.key === p.key) && !extraRows.some(e => e.key === p.key))
       .map(p => ({ ...p, byDay: {} as Record<string, CellEntry> }));
-    return [...groupedRows, ...pendingAsRows];
-  }, [groupedRows, pendingRows]);
+    return [...baseRows, ...extraRows, ...pendingAsRows];
+  }, [filteredProjects, groupedRows, pendingRows]);
 
   const totalByDay = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -452,7 +465,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
       .catch(() => {});
   }, [addRow?.projectId]);
 
-  // Add a pending row (no DB write — row becomes real when first cell is saved)
+  // Add a pending task-specific row
   const handleAddRow = () => {
     if (!addRow?.projectId) return;
     const key = `${addRow.projectId}-${addRow.taskId}`;
@@ -473,19 +486,24 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
     setAddRow(null);
   };
 
-  // Submit all draft entries in a row (validates description on each)
-  const submitRow = async (row: GroupedRow) => {
-    const draftCells = Object.values(row.byDay).filter(c => c.id && c.status === "draft");
+  // Submit all draft entries for a single day across all project rows
+  const submitDay = async (dayKey: string) => {
+    const draftCells = allRows
+      .map(row => row.byDay[dayKey])
+      .filter((c): c is CellEntry => !!(c?.id && c?.status === "draft"));
+    if (draftCells.length === 0) {
+      toast({ title: "No draft entries for this day", variant: "destructive" }); return;
+    }
     const missingDesc = draftCells.filter(c => !c.notes?.trim());
     if (missingDesc.length > 0) {
       toast({
         title: "Description required",
-        description: "All entries must have a description before submitting. Click each cell to add.",
+        description: `${missingDesc.length} entr${missingDesc.length > 1 ? "ies are" : "y is"} missing a description. Click each cell to add.`,
         variant: "destructive",
       });
       return;
     }
-    setSubmitBusy(row.key);
+    setSubmitBusy(dayKey);
     try {
       for (const cell of draftCells) {
         const res = await fetch(`${API_BASE}/timesheets/${cell.id}`, {
@@ -501,45 +519,30 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
           }
         }
       }
-      toast({ title: `Row submitted for approval` });
+      toast({ title: `${format(parseISO(dayKey), "EEE MMM d")} submitted for approval` });
     } finally {
       setSubmitBusy(null);
       load(); onRefetch();
     }
   };
 
-  // Submit every draft entry in the entire week
-  const submitAllDraft = async () => {
-    const allDraftCells = allRows.flatMap(row =>
-      Object.values(row.byDay).filter(c => c.id && c.status === "draft")
-    );
-    if (allDraftCells.length === 0) { toast({ title: "No draft entries to submit" }); return; }
-    const missingDesc = allDraftCells.filter(c => !c.notes?.trim());
-    if (missingDesc.length > 0) {
-      toast({
-        title: "Description required",
-        description: `${missingDesc.length} entr${missingDesc.length > 1 ? "ies are" : "y is"} missing a description. Click each cell to add.`,
-        variant: "destructive",
-      });
-      return;
-    }
-    setSubmitBusy("__all__");
-    try {
-      for (const cell of allDraftCells) {
-        await fetch(`${API_BASE}/timesheets/${cell.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "submit", role: role ?? undefined }),
-        });
-      }
-      toast({ title: `${allDraftCells.length} entr${allDraftCells.length > 1 ? "ies" : "y"} submitted for approval` });
-    } finally {
-      setSubmitBusy(null);
-      load(); onRefetch();
-    }
-  };
+  // Per-day draft counts and status summary
+  const dayDraftCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    dayKeys.forEach(d => {
+      counts[d] = allRows.filter(r => r.byDay[d]?.status === "draft" && r.byDay[d]?.id).length;
+    });
+    return counts;
+  }, [allRows, dayKeys]);
 
-  const hasDraftEntries = allRows.some(r => Object.values(r.byDay).some(c => c.status === "draft" && c.id));
+  const dayAllApproved = useMemo(() => {
+    const approved: Record<string, boolean> = {};
+    dayKeys.forEach(d => {
+      const logged = allRows.filter(r => r.byDay[d]);
+      approved[d] = logged.length > 0 && logged.every(r => r.byDay[d]?.status === "approved");
+    });
+    return approved;
+  }, [allRows, dayKeys]);
 
   return (
     <div className="space-y-3">
