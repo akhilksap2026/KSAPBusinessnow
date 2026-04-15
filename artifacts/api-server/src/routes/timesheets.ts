@@ -1,10 +1,30 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, timesheetsTable, resourcesTable, tasksTable } from "@workspace/db";
+import { z } from "zod";
 import {
-  CreateTimesheetBody,
   ListTimesheetsQueryParams,
 } from "@workspace/api-zod";
+
+// Full-fidelity schema for creating a timesheet entry.
+// Accepts hoursLogged / billableHours as either string or number (Drizzle stores them as
+// numeric strings in Postgres, but the frontend sends JS floats).
+const CreateTimesheetInput = z.object({
+  projectId:    z.number().int(),
+  projectName:  z.string().optional().nullable(),
+  resourceId:   z.number().int(),
+  resourceName: z.string().optional().nullable(),
+  weekStart:    z.string(),
+  entryDate:    z.string().optional().nullable(),
+  hoursLogged:  z.union([z.string(), z.number()]).transform(v => String(v)),
+  billableHours: z.union([z.string(), z.number(), z.null()]).optional().transform(v => (v != null ? String(v) : null)),
+  status:       z.string().optional(),
+  notes:        z.string().optional().nullable(),
+  taskId:       z.number().int().optional().nullable(),
+  categoryId:   z.number().int().optional().nullable(),
+  isBillable:   z.boolean().optional(),
+  activityType: z.string().optional(),
+});
 
 function parseTimesheet(t: typeof timesheetsTable.$inferSelect) {
   return {
@@ -76,7 +96,7 @@ router.get("/timesheets", async (req, res): Promise<void> => {
 });
 
 router.post("/timesheets", async (req, res): Promise<void> => {
-  const parsed = CreateTimesheetBody.safeParse(req.body);
+  const parsed = CreateTimesheetInput.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;

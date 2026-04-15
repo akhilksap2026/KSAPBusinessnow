@@ -321,7 +321,7 @@ function CellContextModal({
 // ── WeeklyGrid ────────────────────────────────────────────────────────────────
 // Mon–Sun columns. Cells are clickable — opens CellContextModal.
 // allocatedProjectIds restricts the project picker for consultants.
-function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch, role, allocatedProjectIds }: {
+function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch, role, allocatedProjectIds, refreshKey }: {
   resourceId: number;
   resourceName: string;
   projects: any[];
@@ -329,6 +329,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
   onRefetch: () => void;
   role: Role | null;
   allocatedProjectIds?: number[];
+  refreshKey?: number;
 }) {
   const { toast } = useToast();
   const [weekOffset, setWeekOffset] = useState(0);
@@ -391,7 +392,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
       .finally(() => setLoading(false));
   }, [resourceId, weekStart, loadTaskMeta]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   // Build grouped rows from entries — includes per-cell notes/isBillable/categoryId
   const groupedRows = useMemo<GroupedRow[]>(() => {
@@ -853,6 +854,7 @@ export default function TimesheetsList() {
   const [categories, setCategories]   = useState<{ id: number; name: string; defaultBillable: boolean; isActive: boolean }[]>([]);
   const [projectTasks, setProjectTasks] = useState<{ id: number; name: string; assignedToId?: number }[]>([]);
   const [tsView, setTsView]           = useState<"list" | "grid">("grid");
+  const [gridRefreshKey, setGridRefreshKey] = useState(0);
 
   // ── Consultant project access control ──────────────────────────────────────
   // Fetch allocations for consultant; filter project list to allocated only.
@@ -1006,6 +1008,7 @@ export default function TimesheetsList() {
         throw new Error(err.error ?? "Server error");
       }
       await refetch();
+      setGridRefreshKey(k => k + 1);
       toast({ title: "Time logged successfully" });
       setLogOpen(false);
       setForm(defaultForm());
@@ -1287,6 +1290,7 @@ export default function TimesheetsList() {
             onRefetch={refetch}
             role={role}
             allocatedProjectIds={role === "consultant" ? (allocatedProjectIds ?? undefined) : undefined}
+            refreshKey={gridRefreshKey}
           />
         </div>
       )}

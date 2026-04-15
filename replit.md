@@ -24,18 +24,26 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 
 Opportunity Pipeline/CRM, Renewal Signals, Account Health Scoring, Client Portal, Automations Engine, Forms Builder, AI Summaries/Digest, Handover wizard, Staffing Requests workflow, Per-project Rate Cards, Sales Dashboard, Account Manager Dashboard.
 
+## Time Log Module — Fixed Bugs (Apr 2026)
+
+Three critical bugs resolved so entries now appear correctly in the weekly grid:
+
+1. **entryDate stripped on POST** — `POST /api/timesheets` used an orval-generated Zod schema missing 8 fields (`entryDate`, `projectName`, `resourceName`, `taskId`, `categoryId`, `isBillable`, `activityType`). Replaced with a full inline `CreateTimesheetInput` Zod schema in `artifacts/api-server/src/routes/timesheets.ts`.
+2. **WeeklyGrid never reloaded after Log Time modal saved** — Parent's `refetch()` only refreshed the list view, not the grid. Added `refreshKey` prop to WeeklyGrid; parent increments it post-save to trigger grid's `load()`.
+3. **All 68 existing DB rows had `entry_date = NULL`** — Backfilled with `UPDATE timesheets SET entry_date = week_start WHERE entry_date IS NULL`. Grid only populates cells when `e.entryDate` is truthy, so rows were invisible.
+
+Also added `"zod": "catalog:"` to `artifacts/api-server/package.json` (needed for inline schema import).
+
 ## Key PRD Gaps Still To Build
 
 1. PTO Tracking + Regional Holiday Calendars (capacity blocking)
-2. Mandatory description + 0.25-hr increment validation on timesheets
-3. Customer Contacts sub-table with Functional Roles (Billing/AP Contact)
-4. Project Team access control on time entry
-5. Time Explorer CSV export
-6. RAID Log — Risk and Issue objects (Change Requests exist)
-7. Timesheet compliance scheduler (Friday/Monday notifications)
-8. Project lifecycle gate validation (billing email check before activation)
-9. Availability Search by role + hours
-10. Hire/Term date blocking on timesheet entry
+2. Customer Contacts sub-table with Functional Roles (Billing/AP Contact)
+3. Time Explorer CSV export
+4. RAID Log — Risk and Issue objects (Change Requests exist)
+5. Timesheet compliance scheduler (Friday/Monday notifications)
+6. Project lifecycle gate validation (billing email check before activation)
+7. Availability Search by role + hours
+8. Hire/Term date blocking on timesheet entry
 
 ## Workspace Overview
 
