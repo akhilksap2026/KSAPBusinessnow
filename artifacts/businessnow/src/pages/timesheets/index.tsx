@@ -279,18 +279,23 @@ function CellContextModal({
           {/* Time Category */}
           <div className="grid gap-1.5">
             <Label>Time Category</Label>
-            <select
-              value={catId}
-              onChange={e => {
-                const cat = categories.find(c => String(c.id) === e.target.value);
-                setCatId(e.target.value);
+            <Select
+              value={catId || "__none__"}
+              onValueChange={val => {
+                if (val === "__none__") { setCatId(""); return; }
+                const cat = categories.find(c => String(c.id) === val);
+                setCatId(val);
                 if (cat) setIsBillable(cat.defaultBillable);
               }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
-              <option value="">— Select category —</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="— Select category —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Select category —</SelectItem>
+                {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Billable toggle — defaults from project/category */}
@@ -687,45 +692,60 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
           <div className="flex gap-2 items-end flex-wrap">
             <div>
               <label className="text-[10px] text-muted-foreground block mb-0.5">Project *</label>
-              <select
-                value={addRow.projectId}
-                onChange={e => {
-                  const p = filteredProjects.find(x => String(x.id) === e.target.value);
-                  setAddRow(r => r ? { ...r, projectId: e.target.value, projectName: p?.name ?? "", taskId: "", taskName: "" } : r);
+              <Select
+                value={addRow.projectId || "__none__"}
+                onValueChange={val => {
+                  if (val === "__none__") { setAddRow(r => r ? { ...r, projectId: "", projectName: "", taskId: "", taskName: "" } : r); return; }
+                  const p = filteredProjects.find(x => String(x.id) === val);
+                  setAddRow(r => r ? { ...r, projectId: val, projectName: p?.name ?? "", taskId: "", taskName: "" } : r);
                 }}
-                className="h-8 rounded border border-border bg-background px-2 text-xs"
               >
-                <option value="">Select project…</option>
-                {filteredProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+                <SelectTrigger className="h-8 text-xs w-48">
+                  <SelectValue placeholder="Select project…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select project…</SelectItem>
+                  {filteredProjects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-[10px] text-muted-foreground block mb-0.5">Task (optional)</label>
-              <select
-                value={addRow.taskId}
-                onChange={e => {
-                  const t = addTasks.find(t => String(t.id) === e.target.value);
-                  setAddRow(r => r ? { ...r, taskId: e.target.value, taskName: t?.name ?? "" } : r);
+              <Select
+                value={addRow.taskId || "__none__"}
+                onValueChange={val => {
+                  if (val === "__none__") { setAddRow(r => r ? { ...r, taskId: "", taskName: "" } : r); return; }
+                  const t = addTasks.find(t => String(t.id) === val);
+                  setAddRow(r => r ? { ...r, taskId: val, taskName: t?.name ?? "" } : r);
                 }}
-                className="h-8 rounded border border-border bg-background px-2 text-xs"
               >
-                <option value="">— None —</option>
-                {addTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+                <SelectTrigger className="h-8 text-xs w-44">
+                  <SelectValue placeholder="— None —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {addTasks.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-[10px] text-muted-foreground block mb-0.5">Category</label>
-              <select
-                value={addRow.categoryId}
-                onChange={e => {
-                  const c = categories.find(c => String(c.id) === e.target.value);
-                  setAddRow(r => r ? { ...r, categoryId: e.target.value, isBillable: c ? c.defaultBillable : r.isBillable } : r);
+              <Select
+                value={addRow.categoryId || "__none__"}
+                onValueChange={val => {
+                  if (val === "__none__") { setAddRow(r => r ? { ...r, categoryId: "" } : r); return; }
+                  const c = categories.find(c => String(c.id) === val);
+                  setAddRow(r => r ? { ...r, categoryId: val, isBillable: c ? c.defaultBillable : r.isBillable } : r);
                 }}
-                className="h-8 rounded border border-border bg-background px-2 text-xs"
               >
-                <option value="">— None —</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                <SelectTrigger className="h-8 text-xs w-36">
+                  <SelectValue placeholder="— None —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <button
               onClick={handleAddRow}
@@ -1424,36 +1444,44 @@ export default function TimesheetsList() {
             {form.projectId && (
               <div className="grid gap-1.5">
                 <Label htmlFor="ts-task">Task</Label>
-                <select
-                  id="ts-task"
-                  value={form.taskId}
-                  onChange={e => {
-                    const t = projectTasks.find(t => String(t.id) === e.target.value);
-                    setForm(f => ({ ...f, taskId: e.target.value, taskName: t?.name ?? "" }));
+                <Select
+                  value={form.taskId || "__none__"}
+                  onValueChange={val => {
+                    if (val === "__none__") { setForm(f => ({ ...f, taskId: "", taskName: "" })); return; }
+                    const t = projectTasks.find(t => String(t.id) === val);
+                    setForm(f => ({ ...f, taskId: val, taskName: t?.name ?? "" }));
                   }}
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">— No specific task —</option>
-                  {projectTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                  <SelectTrigger id="ts-task">
+                    <SelectValue placeholder="— No specific task —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— No specific task —</SelectItem>
+                    {projectTasks.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
             {/* Category */}
             <div className="grid gap-1.5">
               <Label htmlFor="ts-category">Time Category</Label>
-              <select
-                id="ts-category"
-                value={form.categoryId}
-                onChange={e => {
-                  const cat = categories.find(c => String(c.id) === e.target.value);
-                  setForm(f => ({ ...f, categoryId: e.target.value, isBillable: cat ? cat.defaultBillable : f.isBillable }));
+              <Select
+                value={form.categoryId || "__none__"}
+                onValueChange={val => {
+                  if (val === "__none__") { setForm(f => ({ ...f, categoryId: "" })); return; }
+                  const cat = categories.find(c => String(c.id) === val);
+                  setForm(f => ({ ...f, categoryId: val, isBillable: cat ? cat.defaultBillable : f.isBillable }));
                 }}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="">— Select category —</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+                <SelectTrigger id="ts-category">
+                  <SelectValue placeholder="— Select category —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Select category —</SelectItem>
+                  {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Date + Hours — 0.25 step */}
