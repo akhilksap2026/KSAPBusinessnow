@@ -23,6 +23,7 @@ import milestoneCommentsRouter from "./milestone_comments";
 import timeEntryCategoriesRouter from "./time_entry_categories";
 import templateTasksRouter from "./template_tasks";
 import fxRatesRouter from "./fx_rates";
+import opportunitiesRouter from "./opportunities";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(timeEntryCategoriesRouter);
 router.use(taskResourcesRouter);
 router.use(templateTasksRouter);
 router.use(fxRatesRouter);
+router.use(opportunitiesRouter);
 
 export default router;

@@ -36,6 +36,9 @@ import FinancePage from "@/pages/finance/index";
 import ContractsPage from "@/pages/contracts/index";
 import ChangesPage from "@/pages/changes/index";
 
+// Opportunities
+import OpportunitiesPage from "@/pages/opportunities/index";
+
 // Templates
 import TemplatesPage from "@/pages/templates/index";
 
@@ -107,6 +110,7 @@ export function AppRouter() {
 
       {/* ── Customer Management ────────────────────────────────────────── */}
       <Route path="/accounts"><Guard><AccountsList /></Guard></Route>
+      <Route path="/opportunities"><Guard><OpportunitiesPage /></Guard></Route>
 
       {/* ── Resource Command ───────────────────────────────────────────── */}
       <Route path="/resources">

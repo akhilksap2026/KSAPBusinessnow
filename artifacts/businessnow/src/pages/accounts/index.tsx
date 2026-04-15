@@ -3,17 +3,60 @@ import { useListAccounts } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import {
   Search, Building2, TrendingUp, AlertTriangle, DollarSign,
-  Cloud, Server, Calendar, CheckCircle2,
+  Cloud, Server, Calendar, CheckCircle2, Plus, X,
 } from "lucide-react";
 
-const SEGMENTS = ["enterprise", "mid_market", "smb", "strategic"];
-const STATUSES = ["active", "at_risk", "inactive", "churned", "prospect"];
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
+
+const SEGMENTS = ["enterprise", "mid_market", "smb", "strategic"] as const;
+const STATUSES = ["active", "at_risk", "prospect", "inactive", "churned"] as const;
+
+const INDUSTRIES = [
+  "Transportation & Logistics", "Freight & Shipping", "Supply Chain", "Retail & E-commerce",
+  "Manufacturing", "Healthcare", "Energy & Utilities", "Government", "Financial Services", "Other",
+];
+
+const SEGMENT_LABELS: Record<string, string> = {
+  enterprise: "Enterprise", mid_market: "Mid Market", smb: "SMB", strategic: "Strategic",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "Active", at_risk: "At Risk", prospect: "Prospect", inactive: "Inactive", churned: "Churned",
+};
+
+type AddAccountForm = {
+  name: string;
+  industry: string;
+  segment: string;
+  status: string;
+  region: string;
+  otmVersion: string;
+  cloudDeployment: boolean;
+  annualContractValue: string;
+  renewalDate: string;
+};
+
+const defaultForm = (): AddAccountForm => ({
+  name: "",
+  industry: "",
+  segment: "enterprise",
+  status: "prospect",
+  region: "",
+  otmVersion: "",
+  cloudDeployment: false,
+  annualContractValue: "",
+  renewalDate: "",
+});
 
 function HealthBar({ score }: { score: number | null }) {
   if (score == null || score === 0) return <span className="text-muted-foreground text-xs">—</span>;
@@ -58,11 +101,231 @@ function KpiCard({ label, value, sub, icon: Icon, accent }: {
   );
 }
 
+// ── Add Account Modal ─────────────────────────────────────────────────────────
+
+function AddAccountModal({ open, onClose, onCreated }: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [form, setForm] = useState<AddAccountForm>(defaultForm());
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof AddAccountForm, string>>>({});
+
+  const set = <K extends keyof AddAccountForm>(k: K, v: AddAccountForm[K]) =>
+    setForm(f => ({ ...f, [k]: v }));
+
+  const validate = () => {
+    const e: typeof errors = {};
+    if (!form.name.trim()) e.name = "Account name is required";
+    if (form.annualContractValue && isNaN(parseFloat(form.annualContractValue)))
+      e.annualContractValue = "Must be a valid number";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        segment: form.segment,
+        status: form.status,
+        cloudDeployment: form.cloudDeployment,
+      };
+      if (form.industry)            payload.industry = form.industry;
+      if (form.region)              payload.region = form.region;
+      if (form.otmVersion)          payload.otmVersion = form.otmVersion;
+      if (form.annualContractValue) payload.annualContractValue = parseFloat(form.annualContractValue);
+      if (form.renewalDate)         payload.renewalDate = form.renewalDate;
+
+      const res = await fetch(`${API_BASE}/accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to create account");
+      }
+      const created = await res.json();
+      toast({ title: `Account "${created.name}" created successfully` });
+      setForm(defaultForm());
+      setErrors({});
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = () => {
+    setForm(defaultForm());
+    setErrors({});
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && handleClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            Add New Account
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Account Name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="acc-name">
+              Account Name <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="acc-name"
+              placeholder="e.g. GlobalTrans Corp"
+              value={form.name}
+              onChange={e => set("name", e.target.value)}
+              className={errors.name ? "border-red-500" : ""}
+              autoFocus
+            />
+            {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+          </div>
+
+          {/* Status + Segment */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={v => set("status", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map(s => (
+                    <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Segment</Label>
+              <Select value={form.segment} onValueChange={v => set("segment", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SEGMENTS.map(s => (
+                    <SelectItem key={s} value={s}>{SEGMENT_LABELS[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Industry + Region */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Industry</Label>
+              <Select value={form.industry || "__none__"} onValueChange={v => set("industry", v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Select industry…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {INDUSTRIES.map(i => (
+                    <SelectItem key={i} value={i}>{i}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="acc-region">Region</Label>
+              <Input
+                id="acc-region"
+                placeholder="e.g. North America"
+                value={form.region}
+                onChange={e => set("region", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* OTM Version + ACV */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="acc-otm">OTM Version</Label>
+              <Input
+                id="acc-otm"
+                placeholder="e.g. 24.2"
+                value={form.otmVersion}
+                onChange={e => set("otmVersion", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="acc-acv">Annual Contract Value ($)</Label>
+              <Input
+                id="acc-acv"
+                placeholder="e.g. 120000"
+                value={form.annualContractValue}
+                onChange={e => set("annualContractValue", e.target.value)}
+                className={errors.annualContractValue ? "border-red-500" : ""}
+              />
+              {errors.annualContractValue && <p className="text-xs text-red-500">{errors.annualContractValue}</p>}
+            </div>
+          </div>
+
+          {/* Renewal Date */}
+          <div className="space-y-1.5">
+            <Label htmlFor="acc-renewal">Contract Renewal Date</Label>
+            <Input
+              id="acc-renewal"
+              type="date"
+              value={form.renewalDate}
+              onChange={e => set("renewalDate", e.target.value)}
+            />
+          </div>
+
+          {/* Cloud Deployment toggle */}
+          <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/20">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Cloud Deployment</Label>
+              <p className="text-xs text-muted-foreground">Is this account on OTM SaaS / OCI cloud?</p>
+            </div>
+            <Switch
+              checked={form.cloudDeployment}
+              onCheckedChange={v => set("cloudDeployment", v)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={handleClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving} className="gap-1.5">
+            {saving ? (
+              <span className="flex items-center gap-1.5">
+                <span className="animate-spin inline-block w-3.5 h-3.5 border border-t-transparent border-white rounded-full" />
+                Creating…
+              </span>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Create Account
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function AccountsList() {
-  const { data: accounts, isLoading } = useListAccounts();
+  const { data: accounts, isLoading, refetch } = useListAccounts();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSegment, setFilterSegment] = useState("all");
+  const [addOpen, setAddOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!accounts) return [];
@@ -115,11 +378,17 @@ export default function AccountsList() {
   return (
     <div className="p-6 space-y-5 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Accounts</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {kpis.total} accounts · {kpis.active} active · ${kpis.totalACV.toLocaleString()} total ACV
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Accounts</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {kpis.total} accounts · {kpis.active} active · ${kpis.totalACV.toLocaleString()} total ACV
+          </p>
+        </div>
+        <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
+          <Plus className="h-4 w-4" />
+          Add Account
+        </Button>
       </div>
 
       {/* KPI Row */}
@@ -145,14 +414,14 @@ export default function AccountsList() {
           <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            {STATUSES.map(s => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}
+            {STATUSES.map(s => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterSegment} onValueChange={setFilterSegment}>
           <SelectTrigger className="w-[150px] h-9"><SelectValue placeholder="Segment" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Segments</SelectItem>
-            {SEGMENTS.map(s => <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>)}
+            {SEGMENTS.map(s => <SelectItem key={s} value={s}>{SEGMENT_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
         {(filterStatus !== "all" || filterSegment !== "all" || search) && (
@@ -249,6 +518,13 @@ export default function AccountsList() {
         <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 text-amber-500" /> Renewal within 120 days</span>
         <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Health ≥ 80</span>
       </div>
+
+      {/* Add Account Modal */}
+      <AddAccountModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={() => refetch()}
+      />
     </div>
   );
 }

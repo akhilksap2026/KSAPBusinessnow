@@ -14,8 +14,8 @@ import {
   changeRequestsTable,
   notificationsTable,
   phasesTable,
+  opportunitiesTable,
 } from "@workspace/db";
-import { sql } from "drizzle-orm";
 
 export async function autoSeedIfEmpty() {
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(accountsTable);
@@ -416,6 +416,24 @@ export async function runSeed() {
     { projectId: projects[7].id, name: "Test & Go-Live",        sequence: 3, startDate: "2025-11-01", endDate: "2025-12-31", status: "pending",     description: "UAT and go-live." },
   ]);
   console.log("[auto-seed] Inserted phases");
+
+  // ── Opportunities ───────────────────────────────────────────────────────────
+  const pm = resources.find(r => r.title?.includes("Project Manager") || r.title?.includes("Director")) ?? resources[4];
+  const sr = resources.find(r => r.title?.includes("Senior") || r.title?.includes("Principal")) ?? resources[5];
+  const dir = resources.find(r => r.title?.includes("Director") || r.title?.includes("Partner")) ?? resources[1];
+  await db.insert(opportunitiesTable).values([
+    { name: "GlobalTrans OTM Cloud Migration Phase 2",        accountId: accounts[0].id, accountName: accounts[0].name, stage: "proposal",     type: "cloud_migration",      value: "480000.00", probability: 65, expectedCloseDate: "2026-05-30", expectedStartDate: "2026-07-01", expectedDurationWeeks: 20, ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "high",      staffingRisk: "medium", summary: "Expand GlobalTrans OTM on-prem to full cloud (OCI). Phase 2 covers financials and rate management modules.", goNoGoStatus: "approved" },
+    { name: "Apex Logistics AMS Renewal & Expansion",         accountId: accounts[1].id, accountName: accounts[1].name, stage: "negotiation",  type: "ams",                  value: "220000.00", probability: 80, expectedCloseDate: "2026-05-15", expectedStartDate: "2026-06-01", expectedDurationWeeks: 52, ownerId: pm?.id,  ownerName: pm?.name,  deliveryComplexity: "low",       staffingRisk: "none",   summary: "Renew AMS contract with scope expansion to include new carrier integration and rate optimization.",          goNoGoStatus: "approved" },
+    { name: "NorthStar Freight — OTM Certification",          accountId: accounts[2].id, accountName: accounts[2].name, stage: "discovery",    type: "certification",        value: "95000.00",  probability: 40, expectedCloseDate: "2026-07-10", expectedStartDate: "2026-08-01", expectedDurationWeeks: 12, ownerId: dir?.id, ownerName: dir?.name, deliveryComplexity: "medium",     staffingRisk: "none",   summary: "Deliver end-user OTM certification training across 3 NorthStar regional offices.",                          goNoGoStatus: "pending"  },
+    { name: "Pacific Distribution — Custom Rate Engine",      accountId: accounts[3].id, accountName: accounts[3].name, stage: "qualified",    type: "custom_development",   value: "310000.00", probability: 50, expectedCloseDate: "2026-08-15", expectedStartDate: "2026-09-01", expectedDurationWeeks: 24, ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "very_high",  staffingRisk: "high",   summary: "Build a custom Groovy-based rate engine to replace legacy Pacific in-house calculation logic.",               goNoGoStatus: "pending"  },
+    { name: "Meridian Carriers — OTM Upgrade v24.2",          accountId: accounts[4].id, accountName: accounts[4].name, stage: "lead",         type: "implementation",       value: "175000.00", probability: 20, expectedCloseDate: "2026-09-01", expectedStartDate: "2026-10-01", expectedDurationWeeks: 16, ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "medium",     staffingRisk: "none",   summary: "Upgrade Meridian OTM instance from v23.1 to v24.2 including data migration and regression testing.",         goNoGoStatus: "pending"  },
+    { name: "BlueStar Transport — Data Services",             accountId: accounts[5].id, accountName: accounts[5].name, stage: "proposal",     type: "data_services",        value: "130000.00", probability: 55, expectedCloseDate: "2026-06-20", expectedStartDate: "2026-07-15", expectedDurationWeeks: 10, ownerId: pm?.id,  ownerName: pm?.name,  deliveryComplexity: "low",       staffingRisk: "none",   summary: "Design and implement OTM reporting data model feeding BlueStar BI platform (Power BI).",                     goNoGoStatus: "approved" },
+    { name: "Summit Freight — OTM Implementation",            accountId: accounts[6].id, accountName: accounts[6].name, stage: "won",          type: "implementation",       value: "560000.00", probability: 100, expectedCloseDate: "2026-04-01", expectedStartDate: "2026-05-01", expectedDurationWeeks: 32, ownerId: dir?.id, ownerName: dir?.name, deliveryComplexity: "high",      staffingRisk: "medium", summary: "Full greenfield OTM 24.2 implementation for Summit. Project kicked off May 2026.",                           goNoGoStatus: "approved" },
+    { name: "Harbor Logistics — OTM Rate Maintenance",        accountId: accounts[7].id, accountName: accounts[7].name, stage: "lost",         type: "rate_maintenance",     value: "80000.00",  probability: 0,  expectedCloseDate: "2026-03-15", expectedDurationWeeks: 8,          ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "low",       staffingRisk: "none",   summary: "Rate table maintenance and carrier onboarding. Lost to competitor with lower day-rate.",                     goNoGoStatus: "rejected" },
+    { name: "GlobalTrans — OTM Support Retainer",             accountId: accounts[0].id, accountName: accounts[0].name, stage: "won",          type: "ams",                  value: "180000.00", probability: 100, expectedCloseDate: "2025-12-15", expectedStartDate: "2026-01-01", expectedDurationWeeks: 52, ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "low",       staffingRisk: "none",   summary: "Annual AMS retainer providing 40 hrs/month OTM functional and technical support.",                          goNoGoStatus: "approved" },
+    { name: "Apex Logistics — Carrier Network Expansion",     accountId: accounts[1].id, accountName: accounts[1].name, stage: "discovery",    type: "implementation",       value: "245000.00", probability: 35, expectedCloseDate: "2026-10-01", expectedStartDate: "2026-11-01", expectedDurationWeeks: 18, ownerId: dir?.id, ownerName: dir?.name, deliveryComplexity: "medium",     staffingRisk: "low",    summary: "Onboard 12 new carriers into Apex OTM including EDI 214/990 integration and rate agreements.",              goNoGoStatus: "pending"  },
+  ]);
+  console.log("[auto-seed] Inserted opportunities");
 
   console.log("[auto-seed] ✅ Seed complete.");
 }
