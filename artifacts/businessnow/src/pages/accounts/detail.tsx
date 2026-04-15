@@ -21,21 +21,6 @@ function SeverityIcon({ s }: { s: string }) {
     : <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />;
 }
 
-const SIGNAL_LABELS: Record<string, string> = {
-  renewal_due: "Renewal Due",
-  new_work: "New Work",
-  ams_expansion: "AMS Expansion",
-  new_region: "New Region",
-  custom_dev: "Custom Development",
-  migration_phase2: "Migration Phase 2",
-};
-
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: "border-red-500/30 bg-red-500/5 text-red-400",
-  high: "border-orange-500/30 bg-orange-500/5 text-orange-400",
-  medium: "border-amber-500/30 bg-amber-500/5 text-amber-400",
-  low: "border-border bg-muted text-muted-foreground",
-};
 
 export default function AccountDetail() {
   const params = useParams();
@@ -65,7 +50,7 @@ export default function AccountDetail() {
     </div>
   );
 
-  const { account, healthScore, healthReasons, projects, avgProjectHealth, overdueMilestones, clientActions, upcomingGoLives, invoiceSummary, csatAvg, renewalSignals, changeRequests } = data;
+  const { account, healthScore, healthReasons, projects, avgProjectHealth, overdueMilestones, clientActions, upcomingGoLives, invoiceSummary, csatAvg, changeRequests } = data;
 
   const healthColor = healthScore >= 80 ? "text-emerald-400" : healthScore >= 65 ? "text-amber-400" : "text-red-400";
   const healthBg = healthScore >= 80 ? "bg-emerald-500" : healthScore >= 65 ? "bg-amber-500" : "bg-red-500";
@@ -96,7 +81,7 @@ export default function AccountDetail() {
         </div>
 
         {/* KPI Strip */}
-        <div className="grid grid-cols-7 gap-3 mt-4 max-w-[1600px] mx-auto">
+        <div className="grid grid-cols-6 gap-3 mt-4 max-w-[1600px] mx-auto">
           {[
             { label: "ACV", value: fmt(account.annualContractValue), color: "text-foreground" },
             { label: "Avg Project Health", value: `${avgProjectHealth}/100`, color: avgProjectHealth >= 80 ? "text-emerald-400" : avgProjectHealth >= 65 ? "text-amber-400" : "text-red-400" },
@@ -104,7 +89,6 @@ export default function AccountDetail() {
             { label: "Total Billed", value: fmt(invoiceSummary.total), color: "text-foreground" },
             { label: "Outstanding", value: fmt(invoiceSummary.outstanding), color: invoiceSummary.outstanding > 0 ? "text-amber-400" : "text-muted-foreground" },
             { label: "Overdue Items", value: String(invoiceSummary.overdueCount + overdueMilestones.length), color: (invoiceSummary.overdueCount + overdueMilestones.length) > 0 ? "text-red-400" : "text-muted-foreground" },
-            { label: "Renewal Date", value: account.renewalDate || "—", color: "text-foreground/70" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-muted/50 rounded-lg px-3 py-2.5">
               <p className="text-xs text-muted-foreground/70">{label}</p>
@@ -121,9 +105,6 @@ export default function AccountDetail() {
             <TabsTrigger value="projects" className="data-[state=active]:bg-muted">
               Projects ({projects.length})
               {projects.some((p: any) => p.healthScore < 65) && <span className="ml-1.5 w-2 h-2 bg-red-400 rounded-full inline-block" />}
-            </TabsTrigger>
-            <TabsTrigger value="signals" className="data-[state=active]:bg-muted">
-              Renewal Signals ({renewalSignals.length})
             </TabsTrigger>
             <TabsTrigger value="changes" className="data-[state=active]:bg-muted">
               Change Orders ({changeRequests.length})
@@ -292,7 +273,6 @@ export default function AccountDetail() {
                           <td className="p-4">
                             <div className="flex gap-2">
                               <Link href={`/projects/${p.id}`}><ExternalLink className="h-4 w-4 text-muted-foreground/60 hover:text-foreground/70" /></Link>
-                              {p.status === "active" && <Link href={`/projects/${p.id}/close`}><span className="text-xs text-muted-foreground/60 hover:text-muted-foreground">Close</span></Link>}
                             </div>
                           </td>
                         </tr>
@@ -302,43 +282,6 @@ export default function AccountDetail() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Renewal Signals Tab */}
-          <TabsContent value="signals">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">{renewalSignals.length} signal{renewalSignals.length !== 1 ? "s" : ""} tracked</p>
-              </div>
-              {renewalSignals.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground/70">
-                  <TrendingUp className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p>No renewal signals yet</p>
-                  <p className="text-xs mt-1">Signals appear when expansion opportunities are identified</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {renewalSignals.map((s: any) => (
-                    <Card key={s.id} className={`border ${PRIORITY_COLOR[s.priority] || PRIORITY_COLOR.medium}`}>
-                      <CardContent className="pt-4 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-semibold text-foreground text-sm">{SIGNAL_LABELS[s.signalType] || s.signalType}</p>
-                            <p className="text-xs text-muted-foreground/70 mt-0.5">{s.description || "—"}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{s.status}</Badge>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          {s.dueDate && <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />{s.dueDate}</span>}
-                          {s.estimatedValue && <span className="text-emerald-400 font-medium">{fmt(s.estimatedValue)}</span>}
-                        </div>
-                        {s.assignedTo && <p className="text-xs text-muted-foreground/70">Assigned: {s.assignedTo}</p>}
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
           </TabsContent>
 
           {/* Change Orders Tab */}

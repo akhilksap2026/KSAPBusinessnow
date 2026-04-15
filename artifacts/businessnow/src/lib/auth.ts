@@ -30,15 +30,15 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:              "System configuration, audit log, data health",
-  executive:          "Portfolio KPIs, revenue, account health",
+  executive:          "Portfolio KPIs, revenue, project health",
   delivery_director:  "Project escalations, overdue milestones, team capacity",
   project_manager:    "Active projects, tasks, milestones, timesheets",
   consultant:         "Log time, view assigned projects, update task status",
   resource_manager:   "Staffing, utilization, capacity forecasting",
   finance_lead:       "Invoices, contracts, finance, change orders",
-  sales:              "Opportunities, pipeline, renewal signals",
-  account_manager:    "Account health, CSAT, renewals, relationship management",
-  client_stakeholder: "Project updates, milestone status, invoices",
+  sales:              "Customer accounts and project overview",
+  account_manager:    "Customer accounts and project overview",
+  client_stakeholder: "View assigned projects and milestone status",
 };
 
 export interface DemoUser {
@@ -121,19 +121,14 @@ export const PERMISSIONS = {
   logTime:                  ["admin","delivery_director","project_manager","consultant","resource_manager"],
   approveTimesheets:        ["admin","delivery_director","project_manager","resource_manager"],
   viewAllTimesheets:        ["admin","delivery_director","resource_manager","finance_lead"],
-  // Accounts
-  createAccount:            ["admin","sales","account_manager"],
-  editAccount:              ["admin","sales","account_manager"],
-  viewAccountACV:           ["admin","executive","finance_lead","sales","account_manager"],
-  // Opportunities
-  createOpportunity:        ["admin","sales","account_manager"],
-  editOpportunity:          ["admin","sales","account_manager"],
-  markOpportunityWon:       ["admin","sales","delivery_director"],
-  executeHandoff:           ["admin","sales","delivery_director"],
+  // Accounts / Customers
+  createAccount:            ["admin","delivery_director","project_manager","finance_lead"],
+  editAccount:              ["admin","delivery_director","project_manager","finance_lead"],
+  viewAccountACV:           ["admin","executive","finance_lead"],
   // Contracts
-  createContract:           ["admin","finance_lead","account_manager"],
+  createContract:           ["admin","finance_lead","project_manager"],
   editContract:             ["admin","finance_lead"],
-  viewContractValue:        ["admin","executive","finance_lead","account_manager","project_manager"],
+  viewContractValue:        ["admin","executive","finance_lead","project_manager"],
   // Finance
   viewWIPData:              ["admin","executive","finance_lead","delivery_director"],
   viewMarginData:           ["admin","executive","finance_lead"],
@@ -143,9 +138,9 @@ export const PERMISSIONS = {
   createInvoice:            ["admin","finance_lead"],
   markInvoicePaid:          ["admin","finance_lead"],
   // Change Orders
-  createChangeOrder:        ["admin","delivery_director","project_manager","account_manager"],
+  createChangeOrder:        ["admin","delivery_director","project_manager"],
   approveChangeOrder:       ["admin","executive","delivery_director","finance_lead"],
-  advanceChangeOrderStage:  ["admin","delivery_director","account_manager","project_manager"],
+  advanceChangeOrderStage:  ["admin","delivery_director","project_manager"],
   // Resources
   createResource:           ["admin","resource_manager","delivery_director"],
   editResource:             ["admin","resource_manager","delivery_director"],
@@ -155,28 +150,14 @@ export const PERMISSIONS = {
   createAllocation:         ["admin","resource_manager","delivery_director","project_manager"],
   removeAllocation:         ["admin","resource_manager","delivery_director"],
   resolveConflicts:         ["admin","resource_manager","delivery_director"],
-  // Staffing Requests
-  createStaffingRequest:    ["admin","resource_manager","delivery_director","project_manager"],
-  approveStaffingRequest:   ["admin","resource_manager","delivery_director"],
-  cancelStaffingRequest:    ["admin","resource_manager","delivery_director","project_manager"],
   // Templates (Project Blueprints)
   createTemplate:           ["admin","delivery_director"],
   editTemplate:             ["admin","delivery_director"],
   useTemplate:              ["admin","delivery_director","project_manager"],
-  // Automations
-  enableAutomation:         ["admin","delivery_director"],
-  triggerAutomation:        ["admin"],
-  // Forms
-  createForm:               ["admin","delivery_director","project_manager","account_manager"],
-  viewFormResponses:        ["admin","delivery_director","project_manager","account_manager"],
   // Portfolio
-  viewPortfolio:            ["admin","executive","delivery_director","sales","account_manager"],
+  viewPortfolio:            ["admin","executive","delivery_director","project_manager"],
   viewDirectorView:         ["admin","executive","delivery_director"],
-  // Renewal Signals
-  actOnRenewalSignal:       ["admin","sales","account_manager"],
-  // Handover / Closure
-  editHandover:             ["admin","delivery_director","project_manager"],
-  signOffHandover:          ["admin","delivery_director"],
+  // Project Closure
   executeProjectClosure:    ["admin","delivery_director","project_manager"],
   // Admin
   viewAdminPanel:           ["admin"],
@@ -201,19 +182,14 @@ export function usePermission(permission: Permission): boolean {
 export const ROUTE_ROLES: Record<string, readonly Role[]> = {
   "/admin":               ["admin"],
   "/dashboard/admin":     ["admin"],
-  "/dashboard/sales":     ["sales","admin"],
-  "/dashboard/am":        ["account_manager","admin"],
-  "/dashboard/pm":        ["project_manager","admin","delivery_director"],
-  "/portfolio":           ["admin","executive","delivery_director","sales","account_manager"],
+  "/dashboard/pm":        ["project_manager","admin","delivery_director","consultant"],
+  "/portfolio":           ["admin","executive","delivery_director","project_manager"],
   "/finance":             ["admin","executive","finance_lead","delivery_director","project_manager"],
-  "/contracts":           ["admin","finance_lead","project_manager","account_manager"],
-  "/changes":             ["admin","finance_lead","project_manager","delivery_director","account_manager"],
-  "/invoices":            ["admin","executive","finance_lead","delivery_director","project_manager","account_manager"],
-  "/renewal-signals":     ["admin","sales","account_manager","delivery_director"],
-  "/staffing-requests":   ["admin","resource_manager","delivery_director","project_manager"],
+  "/contracts":           ["admin","finance_lead","project_manager"],
+  "/changes":             ["admin","finance_lead","project_manager","delivery_director"],
+  "/invoices":            ["admin","executive","finance_lead","delivery_director","project_manager"],
   "/capacity":            ["admin","resource_manager","delivery_director","project_manager"],
   "/allocations":         ["admin","resource_manager","delivery_director","project_manager"],
-  "/automations":         ["admin","delivery_director"],
   "/templates":           ["admin","delivery_director","project_manager"],
   "/resources":           ["admin","delivery_director","resource_manager","project_manager","consultant"],
   "/resources/:id":       ["admin","delivery_director","resource_manager","project_manager"],

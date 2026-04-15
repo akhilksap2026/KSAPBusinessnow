@@ -9,9 +9,7 @@ import type { Role } from "@/lib/auth";
 import Login from "@/pages/login";
 
 // Dashboards
-import SalesDashboard from "@/pages/dashboard/sales";
 import PMDashboard from "@/pages/dashboard/pm";
-import AMDashboard from "@/pages/dashboard/am";
 import AdminDashboard from "@/pages/dashboard/admin";
 
 // Lists
@@ -20,7 +18,6 @@ import AccountsList from "@/pages/accounts/index";
 import ResourcesList from "@/pages/resources/index";
 import TimesheetsList from "@/pages/timesheets/index";
 import InvoicesList from "@/pages/invoices/index";
-import OpportunitiesList from "@/pages/opportunities/index";
 import MilestonesList from "@/pages/milestones/index";
 import TasksPage from "@/pages/tasks/index";
 
@@ -29,10 +26,6 @@ import ProjectDetail from "@/pages/projects/detail";
 import ProjectCommand from "@/pages/projects/command";
 import AccountDetail from "@/pages/accounts/detail";
 import ResourceDetail from "@/pages/resources/detail";
-
-// Pipeline
-import OpportunityDetail from "@/pages/opportunities/detail";
-import HandoffPage from "@/pages/handoff/index";
 
 // Resource Command
 import AllocationsPage from "@/pages/allocations/index";
@@ -43,19 +36,12 @@ import FinancePage from "@/pages/finance/index";
 import ContractsPage from "@/pages/contracts/index";
 import ChangesPage from "@/pages/changes/index";
 
-// Client Portal
-import ClientPortal from "@/pages/clients/portal";
-
 // Templates
 import TemplatesPage from "@/pages/templates/index";
 
-// Phase 5 — Intelligence, Automations, Closure, Handover, Admin
+// Portfolio & Admin
 import PortfolioPage from "@/pages/portfolio/index";
-import AutomationsPage from "@/pages/automations/index";
-import ClosurePage from "@/pages/projects/closure";
-import HandoverPage from "@/pages/handover/index";
 import AdminPage from "@/pages/admin/index";
-import StaffingRequestsPage from "@/pages/staffing-requests/index";
 import PMOSettingsPage from "@/pages/settings/pmo";
 
 // ─── DashboardRedirect — role-appropriate home landing ───────────────────────
@@ -69,33 +55,22 @@ function DashboardRedirect() {
     case "project_manager":    return <Redirect to="/dashboard/pm" />;
     case "resource_manager":   return <Redirect to="/resources" />;
     case "finance_lead":       return <Redirect to="/finance" />;
-    case "sales":              return <Redirect to="/dashboard/sales" />;
-    case "account_manager":    return <Redirect to="/dashboard/am" />;
-    case "client_stakeholder": return <Redirect to="/portal" />;
+    case "sales":              return <Redirect to="/accounts" />;
+    case "account_manager":    return <Redirect to="/accounts" />;
+    case "client_stakeholder": return <Redirect to="/projects" />;
     case "admin":              return <Redirect to="/dashboard/admin" />;
-    case "consultant":         return <Redirect to="/dashboard/pm" />;
+    case "consultant":         return <Redirect to="/timesheets" />;
     default:                   return <Redirect to="/dashboard/pm" />;
   }
 }
 
-// ─── Guard — auth + role check + client-stakeholder containment ──────────────
-//
-//  roles  (optional)  — if omitted, any authenticated role is allowed.
-//  Client stakeholders are always redirected to /portal unless "client_stakeholder"
-//  is explicitly in the roles array.
+// ─── Guard — auth + role check ────────────────────────────────────────────────
 
 function Guard({ children, roles }: { children: React.ReactNode; roles?: readonly Role[] }) {
   const { role } = useAuthRole();
 
-  // 1. Not logged in
   if (!role) return <Redirect to="/login" />;
 
-  // 2. Client stakeholder containment — they only see /portal
-  if (role === "client_stakeholder" && (!roles || !roles.includes("client_stakeholder"))) {
-    return <Redirect to="/portal" />;
-  }
-
-  // 3. Role not in allowlist
   if (roles && !roles.includes(role)) {
     return <AppLayout><AccessDenied allowedRoles={roles} /></AppLayout>;
   }
@@ -117,14 +92,8 @@ export function AppRouter() {
       </Route>
 
       {/* ── Dashboards (role-specific) ─────────────────────────────────── */}
-      <Route path="/dashboard/sales">
-        <Guard roles={ROUTE_ROLES["/dashboard/sales"]}><SalesDashboard /></Guard>
-      </Route>
       <Route path="/dashboard/pm">
         <Guard roles={ROUTE_ROLES["/dashboard/pm"]}><PMDashboard /></Guard>
-      </Route>
-      <Route path="/dashboard/am">
-        <Guard roles={ROUTE_ROLES["/dashboard/am"]}><AMDashboard /></Guard>
       </Route>
       <Route path="/dashboard/admin">
         <Guard roles={ROUTE_ROLES["/dashboard/admin"]}><AdminDashboard /></Guard>
@@ -136,6 +105,9 @@ export function AppRouter() {
       <Route path="/tasks"><Guard><TasksPage /></Guard></Route>
       <Route path="/timesheets"><Guard><TimesheetsList /></Guard></Route>
 
+      {/* ── Customer Management ────────────────────────────────────────── */}
+      <Route path="/accounts"><Guard><AccountsList /></Guard></Route>
+
       {/* ── Resource Command ───────────────────────────────────────────── */}
       <Route path="/resources">
         <Guard roles={ROUTE_ROLES["/resources"]}><ResourcesList /></Guard>
@@ -145,9 +117,6 @@ export function AppRouter() {
       </Route>
       <Route path="/capacity">
         <Guard roles={ROUTE_ROLES["/capacity"]}><CapacityPage /></Guard>
-      </Route>
-      <Route path="/staffing-requests">
-        <Guard roles={ROUTE_ROLES["/staffing-requests"]}><StaffingRequestsPage /></Guard>
       </Route>
 
       {/* ── Finance Command ────────────────────────────────────────────── */}
@@ -165,8 +134,6 @@ export function AppRouter() {
       <Route path="/invoices">
         <Guard roles={ROUTE_ROLES["/invoices"]}><InvoicesList /></Guard>
       </Route>
-      <Route path="/opportunities"><Guard><OpportunitiesList /></Guard></Route>
-      <Route path="/accounts"><Guard><AccountsList /></Guard></Route>
 
       {/* ── Templates ──────────────────────────────────────────────────── */}
       <Route path="/templates">
@@ -182,9 +149,6 @@ export function AppRouter() {
       </Route>
 
       {/* ── Operations ─────────────────────────────────────────────────── */}
-      <Route path="/automations">
-        <Guard roles={ROUTE_ROLES["/automations"]}><AutomationsPage /></Guard>
-      </Route>
       <Route path="/admin">
         <Guard roles={ROUTE_ROLES["/admin"]}><AdminPage /></Guard>
       </Route>
@@ -192,28 +156,9 @@ export function AppRouter() {
         <Guard roles={["admin", "delivery_director", "project_manager"]}><PMOSettingsPage /></Guard>
       </Route>
 
-      {/* ── Client Portal (client_stakeholder only) ────────────────────── */}
-      <Route path="/portal">
-        {role ? <ClientPortal /> : <Redirect to="/login" />}
-      </Route>
-      <Route path="/clients/:id/portal">
-        {role ? <ClientPortal /> : <Redirect to="/login" />}
-      </Route>
-
       {/* ── Project sub-routes (before /projects/:id) ──────────────────── */}
       <Route path="/projects/:id/command">
         {role ? <AppLayout><ProjectCommand /></AppLayout> : <Redirect to="/login" />}
-      </Route>
-      <Route path="/projects/:id/close">
-        <Guard><ClosurePage /></Guard>
-      </Route>
-      <Route path="/handover/:id">
-        <Guard><HandoverPage /></Guard>
-      </Route>
-
-      {/* ── Sales Handoff (before /opportunities/:id) ──────────────────── */}
-      <Route path="/handoff/:opportunityId">
-        <Guard><HandoffPage /></Guard>
       </Route>
 
       {/* ── Detail pages ───────────────────────────────────────────────── */}
@@ -222,9 +167,6 @@ export function AppRouter() {
       <Route path="/resources/:id">
         <Guard roles={ROUTE_ROLES["/resources/:id"]}><ResourceDetail /></Guard>
       </Route>
-
-      {/* ── Pipeline ───────────────────────────────────────────────────── */}
-      <Route path="/opportunities/:id"><Guard><OpportunityDetail /></Guard></Route>
 
       {/* ── Catch-all ──────────────────────────────────────────────────── */}
       <Route path="/:rest*">

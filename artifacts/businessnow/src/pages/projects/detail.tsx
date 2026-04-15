@@ -11,7 +11,7 @@ import {
   User, ExternalLink, RefreshCw, Circle, CheckSquare, Square,
   MessageSquare, PlusCircle, TrendingUp, Receipt, FileText,
   ThumbsUp, ThumbsDown, Info, ChevronDown, Plus, Pencil, Trash2,
-  Milestone, Layers, Grip, FolderOpen, CheckCheck, X, CreditCard, Copy,
+  Milestone, Layers, Grip, FolderOpen, CheckCheck, X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -2152,10 +2152,7 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             {[
               { key: "kickoffComplete", label: "Kickoff" },
-              { key: "clientPortalActivated", label: "Client Portal" },
               { key: "billingReadiness", label: "Billing Ready" },
-              { key: "closureReadiness", label: "Closure Ready" },
-              { key: "handoverReadiness", label: "Handover Ready" },
             ].map(f=>{
               const done = !!project[f.key];
               return (
@@ -2238,141 +2235,6 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
   );
 }
 
-// ─── Project Rate Cards Section ───────────────────────────────────────────────
-interface ProjRateCard {
-  id: number; name: string; role: string; practiceArea: string | null;
-  billingRate: number; costRate: number | null; effectiveDate: string | null;
-}
-
-function ProjectRateCards({ projectId }: { projectId: number }) {
-  const [cards, setCards] = useState<ProjRateCard[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{ billingRate: string; effectiveDate: string }>({ billingRate: "", effectiveDate: "" });
-  const [copying, setCopying] = useState(false);
-
-  const load = () => fetch(`${API}/rate-cards?projectId=${projectId}`).then(r => r.json()).then(setCards).catch(() => {});
-  useEffect(() => { load(); }, [projectId]);
-
-  const startEdit = (card: ProjRateCard) => {
-    setEditingId(card.id);
-    setEditForm({ billingRate: card.billingRate.toString(), effectiveDate: card.effectiveDate ?? "" });
-  };
-
-  const saveEdit = async () => {
-    if (!editingId) return;
-    await fetch(`${API}/rate-cards/${editingId}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ billingRate: parseFloat(editForm.billingRate), effectiveDate: editForm.effectiveDate || null }),
-    });
-    setEditingId(null);
-    load();
-  };
-
-  const remove = async (id: number) => {
-    if (!confirm("Remove this project rate card override?")) return;
-    await fetch(`${API}/rate-cards/${id}`, { method: "DELETE" });
-    load();
-  };
-
-  const copyFromGlobal = async () => {
-    if (cards.length > 0) {
-      if (!confirm(`This project already has ${cards.length} rate card override(s). Clicking OK will add any missing global rates. Existing overrides won't change.`)) return;
-    }
-    setCopying(true);
-    try {
-      const globals: any[] = await fetch(`${API}/rate-cards`).then(r => r.json());
-      const globalOnly = globals.filter(g => !g.projectId && !g.accountId);
-      const existingRoles = new Set(cards.map(c => c.role));
-      const toAdd = globalOnly.filter(g => !existingRoles.has(g.role));
-      for (const g of toAdd) {
-        await fetch(`${API}/rate-cards`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: g.name, role: g.role, practiceArea: g.practiceArea, billingRate: g.billingRate, costRate: g.costRate, effectiveDate: g.effectiveDate, projectId: projectId }),
-        });
-      }
-      load();
-    } finally { setCopying(false); }
-  };
-
-  const fmt = (v: number) => `$${v.toFixed(0)}/hr`;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <CreditCard size={14} className="text-violet-400" />
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project Rate Card Overrides</p>
-        </div>
-        <button onClick={copyFromGlobal} disabled={copying}
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border rounded-md hover:bg-muted/50 text-muted-foreground transition-colors disabled:opacity-50">
-          <Copy size={11} /> {copying ? "Copying…" : "Copy from Global"}
-        </button>
-      </div>
-      <Card>
-        <CardContent className="p-0">
-          {cards.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground/60 text-sm">
-              No project-specific rates yet. Use "Copy from Global" to clone global rates as overrides, or configure directly in PMO Settings.
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-[11px] text-muted-foreground">
-                  <th className="text-left p-3">Role</th>
-                  <th className="text-left p-3">Practice</th>
-                  <th className="text-right p-3">Billing Rate</th>
-                  <th className="text-center p-3">Effective</th>
-                  <th className="text-right p-3 w-20">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {cards.map(card => (
-                  <tr key={card.id} className="hover:bg-muted/20">
-                    <td className="p-3 font-medium text-foreground">{card.role}</td>
-                    <td className="p-3 text-muted-foreground">{card.practiceArea || "—"}</td>
-                    <td className="p-3 text-right">
-                      {editingId === card.id ? (
-                        <input type="number" value={editForm.billingRate}
-                          onChange={e => setEditForm(f => ({ ...f, billingRate: e.target.value }))}
-                          className="w-20 h-7 rounded border border-violet-400/50 px-2 text-xs text-right bg-background" />
-                      ) : (
-                        <span className="font-medium text-emerald-400">{fmt(card.billingRate)}</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      {editingId === card.id ? (
-                        <input type="date" value={editForm.effectiveDate}
-                          onChange={e => setEditForm(f => ({ ...f, effectiveDate: e.target.value }))}
-                          className="h-7 rounded border border-border px-2 text-xs bg-background" />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{card.effectiveDate || "—"}</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        {editingId === card.id ? (
-                          <>
-                            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-emerald-400" onClick={saveEdit}>Save</Button>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => setEditingId(null)}><X size={12} /></Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEdit(card)}><Pencil size={11} /></Button>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-500" onClick={() => remove(card.id)}><Trash2 size={11} /></Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 // ─── Details Tab ────────────────────────────────────────────────────────────
 function DetailsTab({ project, onToggle }: { project: any; onToggle: (updates: Record<string,any>)=>void }) {
@@ -2395,10 +2257,7 @@ function DetailsTab({ project, onToggle }: { project: any; onToggle: (updates: R
   ];
   const lifecycle = [
     { key:"kickoffComplete",label:"Kickoff Complete" },
-    { key:"clientPortalActivated",label:"Client Portal Activated" },
     { key:"billingReadiness",label:"Billing Readiness" },
-    { key:"closureReadiness",label:"Closure Readiness" },
-    { key:"handoverReadiness",label:"Handover Readiness" },
   ];
   return (
     <div className="p-5 space-y-6 max-w-2xl">
@@ -2430,7 +2289,7 @@ function DetailsTab({ project, onToggle }: { project: any; onToggle: (updates: R
       </Card>
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Lifecycle Flags</p>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {lifecycle.map(f=>{
             const done = !!project[f.key];
             return (
@@ -2443,7 +2302,6 @@ function DetailsTab({ project, onToggle }: { project: any; onToggle: (updates: R
           })}
         </div>
       </div>
-      <ProjectRateCards projectId={project.id} />
     </div>
   );
 }
@@ -2565,10 +2423,7 @@ function UpdatesView({ projectId, onRefresh }: { projectId: number; onRefresh: (
 function CloseView({ project, onToggle }: { project: any; onToggle: (updates: Record<string,any>)=>void }) {
   const checks = [
     {key:"kickoffComplete",label:"Kickoff completed"},
-    {key:"clientPortalActivated",label:"Client portal activated"},
     {key:"billingReadiness",label:"All invoices sent"},
-    {key:"closureReadiness",label:"Closure sign-off received"},
-    {key:"handoverReadiness",label:"Handover package delivered"},
   ];
   const done = checks.filter(c=>!!project[c.key]).length;
   const pct = Math.round((done/checks.length)*100);

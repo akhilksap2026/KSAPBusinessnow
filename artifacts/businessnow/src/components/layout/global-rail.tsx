@@ -4,7 +4,7 @@ import { useAuthRole, ROLE_LABELS, type Role } from "@/lib/auth";
 import { useCallback } from "react";
 import {
   LayoutDashboard, FolderKanban, Users, DollarSign,
-  TrendingUp, BarChart3, Settings2, Truck, LogOut,
+  Building2, BarChart3, Settings2, Truck, LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -18,7 +18,7 @@ const ROLE_INITIALS: Record<string, string> = {
   finance_lead:       "FM",
   sales:              "BD",
   account_manager:    "AM",
-  client_stakeholder: "CC",
+  client_stakeholder: "CL",
 };
 
 interface RailSection {
@@ -43,8 +43,16 @@ const RAIL_SECTIONS: RailSection[] = [
     icon: FolderKanban,
     label: "Projects",
     href: "/projects",
-    roles: ["admin","delivery_director","project_manager","consultant","resource_manager","finance_lead"],
-    matchPrefixes: ["/projects","/milestones","/tasks","/timesheets","/handoff","/handover"],
+    roles: ["admin","delivery_director","project_manager","consultant","resource_manager","finance_lead","executive"],
+    matchPrefixes: ["/projects","/milestones","/tasks","/timesheets"],
+  },
+  {
+    id: "customers",
+    icon: Building2,
+    label: "Customers",
+    href: "/accounts",
+    roles: ["admin","delivery_director","project_manager","finance_lead","executive","sales","account_manager"],
+    matchPrefixes: ["/accounts"],
   },
   {
     id: "people",
@@ -52,30 +60,22 @@ const RAIL_SECTIONS: RailSection[] = [
     label: "People",
     href: "/resources",
     roles: ["admin","delivery_director","project_manager","resource_manager"],
-    matchPrefixes: ["/resources","/allocations","/capacity","/staffing-requests"],
+    matchPrefixes: ["/resources","/allocations","/capacity"],
   },
   {
     id: "finance",
     icon: DollarSign,
     label: "Finance",
     href: "/finance",
-    roles: ["admin","finance_lead","project_manager","account_manager"],
+    roles: ["admin","finance_lead","project_manager","delivery_director","executive"],
     matchPrefixes: ["/finance","/invoices","/contracts","/changes"],
-  },
-  {
-    id: "pipeline",
-    icon: TrendingUp,
-    label: "Pipeline",
-    href: "/opportunities",
-    roles: ["admin","executive","sales","finance_lead","account_manager"],
-    matchPrefixes: ["/opportunities","/accounts"],
   },
   {
     id: "reports",
     icon: BarChart3,
     label: "Reports",
     href: "/portfolio",
-    roles: ["admin","executive","delivery_director","sales"],
+    roles: ["admin","executive","delivery_director","project_manager"],
     matchPrefixes: ["/portfolio"],
   },
   {
@@ -84,7 +84,7 @@ const RAIL_SECTIONS: RailSection[] = [
     label: "Settings",
     href: "/admin",
     roles: ["admin"],
-    matchPrefixes: ["/automations","/templates","/admin","/contracts","/capacity"],
+    matchPrefixes: ["/templates","/admin","/settings"],
   },
 ];
 
