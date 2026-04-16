@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KYkyths7zVNQ8W4AceQyM"
+uri = "file://REBUILD_PROMPT_GUIDE.md"
+type = "text"
+title = "BUSINESSNow — Phase-by-Phase Rebuild Guide"
