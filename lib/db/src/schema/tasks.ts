@@ -34,6 +34,9 @@ export const tasksTable = pgTable("tasks", {
   etcHours: numeric("etc_hours", { precision: 8, scale: 2 }),
   completionPct: integer("completion_pct").default(0),
   sortOrder: integer("sort_order").default(0),
+  hierarchyLevel: integer("hierarchy_level").default(0),
+  isLeaf: boolean("is_leaf").default(true),
+  commentCount: integer("comment_count").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

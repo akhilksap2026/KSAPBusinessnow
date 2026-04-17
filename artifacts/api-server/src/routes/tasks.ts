@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, tasksTable, taskDependenciesTable, taskResourcesTable, resourcesTable, timesheetsTable } from "@workspace/db";
+import { db, tasksTable, taskDependenciesTable, taskResourcesTable, taskAssignmentsTable, resourcesTable, timesheetsTable } from "@workspace/db";
 import { scheduleProject } from "../lib/scheduler";
 
 const SCHEDULE_DATE_FIELDS = new Set(["plannedStartDate", "plannedEndDate", "durationDays"]);
@@ -16,13 +16,18 @@ function parseTask(t: typeof tasksTable.$inferSelect) {
     ...t,
     estimatedHours: t.estimatedHours ? parseFloat(t.estimatedHours) : null,
     loggedHours: t.loggedHours ? parseFloat(t.loggedHours) : null,
+    etcHours: t.etcHours ? parseFloat(t.etcHours) : null,
+    hierarchyLevel: t.hierarchyLevel ?? 0,
+    isLeaf: t.isLeaf ?? true,
+    commentCount: t.commentCount ?? 0,
+    parentId: t.parentId ?? null,
   };
 }
 
 const router: IRouter = Router();
 
 router.get("/tasks", async (req, res): Promise<void> => {
-  const { projectId, milestoneId, assignedTo, status, phaseId, priority } = req.query as Record<string, string>;
+  const { projectId, milestoneId, assignedTo, status, phaseId, priority, parentTaskId } = req.query as Record<string, string>;
   let tasks = await db.select().from(tasksTable).orderBy(tasksTable.createdAt);
   if (projectId) tasks = tasks.filter((t) => t.projectId === parseInt(projectId));
   if (milestoneId) tasks = tasks.filter((t) => t.milestoneId === parseInt(milestoneId));
@@ -30,6 +35,11 @@ router.get("/tasks", async (req, res): Promise<void> => {
   if (status) tasks = tasks.filter((t) => t.status === status);
   if (priority) tasks = tasks.filter((t) => t.priority === priority);
   if (phaseId) tasks = tasks.filter((t) => (t as any).phaseId === parseInt(phaseId));
+  if (parentTaskId === "null" || parentTaskId === "") {
+    tasks = tasks.filter((t) => t.parentId === null);
+  } else if (parentTaskId) {
+    tasks = tasks.filter((t) => t.parentId === parseInt(parentTaskId));
+  }
 
   const { projectsTable } = await import("@workspace/db");
   const projects = await db.select({ id: projectsTable.id, name: projectsTable.name }).from(projectsTable);
@@ -68,9 +78,31 @@ router.get("/tasks/dependencies", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const { name, projectId, ...rest } = req.body;
+  const { name, projectId, parentId, etcHours, ...rest } = req.body;
   if (!name || !projectId) { res.status(400).json({ error: "name and projectId required" }); return; }
-  const [task] = await db.insert(tasksTable).values({ name, projectId: parseInt(projectId), ...rest }).returning();
+
+  let hierarchyLevel = 0;
+  let isLeaf = true;
+
+  if (parentId) {
+    const [parent] = await db.select().from(tasksTable).where(eq(tasksTable.id, parseInt(parentId)));
+    if (parent) {
+      hierarchyLevel = (parent.hierarchyLevel ?? 0) + 1;
+      // Mark parent as non-leaf
+      await db.update(tasksTable).set({ isLeaf: false }).where(eq(tasksTable.id, parseInt(parentId)));
+    }
+  }
+
+  const [task] = await db.insert(tasksTable).values({
+    name,
+    projectId: parseInt(projectId),
+    parentId: parentId ? parseInt(parentId) : null,
+    etcHours: etcHours ? String(etcHours) : null,
+    hierarchyLevel,
+    isLeaf,
+    ...rest,
+  }).returning();
+
   res.status(201).json(parseTask(task));
 });
 
@@ -247,6 +279,129 @@ router.delete("/tasks/:taskId/dependencies/:depId", async (req, res): Promise<vo
   const depId = parseInt(req.params.depId);
   if (isNaN(depId)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(taskDependenciesTable).where(eq(taskDependenciesTable.id, depId));
+  res.json({ ok: true });
+});
+
+// ─── Task Assignments ─────────────────────────────────────────────────────────
+router.get("/task-assignments", async (req, res): Promise<void> => {
+  const { taskId } = req.query as Record<string, string>;
+  if (!taskId) { res.status(400).json({ error: "taskId required" }); return; }
+
+  const assignments = await db
+    .select({
+      id: taskAssignmentsTable.id,
+      taskId: taskAssignmentsTable.taskId,
+      resourceId: taskAssignmentsTable.resourceId,
+      roleOnTask: taskAssignmentsTable.roleOnTask,
+      estimatedHours: taskAssignmentsTable.estimatedHours,
+      createdAt: taskAssignmentsTable.createdAt,
+      resourceName: resourcesTable.name,
+      resourceTitle: resourcesTable.title,
+    })
+    .from(taskAssignmentsTable)
+    .leftJoin(resourcesTable, eq(taskAssignmentsTable.resourceId, resourcesTable.id))
+    .where(eq(taskAssignmentsTable.taskId, parseInt(taskId)));
+
+  res.json(assignments.map(a => ({
+    ...a,
+    estimatedHours: a.estimatedHours ? parseFloat(a.estimatedHours) : null,
+  })));
+});
+
+router.post("/task-assignments", async (req, res): Promise<void> => {
+  const { taskId, resourceId, roleOnTask, estimatedHours } = req.body;
+  if (!taskId || !resourceId) { res.status(400).json({ error: "taskId and resourceId required" }); return; }
+
+  const [assignment] = await db.insert(taskAssignmentsTable).values({
+    taskId: parseInt(taskId),
+    resourceId: parseInt(resourceId),
+    roleOnTask: roleOnTask || null,
+    estimatedHours: estimatedHours ? String(estimatedHours) : null,
+  }).returning();
+
+  const [resource] = await db.select({ name: resourcesTable.name, title: resourcesTable.title })
+    .from(resourcesTable).where(eq(resourcesTable.id, assignment.resourceId));
+
+  res.status(201).json({
+    ...assignment,
+    estimatedHours: assignment.estimatedHours ? parseFloat(assignment.estimatedHours) : null,
+    resourceName: resource?.name,
+    resourceTitle: resource?.title,
+  });
+});
+
+router.delete("/task-assignments/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(taskAssignmentsTable).where(eq(taskAssignmentsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ─── Task Dependencies (flat, by taskId predecessor/successor format) ─────────
+router.get("/task-dependencies", async (req, res): Promise<void> => {
+  const { taskId } = req.query as Record<string, string>;
+  if (!taskId) { res.status(400).json({ error: "taskId required" }); return; }
+  const tid = parseInt(taskId);
+
+  const [predsRaw, succsRaw] = await Promise.all([
+    db.select().from(taskDependenciesTable).where(eq(taskDependenciesTable.dependsOnTaskId, tid)),
+    db.select().from(taskDependenciesTable).where(eq(taskDependenciesTable.taskId, tid)),
+  ]);
+
+  const allTaskIds = [
+    ...predsRaw.map(d => d.taskId),
+    ...succsRaw.map(d => d.dependsOnTaskId),
+  ].filter(Boolean);
+
+  const taskRows = allTaskIds.length > 0
+    ? await db.select({ id: tasksTable.id, name: tasksTable.name }).from(tasksTable).where(inArray(tasksTable.id, allTaskIds))
+    : [];
+  const taskMap: Record<number, string> = {};
+  taskRows.forEach(t => { taskMap[t.id] = t.name; });
+
+  res.json({
+    predecessors: predsRaw.map(d => ({
+      id: d.id,
+      taskId: d.taskId,
+      taskName: taskMap[d.taskId] ?? "Unknown",
+      dependencyType: d.dependencyType ?? "FS",
+      lagDays: d.lagDays ?? 0,
+    })),
+    successors: succsRaw.map(d => ({
+      id: d.id,
+      taskId: d.dependsOnTaskId,
+      taskName: taskMap[d.dependsOnTaskId] ?? "Unknown",
+      dependencyType: d.dependencyType ?? "FS",
+      lagDays: d.lagDays ?? 0,
+    })),
+  });
+});
+
+router.post("/task-dependencies", async (req, res): Promise<void> => {
+  const { predecessorTaskId, successorTaskId, dependencyType = "FS", lagDays = 0 } = req.body;
+  if (!predecessorTaskId || !successorTaskId) {
+    res.status(400).json({ error: "predecessorTaskId and successorTaskId required" }); return;
+  }
+
+  const valid = ["FS", "SS", "FF", "SF"];
+  if (!valid.includes(dependencyType)) {
+    res.status(400).json({ error: "dependencyType must be FS|SS|FF|SF" }); return;
+  }
+
+  const [dep] = await db.insert(taskDependenciesTable).values({
+    taskId: parseInt(successorTaskId),
+    dependsOnTaskId: parseInt(predecessorTaskId),
+    dependencyType,
+    lagDays: parseInt(String(lagDays)) || 0,
+  }).returning();
+
+  res.status(201).json({ ...dep, lagDays: dep.lagDays ?? 0 });
+});
+
+router.delete("/task-dependencies/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(taskDependenciesTable).where(eq(taskDependenciesTable.id, id));
   res.json({ ok: true });
 });
 

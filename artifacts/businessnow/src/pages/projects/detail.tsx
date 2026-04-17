@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -542,6 +543,266 @@ function WbsTaskModal({
 }
 
 // ─── WBS Tree View ────────────────────────────────────────────────────────────
+// ─── Task Slide-In Panel ──────────────────────────────────────────────────────
+function TaskSlidePanel({ task, projectId, onClose, onSave }: {
+  task: Task; projectId: number; onClose: () => void; onSave: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: task.name,
+    status: task.status,
+    priority: task.priority,
+    etcHours: task.etcHours?.toString() ?? "",
+    estimatedHours: task.estimatedHours?.toString() ?? "",
+    dueDate: task.dueDate ?? "",
+    notes: task.notes ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
+  const [deps, setDeps] = useState<{ predecessors: any[]; successors: any[] }>({ predecessors: [], successors: [] });
+  const [addDepOpen, setAddDepOpen] = useState(false);
+  const [depTaskId, setDepTaskId] = useState("");
+  const [depType, setDepType] = useState("FS");
+  const [allProjectTasks, setAllProjectTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/task-comments?taskId=${task.id}`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/task-assignments?taskId=${task.id}`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/task-dependencies?taskId=${task.id}`).then(r => r.json()).catch(() => ({ predecessors: [], successors: [] })),
+      fetch(`${API}/resources`).then(r => r.json()).catch(() => []),
+      fetch(`${API}/tasks?projectId=${projectId}`).then(r => r.json()).catch(() => []),
+    ]).then(([cmts, asgns, depsData, resrs, ptasks]) => {
+      setComments(Array.isArray(cmts) ? cmts : []);
+      setAssignments(Array.isArray(asgns) ? asgns : []);
+      setDeps(depsData && typeof depsData === 'object' && 'predecessors' in depsData ? depsData : { predecessors: [], successors: [] });
+      setResources(Array.isArray(resrs) ? resrs : []);
+      setAllProjectTasks(Array.isArray(ptasks) ? ptasks.filter((t: any) => t.id !== task.id) : []);
+    });
+  }, [task.id, projectId]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await fetch(`${API}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          status: form.status,
+          priority: form.priority,
+          etcHours: form.etcHours ? parseFloat(form.etcHours) : null,
+          estimatedHours: form.estimatedHours ? parseFloat(form.estimatedHours) : null,
+          dueDate: form.dueDate || null,
+          notes: form.notes || null,
+        }),
+      });
+      onSave();
+    } finally { setSaving(false); }
+  }
+
+  async function handlePostComment() {
+    if (!commentBody.trim()) return;
+    setPostingComment(true);
+    try {
+      const res = await fetch(`${API}/task-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: task.id, authorId: 1, body: commentBody.trim() }),
+      });
+      const newComment = await res.json();
+      setComments(prev => [...prev, newComment]);
+      setCommentBody("");
+    } finally { setPostingComment(false); }
+  }
+
+  async function handleAddDep() {
+    if (!depTaskId) return;
+    await fetch(`${API}/task-dependencies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ predecessorTaskId: parseInt(depTaskId), successorTaskId: task.id, dependencyType: depType }),
+    });
+    const updated = await fetch(`${API}/task-dependencies?taskId=${task.id}`).then(r => r.json());
+    setDeps(updated);
+    setAddDepOpen(false);
+    setDepTaskId("");
+  }
+
+  async function handleRemoveDep(id: number) {
+    await fetch(`${API}/task-dependencies/${id}`, { method: "DELETE" });
+    const updated = await fetch(`${API}/task-dependencies?taskId=${task.id}`).then(r => r.json());
+    setDeps(updated);
+  }
+
+  const DEP_TYPE_BADGE: Record<string, string> = {
+    FS: "bg-blue-100 text-blue-700", SS: "bg-violet-100 text-violet-700",
+    FF: "bg-amber-100 text-amber-700", SF: "bg-rose-100 text-rose-700",
+  };
+
+  return (
+    <Sheet open onOpenChange={open => { if (!open) onClose(); }}>
+      <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto flex flex-col gap-0 p-0">
+        <SheetHeader className="px-5 pt-5 pb-3 border-b">
+          <SheetTitle className="text-base">{task.name}</SheetTitle>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Name</label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
+              <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                {["todo","in_progress","in_review","done","blocked","cancelled"].map(s =>
+                  <option key={s} value={s}>{s.replace(/_/g," ")}</option>
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Priority</label>
+              <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                {["low","medium","high","critical"].map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Est. Hours</label>
+              <Input type="number" step="0.5" min="0" value={form.estimatedHours}
+                onChange={e => setForm(f => ({ ...f, estimatedHours: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">ETC (hrs) — remaining estimate</label>
+              <Input type="number" step="0.5" min="0" value={form.etcHours}
+                onChange={e => setForm(f => ({ ...f, etcHours: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Due Date</label>
+              <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+              <Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+
+          {assignments.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assignees</p>
+              <div className="flex flex-wrap gap-1.5">
+                {assignments.map((a: any) => (
+                  <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-xs font-medium">
+                    {a.resourceName || "Unknown"}
+                    {a.roleOnTask && <span className="text-muted-foreground">· {a.roleOnTask}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Dependencies */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dependencies</p>
+              <button onClick={() => setAddDepOpen(v => !v)} className="text-xs text-primary hover:underline">+ Add</button>
+            </div>
+            {addDepOpen && (
+              <div className="flex gap-2 mb-2 p-2 border rounded-md bg-muted/30">
+                <select value={depTaskId} onChange={e => setDepTaskId(e.target.value)}
+                  className="flex-1 h-8 text-xs rounded border border-input bg-background px-2 text-foreground">
+                  <option value="">Predecessor task…</option>
+                  {allProjectTasks.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select value={depType} onChange={e => setDepType(e.target.value)}
+                  className="w-16 h-8 text-xs rounded border border-input bg-background px-2 text-foreground">
+                  {["FS","SS","FF","SF"].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <button onClick={handleAddDep} disabled={!depTaskId}
+                  className="px-2 h-8 text-xs rounded bg-primary text-primary-foreground disabled:opacity-50">Add</button>
+              </div>
+            )}
+            {(deps.predecessors.length > 0 || deps.successors.length > 0) ? (
+              <div className="space-y-1">
+                {deps.predecessors.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-medium mb-1">Predecessors</p>
+                    {deps.predecessors.map((d: any) => (
+                      <div key={d.id} className="flex items-center gap-2 text-xs py-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${DEP_TYPE_BADGE[d.dependencyType] || "bg-muted"}`}>{d.dependencyType}</span>
+                        <span className="flex-1 truncate">{d.taskName}</span>
+                        {d.lagDays > 0 && <span className="text-muted-foreground">+{d.lagDays}d lag</span>}
+                        <button onClick={() => handleRemoveDep(d.id)} className="text-muted-foreground hover:text-red-500">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {deps.successors.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-medium mb-1">Successors</p>
+                    {deps.successors.map((d: any) => (
+                      <div key={d.id} className="flex items-center gap-2 text-xs py-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${DEP_TYPE_BADGE[d.dependencyType] || "bg-muted"}`}>{d.dependencyType}</span>
+                        <span className="flex-1 truncate">{d.taskName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No dependencies</p>
+            )}
+          </div>
+
+          {/* Comments */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Comments ({comments.length})</p>
+            <div className="space-y-2.5 mb-3 max-h-48 overflow-y-auto">
+              {comments.map((c: any) => (
+                <div key={c.id} className="flex gap-2">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
+                    {(c.authorName || "?")[0]}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold">{c.authorName || "Unknown"}</span>
+                      <span className="text-[10px] text-muted-foreground">{c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}</span>
+                      {c.isExternal && <span className="text-[10px] px-1.5 py-0 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Visible to customer</span>}
+                    </div>
+                    <p className="text-xs text-foreground mt-0.5 whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                </div>
+              ))}
+              {comments.length === 0 && <p className="text-xs text-muted-foreground italic">No comments yet</p>}
+            </div>
+            <div className="flex gap-2">
+              <Textarea
+                rows={2}
+                placeholder="Add a comment… use @name to mention"
+                value={commentBody}
+                onChange={e => setCommentBody(e.target.value)}
+                className="flex-1 text-sm resize-none"
+              />
+              <Button size="sm" onClick={handlePostComment} disabled={postingComment || !commentBody.trim()} className="self-end">
+                {postingComment ? "…" : "Post"}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = false }: {
   tasks: Task[];
   allocations: { resourceId?: number; resourceName?: string }[];
@@ -552,6 +813,7 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [modal, setModal] = useState<Partial<Task> | null | false>(false);
   const [defaultParent, setDefaultParent] = useState<number | null>(null);
+  const [slideTask, setSlideTask] = useState<Task | null>(null);
 
   const toggle = (id: number) => setCollapsed(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -617,6 +879,8 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
     const isParent = node.taskType === "parent";
     const isMilestone = node.taskType === "milestone";
     const isCollapsed = collapsed.has(node.id);
+    const etcHrs = (node as any).etcHours;
+    const commentCount = (node as any).commentCount ?? 0;
     const pct = pctFromHours
       ? (isParent ? rollupHoursPct(node) : hoursBasedPct(node))
       : (isParent ? rollupPct(node) : (node.completionPct ?? 0));
@@ -626,8 +890,11 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
 
     return (
       <React.Fragment key={node.id}>
-        <tr className={`border-t border-border group hover:bg-muted/30 ${isParent ? "bg-muted/10" : ""}`}>
-          <td className="px-3 py-2 w-8 text-muted-foreground/30">
+        <tr
+          className={`border-t border-border group hover:bg-muted/30 cursor-pointer ${isParent ? "bg-muted/10" : ""}`}
+          onClick={() => setSlideTask(node as Task)}
+        >
+          <td className="px-3 py-2 w-8 text-muted-foreground/30" onClick={e => e.stopPropagation()}>
             <Grip className="h-3 w-3" />
           </td>
           <td className="px-1 py-2" style={{ paddingLeft: `${depth * 20 + 4}px` }}>
@@ -671,7 +938,27 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
           <td className="px-3 py-2 w-24 text-xs text-muted-foreground text-right">
             {node.estimatedHours ? `${node.loggedHours ?? 0}/${node.estimatedHours}h` : "—"}
           </td>
-          <td className="px-3 py-2 w-20">
+          <td className="px-3 py-2 w-20 text-xs text-right">
+            {etcHrs != null ? (
+              <span className={`font-medium ${etcHrs > (node.estimatedHours ?? 0) * 0.5 ? "text-amber-500" : "text-muted-foreground"}`}>
+                {etcHrs}h
+              </span>
+            ) : "—"}
+          </td>
+          <td className="px-3 py-2 w-16 text-center">
+            {commentCount > 0 ? (
+              <button onClick={(e) => { e.stopPropagation(); setSlideTask(node as Task); }}
+                className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium hover:bg-blue-200 transition-colors">
+                <MessageSquare className="h-2.5 w-2.5" /> {commentCount}
+              </button>
+            ) : (
+              <button onClick={(e) => { e.stopPropagation(); setSlideTask(node as Task); }}
+                className="text-muted-foreground/30 hover:text-muted-foreground transition-colors">
+                <MessageSquare className="h-3 w-3" />
+              </button>
+            )}
+          </td>
+          <td className="px-3 py-2 w-20" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
               {isParent && (
                 <button title="Add child task" onClick={() => { setDefaultParent(node.id); setModal({}); }}
@@ -724,6 +1011,8 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
                 <th className="text-left px-3 py-2 w-24">End</th>
                 <th className="text-left px-3 py-2 w-28">Assignee</th>
                 <th className="text-right px-3 py-2 w-24">Hours</th>
+                <th className="text-right px-3 py-2 w-20">ETC</th>
+                <th className="text-center px-3 py-2 w-16">Cmts</th>
                 <th className="px-3 py-2 w-20"></th>
               </tr>
             </thead>
@@ -742,6 +1031,14 @@ function WbsView({ tasks, allocations, projectId, onRefresh, pctFromHours = fals
           allocations={allocations}
           onClose={() => { setModal(false); setDefaultParent(null); }}
           onSave={onRefresh}
+        />
+      )}
+      {slideTask && (
+        <TaskSlidePanel
+          task={slideTask}
+          projectId={projectId}
+          onClose={() => setSlideTask(null)}
+          onSave={() => { setSlideTask(null); onRefresh(); }}
         />
       )}
     </div>
@@ -1421,6 +1718,34 @@ function OverviewTab({ data, timesheets, invoices, marginForecast, projection }:
         </Card>
       </div>
 
+      {/* 4-Dimension Health RAG Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { key: "healthBudget", label: "Budget" },
+          { key: "healthHours", label: "Hours" },
+          { key: "healthTimeline", label: "Timeline" },
+          { key: "healthRisks", label: "Risks" },
+        ].map(dim => {
+          const val: string = (project as any)[dim.key] || "green";
+          const colorCls = val === "green" ? "bg-emerald-500" : val === "amber" ? "bg-amber-500" : "bg-red-500";
+          const textCls = val === "green" ? "text-emerald-600" : val === "amber" ? "text-amber-600" : "text-red-600";
+          const labelCls = val === "green" ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/40"
+            : val === "amber" ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40"
+            : "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800/40";
+          return (
+            <Card key={dim.key} className={`border ${labelCls}`}>
+              <CardContent className="p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className={`w-2.5 h-2.5 rounded-full ${colorCls}`} />
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{dim.label}</p>
+                </div>
+                <p className={`text-sm font-bold capitalize ${textCls}`}>{val}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
       {/* Next milestone + Blocked tasks */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {nextMilestone && (
@@ -2012,7 +2337,19 @@ function GanttTab({ projectId }: { projectId: number }) {
 
 // ─── Finance Tab ─────────────────────────────────────────────────────────────
 function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; invoices: any[]; revenue?: any; marginForecast?: any }) {
-  const { project, changeRequests } = data;
+  const { project, changeRequests, allocations = [] } = data;
+  const [rateCards, setRateCards] = useState<any[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (project.id) params.set("projectId", String(project.id));
+    if (project.accountId) params.set("accountId", String(project.accountId));
+    fetch(`${API}/rate-cards?${params}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setRateCards(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [project.id, project.accountId]);
+
   const budgetValue = parseFloat(project.budgetValue||0);
   const billedValue = parseFloat(project.billedValue||0);
   const budgetHours = parseFloat(project.budgetHours||0);
@@ -2127,6 +2464,115 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Per-Resource Margin Table */}
+      {allocations.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+            <Users size={14}/> Resource Labor Analysis
+          </p>
+          <div className="rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Resource</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Role</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Alloc %</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Hrs/Wk</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocations.map((alloc: any, i: number) => {
+                  const matchedRC = rateCards.find((rc: any) =>
+                    rc.role?.toLowerCase() === alloc.role?.toLowerCase() ||
+                    rc.resourceId === alloc.resourceId
+                  );
+                  const billingRate = matchedRC ? parseFloat(matchedRC.billingRate) : null;
+                  const hoursPerWk = parseFloat(alloc.hoursPerWeek || 0);
+                  return (
+                    <tr key={alloc.id} className={`border-t hover:bg-muted/20 ${i%2===0?"":"bg-muted/10"}`}>
+                      <td className="px-4 py-2.5 font-medium text-sm">{alloc.resourceName || "—"}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{alloc.role || "—"}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={`text-xs font-medium ${(alloc.allocationPct||0) > 100 ? "text-red-600" : (alloc.allocationPct||0) >= 80 ? "text-amber-600" : "text-muted-foreground"}`}>
+                          {alloc.allocationPct || 0}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground hidden md:table-cell">
+                        {hoursPerWk > 0 ? `${hoursPerWk}h/wk` : "—"}
+                        {billingRate && hoursPerWk > 0 && (
+                          <span className="ml-2 text-emerald-600 font-medium">@ {fmt$(billingRate)}/hr</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                          alloc.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : alloc.status === "confirmed" ? "bg-blue-50 text-blue-700 border-blue-200"
+                          : "bg-muted text-muted-foreground border-muted-foreground/20"
+                        }`}>
+                          {alloc.status || "pending"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {rateCards.length === 0 && (
+            <p className="text-[10px] text-muted-foreground mt-1.5 ml-1">
+              No rate cards configured for this project — billing rates not shown. Add rate cards in Settings.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Rate Card Section */}
+      {rateCards.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+            <DollarSign size={14}/> Rate Card
+          </p>
+          <div className="rounded-xl border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Role</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Practice</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Billing Rate</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Cost Rate</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rateCards.map((rc: any, i: number) => {
+                  const billing = parseFloat(rc.billingRate || 0);
+                  const cost = rc.costRate ? parseFloat(rc.costRate) : null;
+                  const margin = cost && billing > 0 ? Math.round(((billing - cost) / billing) * 100) : null;
+                  return (
+                    <tr key={rc.id} className={`border-t hover:bg-muted/20 ${i%2===0?"":"bg-muted/10"}`}>
+                      <td className="px-4 py-2.5 font-medium text-sm">{rc.name || rc.role}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{rc.practiceArea || "—"}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-emerald-600">{fmt$(billing)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs text-muted-foreground hidden md:table-cell">
+                        {cost ? fmt$(cost) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right hidden md:table-cell">
+                        {margin !== null ? (
+                          <span className={`text-xs font-medium ${margin < 20 ? "text-red-600" : margin < 30 ? "text-amber-500" : "text-emerald-600"}`}>
+                            {margin}%
+                          </span>
+                        ) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Invoice summary cards */}

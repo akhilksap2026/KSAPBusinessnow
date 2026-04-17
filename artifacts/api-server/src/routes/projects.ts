@@ -309,11 +309,25 @@ router.get("/projects/:id/full", async (req, res): Promise<void> => {
 
   const billingQueue = parsedMilestones.filter((m) => m.isBillable && !m.invoiced && m.status === "completed");
 
+  // Build task tree
+  interface TaskNode { [key: string]: any; children: TaskNode[] }
+  const taskMap: Record<number, TaskNode> = {};
+  parsedTasks.forEach(t => { taskMap[t.id] = { ...t, children: [] }; });
+  const taskTree: TaskNode[] = [];
+  parsedTasks.forEach(t => {
+    if (t.parentId && taskMap[t.parentId]) {
+      taskMap[t.parentId].children.push(taskMap[t.id]);
+    } else {
+      taskTree.push(taskMap[t.id]);
+    }
+  });
+
   res.json({
     project: parseProject(project),
     phases: phases.sort((a, b) => a.sequence - b.sequence),
     milestones: parsedMilestones,
     tasks: parsedTasks,
+    taskTree,
     allocations,
     changeRequests,
     activity: activity.slice(0, 20),
@@ -989,6 +1003,112 @@ router.get("/projects/:id/margin-forecast", async (req, res): Promise<void> => {
     hasConversion,
     missingCurrencies: Array.from(missingCurrencies),
   });
+});
+
+// ─── Copy Project ─────────────────────────────────────────────────────────────
+router.post("/projects/:id/copy", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [milestones, tasks] = await Promise.all([
+    db.select().from(milestonesTable).where(eq(milestonesTable.projectId, id)),
+    db.select().from(tasksTable).where(eq(tasksTable.projectId, id)).orderBy(tasksTable.hierarchyLevel),
+  ]);
+
+  const { id: _id, createdAt, updatedAt, ...projectData } = project;
+  const [newProject] = await db.insert(projectsTable).values({
+    ...projectData,
+    name: `${project.name} — Copy`,
+    status: "active" as any,
+    completionPct: 0,
+    consumedHours: "0",
+    billedValue: "0",
+  }).returning();
+
+  // Copy milestones
+  if (milestones.length > 0) {
+    await Promise.all(milestones.map(m => {
+      const { id: _mid, createdAt: _mca, updatedAt: _mua, ...mData } = m;
+      return db.insert(milestonesTable).values({ ...mData, projectId: newProject.id, status: "not_started" as any });
+    }));
+  }
+
+  // Copy tasks, preserving parentId relationships with new IDs
+  const oldIdToNew: Record<number, number> = {};
+  const sortedTasks = [...tasks].sort((a, b) => (a.hierarchyLevel ?? 0) - (b.hierarchyLevel ?? 0));
+  for (const t of sortedTasks) {
+    const { id: _tid, createdAt: _tca, updatedAt: _tua, ...tData } = t;
+    const newParentId = t.parentId ? oldIdToNew[t.parentId] ?? null : null;
+    const [newTask] = await db.insert(tasksTable).values({
+      ...tData,
+      projectId: newProject.id,
+      parentId: newParentId,
+      status: "todo" as any,
+      loggedHours: "0",
+      completionPct: 0,
+      commentCount: 0,
+    }).returning();
+    oldIdToNew[t.id] = newTask.id;
+  }
+
+  res.status(201).json({ id: newProject.id });
+});
+
+// ─── Save as Template ─────────────────────────────────────────────────────────
+router.post("/projects/:id/save-as-template", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { templateName, description } = req.body;
+  if (!templateName) { res.status(400).json({ error: "templateName required" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [milestones, tasks] = await Promise.all([
+    db.select().from(milestonesTable).where(eq(milestonesTable.projectId, id)),
+    db.select().from(tasksTable).where(eq(tasksTable.projectId, id)),
+  ]);
+
+  const { templatesTable } = await import("@workspace/db");
+
+  // Build template data with sequential slugs
+  const taskSlugs: Record<number, string> = {};
+  tasks.forEach((t, i) => { taskSlugs[t.id] = `task_${i + 1}`; });
+
+  const templateData = {
+    projectType: project.type,
+    milestones: milestones.map((m, i) => ({
+      slug: `milestone_${i + 1}`,
+      name: m.name,
+      phase: m.phase,
+      sequence: m.sequence,
+      isBillable: m.isBillable,
+    })),
+    tasks: tasks.map(t => ({
+      slug: taskSlugs[t.id],
+      name: t.name,
+      taskType: t.taskType,
+      parentSlug: t.parentId ? taskSlugs[t.parentId] : null,
+      hierarchyLevel: t.hierarchyLevel,
+      isLeaf: t.isLeaf,
+      estimatedHours: t.estimatedHours,
+      priority: t.priority,
+      phase: t.phase,
+    })),
+  };
+
+  const [template] = await db.insert(templatesTable).values({
+    name: templateName,
+    description: description || null,
+    templateData: templateData as any,
+    projectType: project.type as any,
+  } as any).returning();
+
+  res.status(201).json({ id: template.id });
 });
 
 // ─── Schedule: manual recalculate (synchronous, PM-only) ─────────────────────

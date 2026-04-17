@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { format, addMonths, startOfMonth, differenceInDays, parseISO } from "date-fns";
 import { Link, useLocation } from "wouter";
-import { LayoutGrid, List, GanttChartSquare, Search, X, GripVertical, Plus } from "lucide-react";
+import { LayoutGrid, List, GanttChartSquare, Search, X, GripVertical, Plus, Copy, FileText } from "lucide-react";
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
@@ -187,7 +187,33 @@ function ProjectKanban({ projects, onStatusChange }: { projects: any[]; onStatus
   );
 }
 
-function ProjectTable({ projects }: { projects: any[] }) {
+const RAG_DOT: Record<string, string> = {
+  green: "bg-emerald-500",
+  amber: "bg-amber-500",
+  red: "bg-red-500",
+};
+
+function HealthDots({ project }: { project: any }) {
+  const dims = [
+    { key: "healthBudget", label: "Budget" },
+    { key: "healthHours", label: "Hours" },
+    { key: "healthTimeline", label: "Timeline" },
+    { key: "healthRisks", label: "Risks" },
+  ];
+  return (
+    <div className="flex items-center gap-1.5">
+      {dims.map(d => {
+        const val = project[d.key] || "green";
+        const color = RAG_DOT[val] || "bg-emerald-500";
+        return (
+          <div key={d.key} title={`${d.label}: ${val}`} className={`w-2 h-2 rounded-full ${color}`} />
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectTable({ projects, onCopy, onSaveTemplate }: { projects: any[]; onCopy: (id: number) => void; onSaveTemplate: (id: number, name: string) => void }) {
   const [, navigate] = useLocation();
   return (
     <Card>
@@ -201,12 +227,18 @@ function ProjectTable({ projects }: { projects: any[] }) {
               <TableHead>Status</TableHead>
               <TableHead>Health</TableHead>
               <TableHead>Budget Used</TableHead>
+              <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {projects.map((project) => (
               <TableRow key={project.id} className="cursor-pointer" onClick={() => navigate(`/projects/${project.id}`)}>
-                <TableCell className="font-medium text-primary hover:underline">{project.name}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-primary hover:underline">{project.name}</span>
+                    {project.isInternal && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Internal</Badge>}
+                  </div>
+                </TableCell>
                 <TableCell>{project.accountName}</TableCell>
                 <TableCell className="capitalize">{(project.type || "").replace(/_/g, " ")}</TableCell>
                 <TableCell>
@@ -219,12 +251,7 @@ function ProjectTable({ projects }: { projects: any[] }) {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {project.healthScore ? (
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${project.healthScore >= 80 ? "bg-emerald-500" : project.healthScore >= 60 ? "bg-amber-500" : "bg-red-500"}`} />
-                      <span className="font-medium">{project.healthScore}</span>
-                    </div>
-                  ) : "—"}
+                  <HealthDots project={project} />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -239,11 +266,29 @@ function ProjectTable({ projects }: { projects: any[] }) {
                     )}
                   </div>
                 </TableCell>
+                <TableCell onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1">
+                    <button
+                      title="Copy project"
+                      onClick={() => onCopy(project.id)}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      title="Save as template"
+                      onClick={() => onSaveTemplate(project.id, project.name)}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
             {projects.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
                   No projects match your filters.
                 </TableCell>
               </TableRow>
@@ -698,6 +743,48 @@ function NewProjectDialog({ open, onClose, onCreated }: {
   );
 }
 
+function SaveAsTemplateDialog({ projectId, projectName, open, onClose }: { projectId: number; projectName: string; open: boolean; onClose: () => void }) {
+  const [templateName, setTemplateName] = useState(projectName);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleSave() {
+    if (!templateName.trim()) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/projects/${projectId}/save-as-template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateName: templateName.trim() }),
+      });
+      setDone(true);
+      setTimeout(() => { onClose(); setDone(false); setTemplateName(projectName); }, 1200);
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Save as Template</DialogTitle></DialogHeader>
+        {done ? (
+          <p className="text-sm text-emerald-600 py-4 text-center font-medium">Template saved!</p>
+        ) : (
+          <div className="space-y-4 mt-1">
+            <div className="space-y-1.5">
+              <Label>Template Name</Label>
+              <Input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name…" />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+              <Button onClick={handleSave} disabled={saving || !templateName.trim()}>{saving ? "Saving…" : "Save Template"}</Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ProjectsList() {
   const { data: projectsData, isLoading, refetch } = useListProjects();
   const [localProjects, setLocalProjects] = useState<any[]>([]);
@@ -705,9 +792,20 @@ export default function ProjectsList() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showNewProject, setShowNewProject] = useState(false);
+  const [saveTemplateFor, setSaveTemplateFor] = useState<{ id: number; name: string } | null>(null);
+  const [, navigate] = useLocation();
   useEffect(() => {
     if (projectsData) setLocalProjects(projectsData);
   }, [projectsData]);
+
+  async function handleCopyProject(id: number) {
+    try {
+      const res = await fetch(`/api/projects/${id}/copy`, { method: "POST" });
+      const data = await res.json();
+      refetch();
+      if (data.id) navigate(`/projects/${data.id}`);
+    } catch {}
+  }
 
   const handleStatusChange = async (id: number, status: string) => {
     setLocalProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p));
@@ -840,7 +938,11 @@ export default function ProjectsList() {
         <ProjectKanban projects={filtered} onStatusChange={handleStatusChange} />
       )}
       {view === "table" && (
-        <ProjectTable projects={filtered} />
+        <ProjectTable
+          projects={filtered}
+          onCopy={handleCopyProject}
+          onSaveTemplate={(id, name) => setSaveTemplateFor({ id, name })}
+        />
       )}
       {view === "gantt" && (
         <ConsolidatedGanttView filterStatus={filterStatus} search={search} />
@@ -853,6 +955,14 @@ export default function ProjectsList() {
       onClose={() => setShowNewProject(false)}
       onCreated={() => refetch()}
     />
+    {saveTemplateFor && (
+      <SaveAsTemplateDialog
+        projectId={saveTemplateFor.id}
+        projectName={saveTemplateFor.name}
+        open={true}
+        onClose={() => setSaveTemplateFor(null)}
+      />
+    )}
     </>
   );
 }

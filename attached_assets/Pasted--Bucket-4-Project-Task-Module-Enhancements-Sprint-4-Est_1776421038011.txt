@@ -1,0 +1,331 @@
+## Bucket 4 — Project & Task Module Enhancements
+**Sprint 4 · Estimated: 3–4 days**
+
+> Depends on Bucket 1 (schema — parentTaskId, etcHours, task_assignments,
+> task_comments, saved_filters) and Bucket 2 (labels).
+> Do NOT touch /resources, /timesheets, /customers, or /opportunities pages.
+
+```
+You are enhancing ONLY the Projects module (/projects, /projects/:id)
+and the standalone Tasks page (/tasks).
+Do NOT change any other pages or API routes.
+Do NOT break existing project list, project detail tabs, or milestone functionality.
+All changes are additive.
+
+─── 1. API: TASK HIERARCHY ENDPOINTS ───
+In api-server/src/routes/tasks.ts:
+
+GET /api/tasks — update to include parentTaskId, hierarchyLevel, isLeaf, etcHours,
+  commentCount in the returned fields.
+  Add support for ?parentTaskId= query param to fetch children of a specific task.
+
+GET /api/projects/:id/full — update to return tasks in hierarchical order:
+  {
+    ...project,
+    taskTree: [
+      {
+        ...task,
+        children: [
+          { ...task, children: [...] }
+        ]
+      }
+    ]
+  }
+  Build this tree by fetching all tasks for the project, then nesting them
+  by parentTaskId. Tasks with parentTaskId=null are roots.
+
+POST /api/tasks — update to accept parentTaskId, etcHours.
+  When a task has children (i.e., becomes a parent), set isLeaf=false.
+  New leaf tasks default to isLeaf=true.
+  Auto-calculate hierarchyLevel from parent chain.
+
+PATCH /api/tasks/:id — update to accept etcHours.
+  IMPORTANT: etcHours is stored directly — never derive it as estimatedHours - actualHours.
+
+─── 2. API: TASK COMMENTS ENDPOINTS ───
+Create api-server/src/routes/task-comments.ts:
+
+GET /api/task-comments?taskId=:id
+  Returns all comments for a task, ordered by createdAt ASC.
+  Join with resources to include authorName, authorTitle.
+
+POST /api/task-comments
+  Body: { taskId, authorId, body, isExternal? }
+  Parse @mentions from body: any @word that matches a resource name
+  → populate mentionedUserIds with their resource IDs.
+  After inserting comment: increment tasks.commentCount by 1.
+  For each mentionedUserId: create a notification record:
+    { userId: mentionedUserId, type: 'mention', title: '[Author] mentioned you on [task name]',
+      body: first 100 chars of comment body, resourceId: taskId, resourceType: 'task' }
+
+PATCH /api/task-comments/:id — update body, updatedAt
+DELETE /api/task-comments/:id — decrement tasks.commentCount
+
+Register these routes in api-server/src/routes/index.ts.
+
+─── 3. API: SAVED FILTERS ENDPOINTS ───
+Create api-server/src/routes/saved-filters.ts:
+
+GET /api/saved-filters?context=tasks
+  Returns: personal filters (ownerId = current user) + shared filters (isShared=true)
+  ordered by name.
+
+POST /api/saved-filters
+  Body: { name, ownerId, isShared, filterContext, filterJson }
+
+DELETE /api/saved-filters/:id
+  Only allow if ownerId matches current user.
+
+Register in routes/index.ts.
+
+─── 4. API: TASK ASSIGNMENTS ENDPOINTS ───
+Add to api-server/src/routes/tasks.ts:
+
+GET /api/task-assignments?taskId=:id
+  Returns all assignments for a task with resource name, title, roleOnTask, estimatedHours.
+
+POST /api/task-assignments
+  Body: { taskId, resourceId, roleOnTask?, estimatedHours? }
+
+DELETE /api/task-assignments/:id
+
+─── 5. API: TASK DEPENDENCIES ───
+Update api-server/src/routes/tasks.ts (or task-dependencies.ts):
+GET /api/task-dependencies?taskId=:id
+  Returns both: predecessors (where successorTaskId = :id) AND
+                successors (where predecessorTaskId = :id)
+  Include the lagDays field (from Bucket 1 schema change).
+
+POST /api/task-dependencies
+  Body: { predecessorTaskId, successorTaskId, dependencyType, lagDays? }
+  dependencyType must be one of: 'FS'|'SS'|'FF'|'SF'
+
+DELETE /api/task-dependencies/:id
+
+─── 6. PROJECT LIST: INTERNAL BADGE + 4-DIMENSION HEALTH ───
+In the /projects page (projects/list.tsx or similar):
+
+a) Internal Badge:
+   In the project table row, add a small badge after the project name:
+   {project.isInternal && <Badge variant="outline">Internal</Badge>}
+
+b) 4-Dimension Health Dots:
+   Replace the single health indicator column with four small colored dots:
+   Budget | Hours | Timeline | Risks
+   Each dot = a small circle (8px) colored:
+     'green'  → emerald-500
+     'amber'  → amber-500
+     'red'    → red-500
+   Tooltip on hover shows "Budget: Green", "Hours: Amber", etc.
+   Data comes from the new columns: healthBudget, healthHours, healthTimeline, healthRisks.
+
+c) Actions column: add "Copy" and "Save as Template" icon buttons.
+   Copy: POST /api/projects/:id/copy (see endpoint below)
+   Save as Template: POST /api/projects/:id/save-as-template (see endpoint below)
+
+─── 7. API: COPY PROJECT + SAVE AS TEMPLATE ───
+In api-server/src/routes/projects.ts:
+
+POST /api/projects/:id/copy
+  Duplicates the project record (with name "[Original Name] — Copy")
+  Also duplicates all milestones for the project.
+  Also duplicates all tasks (preserving parentTaskId relationships).
+  Returns the new project's id.
+  On success, frontend navigates to /projects/:newId.
+
+POST /api/projects/:id/save-as-template
+  Body: { templateName, description }
+  Reads the project's milestones and tasks.
+  Creates a project_templates record with templateData containing
+  the full task and milestone structure (as JSON, with IDs replaced by
+  sequential slugs so they're reusable).
+  Increments usageCount on the template.
+  Returns the new template's id.
+
+─── 8. PROJECT DETAIL: TASKS TAB — HIERARCHICAL TREE ───
+Replace the existing flat task list in the Tasks tab with a collapsible tree:
+
+a) Tree Structure:
+   - Root nodes (hierarchyLevel=0) = Phase rows, styled with a slightly darker
+     background (e.g., bg-slate-100).
+   - Child nodes are indented 20px per level.
+   - Each row has a ChevronRight / ChevronDown toggle if it has children.
+   - Collapsed rows only show the parent row.
+
+b) Parent Row Data (rolled up from children):
+   - Total estimatedHours: sum of all leaf descendants
+   - Total actualHours: sum of all leaf descendants
+   - Completion %: weighted average of leaf completion %
+   - Assignee count: count of unique assignees across children
+   - These are computed client-side from the taskTree data.
+
+c) Leaf Row Data (isLeaf=true):
+   Shows: task name | assignee avatar stack (up to 3) | status badge |
+          priority badge | estimatedHours | actualHours | ETC | due date |
+          comment count badge | progress %
+
+d) Time Entry Gate:
+   - On non-leaf rows, the "Log Time" action is disabled (greyed out with tooltip:
+     "Time can only be logged on subtasks")
+   - On leaf rows, "Log Time" opens the existing timesheet popover.
+
+e) Add Task Button:
+   Opens a dialog with a "Parent Task" select field (hierarchical dropdown
+   showing all existing tasks for this project, indented by level).
+   Selecting a parent automatically sets hierarchyLevel and isLeaf appropriately.
+
+─── 9. PROJECT DETAIL: TASK SLIDE-IN PANEL ───
+When a task row is clicked, a slide-in panel appears from the right (use a
+Sheet component from shadcn/ui). The panel contains:
+
+a) Editable Fields:
+   - Name, Description (textarea), Status (select), Priority (select)
+   - Estimated Hours (number input)
+   - ETC — Estimated Time to Complete (number input):
+     Label clearly: "ETC (hrs) — enter your remaining estimate"
+     Store directly in etcHours column. Show current value.
+     NEVER pre-fill as estimatedHours - actualHours.
+   - Start Date, Due Date
+   - Assignees: multi-select from /api/resources
+     Shows existing assignments from task_assignments
+     On save: reconcile task_assignments (delete removed, add new)
+   - Dependencies section (see below)
+
+b) Comments Section:
+   Below the edit fields, show a "Comments" section:
+   - Fetch GET /api/task-comments?taskId=:id
+   - Show each comment with: author avatar, author name, timestamp (relative), body text
+   - @mentions in the body are highlighted in blue
+   - "Add comment" textarea at the bottom:
+     As user types "@", show a floating dropdown of resource names
+     (filter by text after "@", show initials + name)
+     Selecting a resource inserts "@ResourceName" into the text
+     "Post comment" button: POST /api/task-comments
+   - Comments marked isExternal=true get a small "Visible to customer" badge
+
+c) Dependencies Section:
+   Show two lists: Predecessors | Successors
+   For each dependency: task name, dependency type badge (FS/SS/FF/SF),
+     lag days if non-zero.
+   "Add dependency" button opens a small inline form:
+     Predecessor task (searchable select from project tasks)
+     Dependency type (FS/SS/FF/SF)
+     Lag days (number, default 0)
+   DELETE /api/task-dependencies/:id on the × button.
+
+─── 10. TASKS PAGE (/tasks): THREE VIEWS + SAVED FILTERS ───
+a) View toggle: add a "Hierarchy" option to the existing List | Board toggle:
+   List | Board | Hierarchy
+   Hierarchy view = same tree component as Project Detail Tasks tab,
+   but filterable by project selector.
+
+b) Saved Filters UI:
+   Add a "Saved Filters" dropdown button next to the filter bar.
+   Dropdown shows: personal filters + shared filters from GET /api/saved-filters?context=tasks
+   Applying a saved filter populates the filter bar inputs.
+   "Save current filter" option at bottom of dropdown:
+     Opens a small dialog: Name (text) + Share with team (toggle)
+     POST /api/saved-filters
+
+c) ETC column in List view:
+   Add ETC column after "Actual Hours".
+   Show etcHours value or "—" if null.
+   Color red if etcHours > (estimatedHours - actualHours) and both are non-null.
+
+d) Comments badge on Kanban cards:
+   In board view, show a small comment count badge on each card if commentCount > 0.
+   Badge shows the count in a small rounded chip.
+
+─── 11. PROJECT DETAIL: OVERVIEW TAB ENHANCEMENTS ───
+a) Health Dashboard:
+   Replace the single health badge in the header with 4 RAG cards below the KPI tiles:
+   Budget | Hours | Timeline | Risks
+   Each card: dimension name, current RAG color, last updated indicator.
+   Each card has an edit icon (pencil) — clicking opens a select: Green / Amber / Red
+   PUT /api/projects/:id with the updated health dimension field.
+
+b) ETC Projection Card:
+   Add a new card below the margin forecast chart:
+   Title: "ETC Projection"
+   Fields (from GET /api/projects/:id/projection):
+     - Estimated Completion Date
+     - Budget at Risk (yes/no badge)
+     - Projected Total Hours
+     - Current Burn Rate (hrs/week)
+   This card uses the etcHours from leaf tasks to project forward.
+
+c) Margin Forecast Chart:
+   Update to show 4 lines instead of 2:
+     Planned Revenue, Actual Revenue, Planned Cost, Actual Cost
+   Data from GET /api/projects/:id/margin-forecast (updated endpoint).
+
+─── 12. PROJECT DETAIL: FINANCE TAB ENHANCEMENTS ───
+a) Rate Card Section:
+   At the top of the Finance tab, add a "Rate Card" section:
+   Fetch GET /api/rate-cards/project/:projectId
+   Show a table: Role | Sell Rate | Buy Rate (hidden for non-finance roles) | Resources in Role
+   "Edit Rate Card" button (visible to finance/admin only) → navigate to /rate-cards/:id
+
+b) Margin Analysis Table:
+   Below the existing Revenue vs Budget gauge, add a "Per-Resource Margin" table:
+   Fetch GET /api/projects/:id/margin-analysis
+   Columns: Resource | Role | Hours | Revenue | Cost | Margin % | Variance
+   Rows with variance > 0 (resource costs more than budgeted for their role):
+     Highlight in light amber background.
+     Show a small warning icon (TriangleAlert from Lucide).
+
+─── 13. PROJECT DETAIL: COMMAND TAB (GANTT) ───
+Update the placeholder Command tab with a proper Gantt implementation:
+
+a) Render tasks as horizontal bars on a date axis.
+   X-axis = calendar dates (Mon–Sun columns, labeled weekly).
+   Y-axis = task rows, grouped by phase (parent task).
+   Bar width = duration (startDate to dueDate).
+   Bar color = status color (not_started=slate, in_progress=blue, completed=emerald, blocked=red).
+
+b) Dependency arrows:
+   Draw SVG arrows between bars based on task_dependencies:
+     FS: arrow from right edge of predecessor to left edge of successor
+     SS: arrow from left edge to left edge
+     FF: arrow from right edge to right edge
+     SF: arrow from left edge to right edge
+   Arrow color = grey, with arrowhead.
+
+c) Milestone diamonds:
+   Show milestones as diamond shapes on the timeline at their dueDate.
+   Color: payment=amber, project=blue, external=violet.
+
+d) Today line:
+   Vertical red dashed line at today's date.
+
+e) Drag to reschedule:
+   Allow dragging a task bar horizontally to change its startDate and dueDate.
+   On drop: PUT /api/tasks/:id with new dates.
+   (No dependency constraint enforcement needed for MVP — just update dates.)
+
+f) Baseline overlay:
+   If a baseline is stored (add baselineStartDate, baselineEndDate to tasks if needed),
+   show a grey outline bar behind the actual bar.
+   For MVP, skip if baseline columns are not yet populated.
+```
+
+**✅ Bucket 4 Validation:**
+```
+- /projects list shows "Internal" badge on the KSAP Internal project
+- /projects list shows 4 colored health dots per project row
+- /projects/:id Tasks tab shows collapsible hierarchy tree
+- Phase rows are expandable; leaf rows show ETC column
+- Clicking a phase row does NOT allow time entry (disabled Log Time)
+- Clicking a leaf task opens the slide-in panel
+- Slide-in panel: ETC field is editable and saves correctly
+- Slide-in panel: typing "@" in comment box triggers resource autocomplete dropdown
+- Posting a comment increments the commentCount badge on the task row
+- Slide-in panel: dependency section shows predecessors/successors; FS/SS/FF/SF badges
+- /projects/:id Finance tab shows Rate Card table and Per-Resource Margin table
+- /projects/:id Command tab shows Gantt with task bars and milestone diamonds
+- /tasks page shows 3-view toggle (List | Board | Hierarchy)
+- /tasks page: "Save current filter" saves to DB and reloads from saved filters dropdown
+- /tasks board view: cards show comment count badge if > 0
+- "Save as Template" on project → creates template → appears in /templates stub page
+- "Copy" on project → creates duplicate → navigates to new project
+- All existing tab functionality still works (Overview, Milestones, Team, Finance)

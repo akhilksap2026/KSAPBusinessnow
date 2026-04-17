@@ -24,6 +24,9 @@ import timeEntryCategoriesRouter from "./time_entry_categories";
 import templateTasksRouter from "./template_tasks";
 import fxRatesRouter from "./fx_rates";
 import opportunitiesRouter from "./opportunities";
+import taskCommentsRouter from "./task-comments";
+import savedFiltersRouter from "./saved-filters";
+import rateCardsRouter from "./rate-cards";
 
 const router: IRouter = Router();
 
@@ -52,5 +55,8 @@ router.use(taskResourcesRouter);
 router.use(templateTasksRouter);
 router.use(fxRatesRouter);
 router.use(opportunitiesRouter);
+router.use(taskCommentsRouter);
+router.use(savedFiltersRouter);
+router.use(rateCardsRouter);
 
 export default router;

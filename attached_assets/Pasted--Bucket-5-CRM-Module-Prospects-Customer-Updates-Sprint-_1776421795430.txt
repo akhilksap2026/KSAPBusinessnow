@@ -1,0 +1,223 @@
+## Bucket 5 — CRM Module (Prospects + Customer Updates)
+**Sprint 5 · Estimated: 2 days**
+
+> Depends on Bucket 1 (prospects table, convertedFromProspectId columns)
+> and Bucket 2 (nav entries, route stubs).
+> Do NOT touch /projects, /resources, /timesheets, or /opportunities.
+
+```
+You are building the Prospects module and updating the Customers module.
+Do NOT change the Accounts/Customers API logic that already works.
+Do NOT touch any project, resource, or timesheet pages.
+
+─── 1. API: PROSPECTS ENDPOINTS ───
+Create api-server/src/routes/prospects.ts:
+
+GET /api/prospects?status=&ownerId=
+  Requires role: account_manager | delivery_director | admin.
+  Return 403 for all other roles.
+  Returns all prospects.
+  IMPORTANT: strip confidential fields for any role that is not
+  account_manager, delivery_director, or admin:
+    delete prospect.primaryContactName
+    delete prospect.primaryContactEmail
+    delete prospect.linkedinUrl
+    delete prospect.sentiment
+    delete prospect.touchPoints
+
+GET /api/prospects/:id
+  Same field-level security as above.
+  Also includes linked opportunities (WHERE prospectId = :id).
+
+POST /api/prospects
+  Body: { name, type, industry, segment, primaryContactName,
+          primaryContactEmail, linkedinUrl, sentiment, ownerId, notes }
+
+PUT /api/prospects/:id
+  Full update.
+
+DELETE /api/prospects/:id
+  Only if status != 'converted'.
+
+POST /api/prospects/:id/convert
+  This operation MUST be transactional:
+  1. BEGIN TRANSACTION
+  2. Read the prospect record
+  3. INSERT into accounts:
+     { name: prospect.name, type: prospect.type, industry: prospect.industry,
+       segment: prospect.segment, status: 'active',
+       convertedFromProspectId: prospect.id }
+  4. UPDATE prospects SET
+       convertedToAccountId = [new account id],
+       convertedAt = NOW(),
+       status = 'converted'
+     WHERE id = :id
+  5. COMMIT
+  6. If any step fails: ROLLBACK and return 500
+  Returns: { accountId: [new account id] }
+  Frontend then navigates to /customers/:accountId.
+
+Register in routes/index.ts.
+
+─── 2. PROSPECTS LIST PAGE (/prospects) ───
+Replace the stub page with the full Prospects list:
+
+Route guard: Guard roles={["account_manager","delivery_director","admin"]}
+If other roles navigate to /prospects, redirect to /.
+
+4 KPI cards:
+  Total Prospects | Active | Qualified | Converted (this quarter)
+  "Converted this quarter" = COUNT where convertedAt >= start of current quarter.
+
+Filter bar: Search (name) | Status (active/qualified/converted/dead) | Owner | Clear
+
+Table columns:
+  Prospect Name (link to /prospects/:id) |
+  Owner (resource name) |
+  Status badge: active=blue, qualified=violet, converted=emerald, dead=muted |
+  Sentiment badge [confidential, only shown to authorized roles]:
+    positive=emerald, neutral=slate, negative=red |
+  Last Touch Point (most recent date from touchPoints array, or "—") |
+  Created Date |
+  Actions: Convert to Customer button (only for active/qualified), Edit, Delete
+
+"Add Prospect" button → modal with fields:
+  Prospect Name (required), Type, Industry, Segment,
+  Owner (select from /api/resources),
+  Primary Contact Name [confidential], Primary Contact Email [confidential],
+  LinkedIn URL [confidential],
+  Sentiment (Positive/Neutral/Negative) [confidential],
+  Notes
+
+─── 3. PROSPECT DETAIL PAGE (/prospects/:id) ───
+Replace the stub page with the full Prospect detail:
+
+Header: name, type badge, status badge, owner name, created date
+Action buttons: Edit | Delete
+
+Two sections:
+  a) General Info: name, type, industry, segment, status, notes, owner
+
+  b) Confidential Info section (only renders for authorized roles):
+     useCanSee('prospect_data') gate.
+     If false: show a locked card "Confidential — access restricted"
+     If true: show:
+       Primary Contact: name + email (mailto link)
+       LinkedIn: link icon + URL
+       Sentiment: colored badge
+       Touch Points Timeline: render touchPoints JSONB array as a timeline:
+         Each entry: date | type | notes text
+         Sorted by date descending
+
+Linked Opportunities section:
+  Table of opportunities where prospectId = this prospect's id.
+  Columns: Name | Stage | Value | Close Date | Owner
+
+"Convert to Customer" button:
+  Only visible if status is 'active' or 'qualified'.
+  Opens a confirmation modal:
+    Title: "Convert [Prospect Name] to Customer"
+    Pre-filled read-only fields: Name, Type, Industry
+    Editable fields: Annual Contract Value ($), Payment Terms, Contract Header
+    Confirm button → POST /api/prospects/:id/convert
+    On success: navigate to /customers/:newAccountId with toast "Converted successfully"
+    The prospect record is NOT deleted — it stays with status='converted' and
+    a link back to the new customer page.
+
+─── 4. CUSTOMER UPDATES: ADD FIELDS + CONVERSION LINK ───
+In the Customer (Account) detail page (/customers/:id):
+
+a) Add to the Overview tab:
+   - Payment Terms field (from the new paymentTerms column)
+   - Contract Header field (from contractHeader column)
+   - "Converted from Prospect" section: if convertedFromProspectId is non-null,
+     show a link: "Converted from: [Prospect Name]" → /prospects/:id
+
+b) Add to the Add Customer modal:
+   - Payment Terms (text input)
+   - Contract Header (text input)
+   - "Converted From Prospect" (optional select from /api/prospects — for manual linking)
+
+c) Add new tabs to Customer detail:
+   - Change Orders tab: placeholder for now — "Coming soon"
+   - Contacts tab: placeholder for now — "Coming soon"
+
+─── 5. MILESTONE TYPES: BADGES + PAYMENT ALERT ───
+In the Milestones tab of Project Detail AND the standalone /milestones page:
+
+a) Type Badges:
+   Each milestone card now shows a type badge:
+     milestoneType='payment'  → amber badge "Payment"
+     milestoneType='project'  → blue badge "Project"
+     milestoneType='external' → violet badge "External"
+
+b) Payment Milestone — Invoice Amount:
+   On payment-type milestone cards, show:
+   Invoice Amount: $[invoiceAmount] (formatted with commas)
+   Alert Sent: [Yes/No] indicator (from invoiceAlertSent column)
+
+c) External Milestone — Awaiting Sign-off Banner:
+   On external-type milestone cards with status='pending' or 'in_progress',
+   show a banner: "Awaiting Customer Sign-off"
+
+d) "Complete Milestone" Button:
+   All milestone cards get a "Complete" button (if status != 'completed').
+   Clicking opens a confirmation dialog:
+     For payment type: "Mark complete and alert PM to generate invoice?
+       Invoice Amount: $[amount]" — Confirm button
+     For external type: "Confirm customer has signed off?" — Confirm button
+     For project type: Simple "Mark as complete?" — Confirm button
+   On confirm:
+     PATCH /api/milestones/:id { status: 'completed', completedDate: today }
+     If milestoneType='payment' AND invoiceAlertSent=false:
+       Server creates a notification:
+         { type: 'milestone_payment', title: '[Milestone] complete — generate invoice',
+           body: 'Project: [name]. Invoice amount: $[amount]',
+           userId: projectManagerId of the project }
+       Server sets invoiceAlertSent=true
+
+─── 6. OPPORTUNITIES: LINK TO PROSPECT ───
+In the /opportunities page, update:
+
+a) In the Add Opportunity modal, change the "Account" field to:
+   Two radio buttons: "Customer" | "Prospect"
+   When "Customer" selected: show existing account select
+   When "Prospect" selected: show prospect select (GET /api/prospects)
+
+b) In the Opportunity table (list view), rename "Account" column to "Customer / Prospect"
+   and show:
+   - Customer name with Building2 icon if accountId is set
+   - Prospect name with Target icon if prospectId is set
+
+c) In the Kanban view, opportunity cards show the same icon differentiation.
+
+d) Stage → probability auto-fill: update mapping to match executive committee decision:
+   discovery=10, qualified=30, proposal=50, negotiation=70, won=100, lost=0
+
+─── 7. CUSTOMER LIST: TABLE/KANBAN TOGGLE ───
+On the /customers page, add a view toggle (same pattern as /opportunities):
+  Table view (default) | Kanban view
+  Kanban columns by status: active | at_risk | inactive
+  Each card: name, ACV, health score mini-bar, renewal date
+  Drag between columns → PATCH /api/accounts/:id { status: newColumn }
+```
+
+**✅ Bucket 5 Validation:**
+```
+- Navigating to /prospects as a consultant redirects to /
+- /prospects shows 3 seeded prospects for authorized roles
+- Confidential fields (sentiment, contact) NOT visible to unauthorized roles
+  (verify in browser network tab)
+- "Add Prospect" modal saves a new prospect correctly
+- /prospects/:id shows confidential section for authorized roles; locked card for others
+- "Convert to Customer" flow:
+  1. Opens modal with ACV/payment terms fields
+  2. On confirm, creates new customer record
+  3. Redirects to /customers/:newId
+  4. Prospect page now shows status='converted' and link to new customer
+  5. New customer page shows "Converted from: [Prospect Name]" link
+- /milestones and /projects/:id milestones tab show type badges (Payment/Project/External)
+- Payment milestones show invoice amount
+- "Complete" on a payment milestone: creates PM notification; sets invoiceAlertSent=true
+- /opportunities Add modal shows Customer/Prospect radio buttons
+- /customers page has Table/Kanban toggle

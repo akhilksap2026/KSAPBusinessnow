@@ -31,3 +31,6 @@ export * from "./task_resource_daily_plan";
 export * from "./time_entry_categories";
 export * from "./template_tasks";
 export * from "./fx_rates";
+export * from "./task_comments";
+export * from "./task_assignments";
+export * from "./saved_filters";

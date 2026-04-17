@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useListTasks, useListProjects } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Link } from "wouter";
 import {
   Search, ExternalLink, Circle, Clock, AlertTriangle, CheckCircle2,
   Ban, RefreshCw, Info, Rocket, LayoutGrid, List, GripVertical,
+  MessageSquare, Bookmark, BookmarkPlus, ChevronRight, ChevronDown,
+  FolderOpen, Layers, Milestone as MilestoneIcon, X,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -16,6 +18,8 @@ import {
   PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+
+const API = import.meta.env.BASE_URL + "api";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   todo:        { label: "To Do",      color: "bg-slate-100 text-slate-700 border-slate-200",       icon: Circle },
@@ -51,7 +55,7 @@ const BOARD_COLUMNS = [
 ];
 
 async function patchTask(id: number, status: string) {
-  const res = await fetch(`/api/tasks/${id}`, {
+  const res = await fetch(`${API}/tasks/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -63,6 +67,7 @@ function TaskCardContent({ task, ghost = false }: { task: any; ghost?: boolean }
   const sc = STATUS_CONFIG[task.status] || STATUS_CONFIG.todo;
   const pc = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const isOverdue = task.dueDate && task.dueDate < new Date().toISOString().split("T")[0] && task.status !== "done" && task.status !== "cancelled";
+  const commentCount = task.commentCount ?? 0;
 
   return (
     <div className={`rounded-lg border bg-card p-3 space-y-2 ${ghost ? "shadow-xl rotate-1 opacity-95 ring-2 ring-primary/30" : "hover:shadow-sm hover:border-primary/30 transition-all"}`}>
@@ -76,8 +81,8 @@ function TaskCardContent({ task, ghost = false }: { task: any; ghost?: boolean }
           )}
         </div>
       </div>
-      {(task as any).projectName && (
-        <p className="text-xs text-muted-foreground truncate pl-6">{(task as any).projectName}</p>
+      {task.projectName && (
+        <p className="text-xs text-muted-foreground truncate pl-6">{task.projectName}</p>
       )}
       <div className="flex items-center justify-between pl-6">
         <div className="flex items-center gap-1.5">
@@ -90,9 +95,21 @@ function TaskCardContent({ task, ghost = false }: { task: any; ghost?: boolean }
           </span>
         )}
       </div>
-      {task.assignedToName && (
-        <p className="text-xs text-muted-foreground pl-6">{task.assignedToName}</p>
-      )}
+      <div className="flex items-center justify-between pl-6">
+        {task.assignedToName && (
+          <p className="text-xs text-muted-foreground">{task.assignedToName}</p>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {task.etcHours != null && (
+            <span className="text-[10px] text-amber-600 font-medium">{task.etcHours}h ETC</span>
+          )}
+          {commentCount > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+              <MessageSquare className="h-2.5 w-2.5" /> {commentCount}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -138,17 +155,12 @@ function TaskBoard({ tasks, onStatusChange }: { tasks: any[]; onStatusChange: (i
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const activeTask = tasks.find(t => t.id === activeId);
 
-  function handleDragStart({ active }: DragStartEvent) {
-    setActiveId(active.id as number);
-  }
-
+  function handleDragStart({ active }: DragStartEvent) { setActiveId(active.id as number); }
   function handleDragEnd({ active, over }: DragEndEvent) {
     setActiveId(null);
     if (!over) return;
     const task = tasks.find(t => t.id === active.id);
-    if (task && task.status !== over.id) {
-      onStatusChange(task.id, over.id as string);
-    }
+    if (task && task.status !== over.id) onStatusChange(task.id, over.id as string);
   }
 
   return (
@@ -171,20 +183,122 @@ function TaskBoard({ tasks, onStatusChange }: { tasks: any[]; onStatusChange: (i
   );
 }
 
+type HierarchyNode = any & { children: HierarchyNode[] };
+
+function buildHierarchy(tasks: any[]): HierarchyNode[] {
+  const map: Record<number, HierarchyNode> = {};
+  tasks.forEach(t => { map[t.id] = { ...t, children: [] }; });
+  const roots: HierarchyNode[] = [];
+  tasks.forEach(t => {
+    if (t.parentId && map[t.parentId]) map[t.parentId].children.push(map[t.id]);
+    else roots.push(map[t.id]);
+  });
+  return roots;
+}
+
+function HierarchyRow({ node, depth, onStatusChange, updatingId }: {
+  node: HierarchyNode; depth: number; onStatusChange: (id:number, status:string) => Promise<void>; updatingId: number | null;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const sc = STATUS_CONFIG[node.status] || STATUS_CONFIG.todo;
+  const pc = PRIORITY_CONFIG[node.priority] || PRIORITY_CONFIG.medium;
+  const StatusIcon = sc.icon;
+  const commentCount = node.commentCount ?? 0;
+  const hasChildren = node.children.length > 0;
+
+  return (
+    <>
+      <tr className="hover:bg-muted/30 transition-colors border-b border-border">
+        <td className="px-4 py-2" style={{ paddingLeft: `${depth * 24 + 16}px` }}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {hasChildren ? (
+              <button onClick={() => setCollapsed(v => !v)} className="p-0.5 rounded hover:bg-muted shrink-0">
+                {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+              </button>
+            ) : <span className="w-5 shrink-0" />}
+            {node.taskType === "parent" ? <FolderOpen className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+              : node.taskType === "milestone" ? <MilestoneIcon className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              : <Layers className="h-3.5 w-3.5 text-blue-400 shrink-0" />}
+            <span className={`text-sm truncate max-w-[260px] ${node.taskType === "parent" ? "font-semibold" : ""}`}>{node.name}</span>
+            {commentCount > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium shrink-0">
+                <MessageSquare className="h-2.5 w-2.5" /> {commentCount}
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-2 hidden lg:table-cell">
+          {node.projectName ? (
+            <Link href={`/projects/${node.projectId}`} className="text-xs text-muted-foreground hover:text-primary truncate max-w-[120px] block">
+              {node.projectName}
+            </Link>
+          ) : <span className="text-muted-foreground text-xs">—</span>}
+        </td>
+        <td className="px-4 py-2 hidden md:table-cell">
+          <span className="text-xs text-muted-foreground">{node.assignedToName || "—"}</span>
+        </td>
+        <td className="px-4 py-2">
+          <div className="flex items-center gap-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${pc.dot}`} />
+            <span className="text-xs text-muted-foreground">{pc.label}</span>
+          </div>
+        </td>
+        <td className="px-4 py-2 hidden md:table-cell">
+          {node.dueDate ? <span className="text-xs text-muted-foreground">{format(new Date(node.dueDate), "MMM d")}</span>
+            : <span className="text-muted-foreground text-xs">—</span>}
+        </td>
+        <td className="px-4 py-2 hidden md:table-cell">
+          {node.estimatedHours ? (
+            <span className="text-xs text-muted-foreground">{node.loggedHours ?? 0}/{node.estimatedHours}h</span>
+          ) : <span className="text-xs text-muted-foreground">—</span>}
+        </td>
+        <td className="px-4 py-2 hidden md:table-cell">
+          {node.etcHours != null ? (
+            <span className={`text-xs font-medium ${node.etcHours > (node.estimatedHours ?? 0) * 0.5 ? "text-amber-500" : "text-muted-foreground"}`}>
+              {node.etcHours}h
+            </span>
+          ) : <span className="text-xs text-muted-foreground">—</span>}
+        </td>
+        <td className="px-4 py-2">
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${sc.color}`}>
+            <StatusIcon className="h-2.5 w-2.5" />{sc.label}
+          </span>
+        </td>
+      </tr>
+      {!collapsed && node.children.map((child: HierarchyNode) => (
+        <HierarchyRow key={child.id} node={child} depth={depth + 1} onStatusChange={onStatusChange} updatingId={updatingId} />
+      ))}
+    </>
+  );
+}
+
 export default function TasksPage() {
   const { data: tasksData, isLoading, refetch } = useListTasks();
   const { data: projects } = useListProjects();
   const [localTasks, setLocalTasks] = useState<any[]>([]);
-  const [view, setView] = useState<"list" | "board">("list");
+  const [view, setView] = useState<"list" | "board" | "hierarchy">("list");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterProject, setFilterProject] = useState("all");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
+  // Saved filters
+  const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  const [saveFilterName, setSaveFilterName] = useState("");
+  const [showSaveFilter, setShowSaveFilter] = useState(false);
+  const [selectedSavedFilter, setSelectedSavedFilter] = useState("__none__");
+
   useEffect(() => {
     if (tasksData) setLocalTasks(tasksData);
   }, [tasksData]);
+
+  useEffect(() => {
+    fetch(`${API}/saved-filters?resourceType=task`)
+      .then(r => r.json())
+      .then(data => Array.isArray(data) ? setSavedFilters(data) : setSavedFilters([]))
+      .catch(() => setSavedFilters([]));
+  }, []);
 
   const handleStatusChange = async (taskId: number, newStatus: string) => {
     setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
@@ -200,6 +314,38 @@ export default function TasksPage() {
     setUpdatingId(taskId);
     await handleStatusChange(taskId, newStatus);
     setUpdatingId(null);
+  };
+
+  const handleLoadSavedFilter = useCallback((filterId: string) => {
+    setSelectedSavedFilter(filterId);
+    if (filterId === "__none__") return;
+    const sf = savedFilters.find((f: any) => String(f.id) === filterId);
+    if (sf?.filterCriteria) {
+      const c = typeof sf.filterCriteria === "string" ? JSON.parse(sf.filterCriteria) : sf.filterCriteria;
+      if (c.status) setFilterStatus(c.status);
+      if (c.priority) setFilterPriority(c.priority);
+      if (c.projectId) setFilterProject(String(c.projectId));
+      if (c.search) setSearch(c.search);
+    }
+  }, [savedFilters]);
+
+  const handleSaveFilter = async () => {
+    if (!saveFilterName.trim()) return;
+    const criteria = {
+      status: filterStatus !== "all" ? filterStatus : undefined,
+      priority: filterPriority !== "all" ? filterPriority : undefined,
+      projectId: filterProject !== "all" ? parseInt(filterProject) : undefined,
+      search: search || undefined,
+    };
+    const res = await fetch(`${API}/saved-filters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: saveFilterName.trim(), resourceType: "task", filterCriteria: criteria, userId: 1 }),
+    });
+    const newFilter = await res.json();
+    setSavedFilters(prev => [...prev, newFilter]);
+    setSaveFilterName("");
+    setShowSaveFilter(false);
   };
 
   const filtered = useMemo(() => {
@@ -229,6 +375,9 @@ export default function TasksPage() {
     };
   }, [localTasks]);
 
+  const hierarchyRoots = useMemo(() => buildHierarchy(filtered), [filtered]);
+  const hasActiveFilters = filterStatus !== "all" || filterPriority !== "all" || filterProject !== "all" || search;
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-4">
@@ -255,6 +404,9 @@ export default function TasksPage() {
           </Button>
           <Button variant={view === "board" ? "default" : "ghost"} size="sm" onClick={() => setView("board")} className="h-7 px-2.5">
             <LayoutGrid className="h-3.5 w-3.5 mr-1.5" /> Board
+          </Button>
+          <Button variant={view === "hierarchy" ? "default" : "ghost"} size="sm" onClick={() => setView("hierarchy")} className="h-7 px-2.5">
+            <Layers className="h-3.5 w-3.5 mr-1.5" /> Hierarchy
           </Button>
         </div>
       </div>
@@ -329,9 +481,50 @@ export default function TasksPage() {
             ))}
           </SelectContent>
         </Select>
-        {(filterStatus !== "all" || filterPriority !== "all" || filterProject !== "all" || search) && (
+
+        {/* Saved Filters */}
+        {savedFilters.length > 0 && (
+          <Select value={selectedSavedFilter} onValueChange={handleLoadSavedFilter}>
+            <SelectTrigger className="w-[170px] h-9">
+              <Bookmark className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Saved filters" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Saved filters…</SelectItem>
+              {savedFilters.map((sf: any) => (
+                <SelectItem key={sf.id} value={String(sf.id)}>{sf.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {hasActiveFilters && !showSaveFilter && (
+          <button
+            onClick={() => setShowSaveFilter(true)}
+            className="flex items-center gap-1 h-9 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md border border-dashed border-border hover:border-primary/50 transition-colors"
+            title="Save current filters"
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" /> Save
+          </button>
+        )}
+        {showSaveFilter && (
+          <div className="flex items-center gap-1">
+            <Input
+              value={saveFilterName}
+              onChange={e => setSaveFilterName(e.target.value)}
+              placeholder="Filter name…"
+              className="h-9 w-36 text-sm"
+              onKeyDown={e => { if (e.key === "Enter") handleSaveFilter(); if (e.key === "Escape") setShowSaveFilter(false); }}
+              autoFocus
+            />
+            <Button size="sm" className="h-9" onClick={handleSaveFilter} disabled={!saveFilterName.trim()}>Save</Button>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSaveFilter(false)}><X className="h-3.5 w-3.5" /></Button>
+          </div>
+        )}
+
+        {hasActiveFilters && (
           <Button variant="ghost" size="sm" className="h-9 text-muted-foreground"
-            onClick={() => { setFilterStatus("all"); setFilterPriority("all"); setFilterProject("all"); setSearch(""); }}>
+            onClick={() => { setFilterStatus("all"); setFilterPriority("all"); setFilterProject("all"); setSearch(""); setSelectedSavedFilter("__none__"); }}>
             Clear filters
           </Button>
         )}
@@ -339,6 +532,35 @@ export default function TasksPage() {
 
       {view === "board" ? (
         <TaskBoard tasks={filtered} onStatusChange={handleStatusChange} />
+      ) : view === "hierarchy" ? (
+        <div className="border rounded-xl overflow-hidden bg-card">
+          {hierarchyRoots.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <p className="font-medium">No tasks match your filters</p>
+              <p className="text-sm mt-1">Try adjusting the filters above</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Task</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Project</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Assignee</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Priority</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Due</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Hours</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">ETC</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hierarchyRoots.map(node => (
+                  <HierarchyRow key={node.id} node={node} depth={0} onStatusChange={handleListStatusChange} updatingId={updatingId} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       ) : (
         <>
           <div className="border rounded-xl overflow-hidden bg-card">
@@ -356,6 +578,8 @@ export default function TasksPage() {
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Assignee</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Priority</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Due Date</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Hours</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">ETC</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Move To</th>
                   </tr>
@@ -368,11 +592,19 @@ export default function TasksPage() {
                     const transitions = STATUS_TRANSITIONS[task.status] || [];
                     const isToday = task.dueDate === new Date().toISOString().split("T")[0];
                     const isOverdue = task.dueDate && task.dueDate < new Date().toISOString().split("T")[0] && task.status !== "done" && task.status !== "cancelled";
+                    const commentCount = task.commentCount ?? 0;
                     return (
                       <tr key={task.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3">
                           <div className="min-w-0">
-                            <p className="font-medium text-foreground truncate max-w-[280px]">{task.name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-medium text-foreground truncate max-w-[260px]">{task.name}</p>
+                              {commentCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium shrink-0">
+                                  <MessageSquare className="h-2.5 w-2.5" /> {commentCount}
+                                </span>
+                              )}
+                            </div>
                             {task.phase && <p className="text-xs text-muted-foreground mt-0.5">{task.phase}</p>}
                             {task.blockerNote && (
                               <p className="text-xs text-destructive mt-0.5 truncate max-w-[280px]">⚠ {task.blockerNote}</p>
@@ -380,10 +612,10 @@ export default function TasksPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 hidden lg:table-cell">
-                          {(task as any).projectName ? (
+                          {task.projectName ? (
                             <div className="flex items-center gap-2 w-fit">
                               <Link href={`/projects/${task.projectId}`} className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 group">
-                                <span className="truncate max-w-[140px]">{(task as any).projectName}</span>
+                                <span className="truncate max-w-[140px]">{task.projectName}</span>
                                 <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 shrink-0" />
                               </Link>
                               <Link href={`/projects/${task.projectId}/command`} className="text-muted-foreground/50 hover:text-primary" title="Command Center">
@@ -407,6 +639,18 @@ export default function TasksPage() {
                               {isOverdue ? "⚠ " : ""}{format(new Date(task.dueDate), "MMM d")}
                             </span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          {task.estimatedHours ? (
+                            <span className="text-xs text-muted-foreground">{task.loggedHours ?? 0}/{task.estimatedHours}h</span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          {task.etcHours != null ? (
+                            <span className={`text-xs font-medium ${task.etcHours > (task.estimatedHours ?? 0) * 0.5 ? "text-amber-500" : "text-muted-foreground"}`}>
+                              {task.etcHours}h
+                            </span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium border ${sc.color}`}>
