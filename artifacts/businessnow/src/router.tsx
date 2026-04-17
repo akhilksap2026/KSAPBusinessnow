@@ -39,6 +39,10 @@ import ChangesPage from "@/pages/changes/index";
 // Opportunities
 import OpportunitiesPage from "@/pages/opportunities/index";
 
+// Stubs
+import ProspectsPage from "@/pages/prospects/index";
+import RateCardsPage from "@/pages/rate-cards/index";
+
 // Templates
 import TemplatesPage from "@/pages/templates/index";
 
@@ -58,8 +62,8 @@ function DashboardRedirect() {
     case "project_manager":    return <Redirect to="/dashboard/pm" />;
     case "resource_manager":   return <Redirect to="/resources" />;
     case "finance_lead":       return <Redirect to="/finance" />;
-    case "sales":              return <Redirect to="/accounts" />;
-    case "account_manager":    return <Redirect to="/accounts" />;
+    case "sales":              return <Redirect to="/customers" />;
+    case "account_manager":    return <Redirect to="/customers" />;
     case "client_stakeholder": return <Redirect to="/projects" />;
     case "admin":              return <Redirect to="/dashboard/admin" />;
     case "consultant":         return <Redirect to="/timesheets" />;
@@ -109,7 +113,9 @@ export function AppRouter() {
       <Route path="/timesheets"><Guard><TimesheetsList /></Guard></Route>
 
       {/* ── Customer Management ────────────────────────────────────────── */}
-      <Route path="/accounts"><Guard><AccountsList /></Guard></Route>
+      <Route path="/customers"><Guard><AccountsList /></Guard></Route>
+      <Route path="/accounts"><Redirect to="/customers" /></Route>
+      <Route path="/prospects"><Guard><ProspectsPage /></Guard></Route>
       <Route path="/opportunities"><Guard><OpportunitiesPage /></Guard></Route>
 
       {/* ── Resource Command ───────────────────────────────────────────── */}
@@ -138,6 +144,7 @@ export function AppRouter() {
       <Route path="/invoices">
         <Guard roles={ROUTE_ROLES["/invoices"]}><InvoicesList /></Guard>
       </Route>
+      <Route path="/rate-cards"><Guard><RateCardsPage /></Guard></Route>
 
       {/* ── Templates ──────────────────────────────────────────────────── */}
       <Route path="/templates">
@@ -167,7 +174,8 @@ export function AppRouter() {
 
       {/* ── Detail pages ───────────────────────────────────────────────── */}
       <Route path="/projects/:id"><Guard><ProjectDetail /></Guard></Route>
-      <Route path="/accounts/:id"><Guard><AccountDetail /></Guard></Route>
+      <Route path="/customers/:id"><Guard><AccountDetail /></Guard></Route>
+      <Route path="/accounts/:id"><Redirect to="/customers" /></Route>
       <Route path="/resources/:id">
         <Guard roles={ROUTE_ROLES["/resources/:id"]}><ResourceDetail /></Guard>
       </Route>

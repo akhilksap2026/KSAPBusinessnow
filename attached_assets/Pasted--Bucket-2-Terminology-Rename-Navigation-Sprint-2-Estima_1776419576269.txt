@@ -1,0 +1,114 @@
+## Bucket 2 — Terminology Rename & Navigation
+**Sprint 2 · Estimated: 0.5 days · Quick wins, high visibility**
+
+> Zero database changes. Zero breaking changes to existing API logic.
+> This is text, routes, and nav only.
+
+```
+You are making ONLY terminology and navigation changes to BUSINESSNow.
+Do NOT change any API endpoint logic, database queries, or component business logic.
+Do NOT change any database table or column names (the DB table stays "accounts").
+This is purely a find-and-replace on labels, routes, and nav structure.
+
+─── 1. ROUTE CHANGES ───
+In router.tsx, add the following NEW routes as ALIASES to the existing account routes:
+  /customers        → same component as /accounts (AccountsList)
+  /customers/:id    → same component as /accounts/:id (AccountDetail)
+
+Keep /accounts and /accounts/:id working as redirects to /customers.
+The API still uses /api/accounts — do not change API URLs.
+
+─── 2. SIDEBAR NAVIGATION ───
+In sidebar.tsx (or context-sidebar.tsx), update the CUSTOMERS section:
+
+BEFORE:
+  ── CUSTOMERS
+    Accounts      → /accounts   (Building2 icon)
+    Opportunities → /opportunities
+    Contracts     → /contracts
+
+AFTER:
+  ── CUSTOMERS
+    Customers     → /customers   (Building2 icon)   ← renamed
+    Prospects     → /prospects   (Target icon)       ← NEW entry
+    Opportunities → /opportunities
+    Contracts     → /contracts
+
+In sidebar.tsx, update the FINANCE section:
+BEFORE:
+  ── FINANCE
+    Finance  → /finance
+    Invoices → /invoices
+
+AFTER:
+  ── FINANCE
+    Finance    → /finance
+    Invoices   → /invoices
+    Rate Cards → /rate-cards   (CreditCard icon)   ← NEW entry
+
+─── 3. LABEL CHANGES ───
+Across all existing frontend files, replace these exact strings:
+
+  "Accounts"           → "Customers"     (page titles, breadcrumbs, table headers)
+  "Add Account"        → "Add Customer"  (button labels, modal titles)
+  "Account"            → "Customer"      (singular references in labels)
+  "Add Employee"       → "Add Resource"  (button on /resources page)
+  "Employee"           → "Resource"      (when used as a label for a person, NOT as a database term)
+  "Team Member"        → "Resource"      (in resource module labels)
+
+Do NOT rename:
+  - Any variable names or TypeScript types (accountId, accountName, etc.)
+  - Any API endpoint URLs (/api/accounts stays as-is)
+  - The word "employee" inside any database queries or seed data field names
+  - Any prop names in React components
+
+─── 4. ADD STUB PAGES ───
+Create minimal stub pages for new routes (just enough to not 404):
+
+/prospects   → ProspectsPage stub: shows "Prospects — Coming in Bucket 5" placeholder
+/rate-cards  → RateCardsPage stub: shows "Rate Cards — Coming in Bucket 6" placeholder
+
+─── 5. ROLE ENUM UPDATE ───
+In src/lib/auth.ts, add "external" to the role union type:
+  type Role = "delivery_director" | "project_manager" | "consultant" |
+              "resource_manager" | "account_manager" | "finance" | "admin" | "external"
+
+Add useCanSee() hook to src/lib/auth.ts:
+  export function useCanSee(field: string): boolean {
+    const { user } = useAuth();
+    const role = user?.role;
+    const rules: Record<string, string[]> = {
+      financial_rates:  ["delivery_director", "project_manager", "finance", "admin"],
+      prospect_data:    ["account_manager", "delivery_director", "admin"],
+      resource_costs:   ["delivery_director", "finance", "admin"],
+      all_projects:     ["delivery_director", "admin", "finance"],
+      approve_time:     ["delivery_director", "project_manager", "admin"],
+    };
+    return !!(role && rules[field]?.includes(role));
+  }
+
+─── 6. ROUTE GUARD UPDATE ───
+In router.tsx, update the root "/" redirect:
+  finance         → /finance
+  account_manager → /customers
+  (keep all others as they are)
+
+─── 7. PAGE TITLE MAP ───
+In top-bar.tsx (or wherever the page title is derived from route),
+add the new routes to the title map:
+  "/customers"   → "Customers"
+  "/prospects"   → "Prospects"
+  "/rate-cards"  → "Rate Cards"
+```
+
+**✅ Bucket 2 Validation:**
+```
+- Navigate to /customers — same Accounts list loads, no 404
+- /accounts redirects to /customers
+- Sidebar shows "Customers" (not "Accounts"), "Prospects", "Rate Cards"
+- /resources page shows "Add Resource" button (not "Add Employee")
+- /prospects shows stub placeholder page — no 404
+- /rate-cards shows stub placeholder page — no 404
+- useCanSee('financial_rates') returns false for consultant, true for finance
+- No console errors on any page
+- All existing functionality still works (projects, timesheets, opportunities, etc.)

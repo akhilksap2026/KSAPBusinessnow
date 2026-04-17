@@ -101,7 +101,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent }: {
   );
 }
 
-// ── Add Account Modal ─────────────────────────────────────────────────────────
+// ── Add Customer Modal ─────────────────────────────────────────────────────────
 
 function AddAccountModal({ open, onClose, onCreated }: {
   open: boolean;
@@ -118,7 +118,7 @@ function AddAccountModal({ open, onClose, onCreated }: {
 
   const validate = () => {
     const e: typeof errors = {};
-    if (!form.name.trim()) e.name = "Account name is required";
+    if (!form.name.trim()) e.name = "Customer name is required";
     if (form.annualContractValue && isNaN(parseFloat(form.annualContractValue)))
       e.annualContractValue = "Must be a valid number";
     setErrors(e);
@@ -151,7 +151,7 @@ function AddAccountModal({ open, onClose, onCreated }: {
         throw new Error(err.error ?? "Failed to create account");
       }
       const created = await res.json();
-      toast({ title: `Account "${created.name}" created successfully` });
+      toast({ title: `Customer "${created.name}" created successfully` });
       setForm(defaultForm());
       setErrors({});
       onCreated();
@@ -175,15 +175,15 @@ function AddAccountModal({ open, onClose, onCreated }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
-            Add New Account
+            Add New Customer
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          {/* Account Name */}
+          {/* Customer Name */}
           <div className="space-y-1.5">
             <Label htmlFor="acc-name">
-              Account Name <span className="text-red-500">*</span>
+              Customer Name <span className="text-red-500">*</span>
             </Label>
             <Input
               id="acc-name"
@@ -308,7 +308,7 @@ function AddAccountModal({ open, onClose, onCreated }: {
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                Create Account
+                Create Customer
               </>
             )}
           </Button>
@@ -380,23 +380,23 @@ export default function AccountsList() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Accounts</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {kpis.total} accounts · {kpis.active} active · ${kpis.totalACV.toLocaleString()} total ACV
           </p>
         </div>
         <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
           <Plus className="h-4 w-4" />
-          Add Account
+          Add Customer
         </Button>
       </div>
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Accounts" value={kpis.total}  sub={`${kpis.active} active`}             icon={Building2}    accent="bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400" />
+        <KpiCard label="Total Customers" value={kpis.total}  sub={`${kpis.active} active`}             icon={Building2}    accent="bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400" />
         <KpiCard label="Total ACV"      value={`$${(kpis.totalACV / 1000).toFixed(0)}K`} sub="active &amp; AMS accounts" icon={DollarSign}   accent="bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400" />
         <KpiCard label="At Risk"        value={kpis.atRisk}  sub="need attention"                     icon={AlertTriangle} accent="bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400" />
-        <KpiCard label="Avg Health"     value={kpis.avgHealth} sub="across scored accounts"           icon={TrendingUp}   accent="bg-violet-100 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400" />
+        <KpiCard label="Avg Health"     value={kpis.avgHealth} sub="across scored customers"           icon={TrendingUp}   accent="bg-violet-100 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400" />
       </div>
 
       {/* Filters */}
@@ -438,7 +438,7 @@ export default function AccountsList() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="min-w-[180px]">Account</TableHead>
+              <TableHead className="min-w-[180px]">Customer</TableHead>
               <TableHead>Industry</TableHead>
               <TableHead>Segment</TableHead>
               <TableHead>Status</TableHead>
@@ -502,7 +502,7 @@ export default function AccountsList() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                  No accounts match the current filters.
+                  No customers match the current filters.
                 </TableCell>
               </TableRow>
             )}
@@ -519,7 +519,7 @@ export default function AccountsList() {
         <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Health ≥ 80</span>
       </div>
 
-      {/* Add Account Modal */}
+      {/* Add Customer Modal */}
       <AddAccountModal
         open={addOpen}
         onClose={() => setAddOpen(false)}

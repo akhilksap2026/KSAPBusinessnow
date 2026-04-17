@@ -379,7 +379,7 @@ function RiskView({ resources }: { resources: Resource[] }) {
   );
 }
 
-// ─── Add Employee Modal ───────────────────────────────────────────────────────
+// ─── Add Resource Modal ───────────────────────────────────────────────────────
 
 type EmpForm = {
   name: string; title: string; practiceArea: string; employmentType: string;
@@ -467,7 +467,7 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary" /> Add Team Member
+            <UserPlus className="h-5 w-5 text-primary" /> Add Resource
           </DialogTitle>
         </DialogHeader>
 
@@ -571,7 +571,7 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
                 <span className="animate-spin inline-block w-3.5 h-3.5 border border-t-transparent border-white rounded-full" />
                 Adding…
               </span>
-            ) : <><UserPlus className="h-4 w-4" /> Add Team Member</>}
+            ) : <><UserPlus className="h-4 w-4" /> Add Resource</>}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -623,7 +623,7 @@ export default function ResourcesList() {
               </div>
             ))}
             <Button onClick={() => setAddOpen(true)} className="gap-2 ml-2">
-              <UserPlus className="h-4 w-4" /> Add Employee
+              <UserPlus className="h-4 w-4" /> Add Resource
             </Button>
           </div>
         </div>
@@ -678,7 +678,7 @@ export default function ResourcesList() {
         )}
       </div>
 
-      {/* Add Employee Modal */}
+      {/* Add Resource Modal */}
       <AddEmployeeModal
         open={addOpen}
         onClose={() => setAddOpen(false)}

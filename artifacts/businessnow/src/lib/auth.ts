@@ -11,6 +11,7 @@ export const ROLES = [
   "sales",
   "account_manager",
   "client_stakeholder",
+  "external",
 ] as const;
 
 export type Role = typeof ROLES[number];
@@ -26,6 +27,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   sales:              "Business Development",
   account_manager:    "Account Manager",
   client_stakeholder: "Client Contact",
+  external:           "External User",
 };
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
@@ -39,6 +41,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   sales:              "Customer accounts and project overview",
   account_manager:    "Customer accounts and project overview",
   client_stakeholder: "View assigned projects and milestone status",
+  external:           "Limited access for external collaborators",
 };
 
 export interface DemoUser {
@@ -178,6 +181,18 @@ export function hasPermission(role: Role | null, permission: Permission): boolea
 export function usePermission(permission: Permission): boolean {
   const { role } = useAuthRole();
   return hasPermission(role, permission);
+}
+
+export function useCanSee(field: string): boolean {
+  const { role } = useAuthRole();
+  const rules: Record<string, string[]> = {
+    financial_rates:  ["delivery_director", "project_manager", "finance_lead", "admin"],
+    prospect_data:    ["account_manager", "delivery_director", "admin"],
+    resource_costs:   ["delivery_director", "finance_lead", "admin"],
+    all_projects:     ["delivery_director", "admin", "finance_lead"],
+    approve_time:     ["delivery_director", "project_manager", "admin"],
+  };
+  return !!(role && rules[field]?.includes(role));
 }
 
 // ─── Route-level role allowlists ─────────────────────────────────────────────

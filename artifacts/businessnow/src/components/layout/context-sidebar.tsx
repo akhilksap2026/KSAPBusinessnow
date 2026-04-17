@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FolderKanban, Building2, Users, Clock,
   Target, PieChart, GitMerge, DollarSign, ScrollText,
   ClipboardList, BarChart3, Zap, Settings2, Receipt,
-  CheckSquare, Package, UserCircle, Handshake,
+  CheckSquare, Package, UserCircle, Handshake, CreditCard,
   ChevronDown, ChevronRight, Wrench,
 } from "lucide-react";
 
@@ -25,7 +25,8 @@ const SECTIONS: Record<string, NavSection> = {
     label: "Pipeline",
     sublabel: "Creates work",
     items: [
-      { name: "Accounts",      href: "/accounts",      icon: Building2 },
+      { name: "Customers",     href: "/customers",     icon: Building2 },
+      { name: "Prospects",     href: "/prospects",     icon: Target },
       { name: "Opportunities", href: "/opportunities", icon: Handshake },
     ],
   },
@@ -52,9 +53,10 @@ const SECTIONS: Record<string, NavSection> = {
     label: "Finance",
     sublabel: "Billing & revenue",
     items: [
-      { name: "Financials",    href: "/finance",  icon: DollarSign },
-      { name: "Invoices",      href: "/invoices", icon: Receipt },
-      { name: "Change Orders", href: "/changes",  icon: ClipboardList },
+      { name: "Financials",    href: "/finance",     icon: DollarSign },
+      { name: "Invoices",      href: "/invoices",    icon: Receipt },
+      { name: "Rate Cards",    href: "/rate-cards",  icon: CreditCard },
+      { name: "Change Orders", href: "/changes",     icon: ClipboardList },
     ],
   },
   Portfolio: {
@@ -87,6 +89,7 @@ const ROLE_SECTIONS: Record<Role, string[]> = {
   sales:              ["Home", "Pipeline", "Portfolio"],
   account_manager:    ["Home", "Pipeline", "Finance"],
   client_stakeholder: [],
+  external:           [],
 };
 
 // ─── Advanced & Tools — progressively disclosed ──────────────────────────────
