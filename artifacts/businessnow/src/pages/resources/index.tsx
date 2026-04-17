@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -522,6 +523,15 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
     groups[key].push(r);
   });
 
+  const useVirtual = filtered.length > 100;
+  const rosterParentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => rosterParentRef.current,
+    estimateSize: () => 72,
+    enabled: useVirtual,
+  });
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex gap-2 items-center flex-wrap">
@@ -546,7 +556,38 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
         <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full border border-blue-700 bg-transparent" />Inner ring = hard only</span>
       </div>
 
-      {Object.entries(groups).sort().map(([area, areaResources]) => (
+      {useVirtual ? (
+        <div ref={rosterParentRef} style={{ overflow: "auto", maxHeight: "640px" }} className="border rounded-xl overflow-hidden divide-y">
+          <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
+            {rowVirtualizer.getVirtualItems().map(virtualRow => {
+              const r = filtered[virtualRow.index];
+              const util = r.currentUtilization || 0;
+              const isBench = util < 20;
+              const isOver = util > 100;
+              return (
+                <div
+                  key={r.id}
+                  style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualRow.start}px)` }}
+                  className="px-4 py-3 flex items-center gap-4 hover:bg-muted/10 transition-colors cursor-pointer border-b"
+                  onClick={() => onSelect(r.id)}
+                >
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isOver ? "bg-red-100 text-red-700" : isBench ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                    {r.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">{r.name}</p>
+                    <p className="text-xs text-muted-foreground">{r.title} · {PRACTICE_LABELS[r.practiceArea] || r.practiceArea}</p>
+                  </div>
+                  <div className="flex-shrink-0 text-xs text-right">
+                    <p className={`font-semibold ${isOver ? "text-red-500" : isBench ? "text-amber-500" : "text-foreground"}`}>{util}%</p>
+                    <p className="text-muted-foreground">utilization</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : Object.entries(groups).sort().map(([area, areaResources]) => (
         <div key={area} className="border rounded-xl overflow-hidden">
           <div className="bg-muted/50 px-4 py-2 flex items-center gap-2">
             <Briefcase size={13} className="text-muted-foreground" />

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
   useSensor, useSensors, useDroppable, useDraggable,
@@ -544,6 +545,7 @@ export default function OpportunitiesPage() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [q, setQ] = useState("");
+  const debouncedQ = useDebounce(q, 300);
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("list");
   const { toast } = useToast();
@@ -579,10 +581,10 @@ export default function OpportunitiesPage() {
   const filtered = useMemo(() => opps.filter(o => {
     if (stageFilter !== "all" && o.stage !== stageFilter) return false;
     if (typeFilter !== "all" && o.type !== typeFilter) return false;
-    if (q && !o.name.toLowerCase().includes(q.toLowerCase()) &&
-        !(o.accountName ?? "").toLowerCase().includes(q.toLowerCase())) return false;
+    if (debouncedQ && !o.name.toLowerCase().includes(debouncedQ.toLowerCase()) &&
+        !(o.accountName ?? "").toLowerCase().includes(debouncedQ.toLowerCase())) return false;
     return true;
-  }), [opps, stageFilter, typeFilter, q]);
+  }), [opps, stageFilter, typeFilter, debouncedQ]);
 
   const kpis = useMemo(() => {
     const active = opps.filter(o => !["won", "lost", "parked"].includes(o.stage));

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useListProjects } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -790,6 +791,7 @@ export default function ProjectsList() {
   const [localProjects, setLocalProjects] = useState<any[]>([]);
   const [view, setView] = useState<"kanban" | "table" | "gantt">("kanban");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [filterStatus, setFilterStatus] = useState("all");
   const [showNewProject, setShowNewProject] = useState(false);
   const [saveTemplateFor, setSaveTemplateFor] = useState<{ id: number; name: string } | null>(null);
@@ -824,15 +826,15 @@ export default function ProjectsList() {
   const filtered = useMemo(() => {
     return localProjects.filter(p => {
       if (filterStatus !== "all" && p.status !== filterStatus) return false;
-      if (search) {
-        const q = search.toLowerCase();
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase();
         if (!p.name.toLowerCase().includes(q) &&
             !(p.accountName || "").toLowerCase().includes(q) &&
             !(TYPE_LABELS[p.type] || p.type || "").toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [localProjects, filterStatus, search]);
+  }, [localProjects, filterStatus, debouncedSearch]);
 
   const counts = useMemo(() => ({
     all:       localProjects.length,

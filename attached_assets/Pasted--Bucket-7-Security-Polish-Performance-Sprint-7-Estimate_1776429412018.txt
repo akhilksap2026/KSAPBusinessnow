@@ -1,0 +1,269 @@
+## Bucket 7 — Security, Polish & Performance
+**Sprint 7 · Estimated: 1–2 days · Non-negotiable before launch**
+
+> Final bucket. Depends on all previous buckets.
+> This tightens security, adds polish, and adds performance optimizations.
+
+ 
+You are adding security hardening, UI polish, and performance improvements
+to BUSINESSNow. Do NOT change any API business logic or database schema.
+Do NOT break any existing functionality.
+
+─── 1. FIELD-LEVEL SECURITY MIDDLEWARE ───
+Create api-server/src/middleware/field-access.ts:
+
+Export a function: stripFields(obj, fieldsToRemove)
+ For each field in fieldsToRemove: delete obj[field]
+ Works recursively on arrays of objects.
+
+Create a role-to-allowed-fields map:
+ const RESTRICTED_FIELDS = {
+ costRate_resources: ['delivery_director','finance','admin'],
+ buyRate_rate_cards: ['delivery_director','finance','admin'],
+ prospect_confidential:['account_manager','delivery_director','admin'],
+ sellRate_timesheets: ['delivery_director','project_manager','finance','admin'],
+ costRate_timesheets: ['delivery_director','finance','admin'],
+ }
+
+Apply in routes:
+ - resources.ts GET routes: strip costRate unless role in allowed list
+ - rate-cards.ts GET routes: strip buyRate from rate_card_roles unless authorized
+ - prospects.ts GET routes: strip primaryContactName, primaryContactEmail,
+ linkedinUrl, sentiment, touchPoints unless authorized
+ - timesheets.ts GET routes: strip sellRate/costRate unless authorized
+
+The role is read from a request header or session. If using localStorage-based auth,
+the frontend must pass the role in an X-User-Role header on every API request.
+Add this header to the React Query / fetch setup:
+ headers: { 'X-User-Role': currentUser?.role || 'consultant' }
+
+─── 2. CUSTOMER PORTAL (EXTERNAL ROLE) ───
+In router.tsx, add a route guard for the "external" role:
+ When a user logs in with role="external", redirect them to /portal instead of /.
+
+Create a new minimal page at /portal:
+ This page only shows tasks for a single specific project.
+ For MVP: hard-code the projectId to whatever the external user's accountId maps to.
+ (Full external user management is post-MVP — this is a scoped placeholder.)
+ Fetches GET /api/tasks?projectId=:projectId&status=
+ Shows a read-only task list (no edit buttons, no financial data, no timesheets).
+ External users can add comments on tasks (isExternal=true).
+ Guard: if role != 'external', do not show this route.
+
+─── 3. TABLE/KANBAN TOGGLE ON PROJECTS PAGE ───
+In /projects page:
+ Add a view toggle button group (same as Opportunities):
+ Table (default) | Kanban
+ Kanban columns: Forecasted | Active | On Hold | Completed
+ Each card: project name, customer, PM, completion % bar, health dots
+ Drag between columns → PATCH /api/projects/:id { status: newColumn }
+ Persist view choice in sessionStorage.
+
+In /tasks page:
+ Confirm the 3-view toggle from Bucket 4 (List | Board | Hierarchy) works.
+ (This was implemented in Bucket 4 — just verify it's still functional.)
+
+─── 4. DARK MODE ───
+In the Tailwind config (tailwind.config.ts or vite.config):
+ Set darkMode: 'class'
+
+In the root layout (main.tsx or app-shell.tsx):
+ On mount: read localStorage('theme'). If 'dark', add class 'dark' to <html>.
+ If no preference, read window.matchMedia('prefers-color-scheme: dark').
+
+In /settings/pmo page:
+ Add a "Appearance" section with a toggle:
+ Light | Dark | System
+ On change: update localStorage('theme') and toggle the 'dark' class on <html>.
+
+Apply dark: variants on key components:
+ Sidebar: dark:bg-slate-900
+ Main content area: dark:bg-slate-800
+ Cards: dark:bg-slate-700 dark:border-slate-600
+ Table rows: dark:bg-slate-800 dark:hover:bg-slate-750
+ Input fields: dark:bg-slate-700 dark:border-slate-500 dark:text-white
+
+─── 5. SIDEBAR COLLAPSE TO ICON RAIL ───
+In sidebar.tsx (or context-sidebar.tsx):
+ Add a collapsed state (boolean) stored in localStorage('sidebarCollapsed').
+ On screens < 1024px: auto-collapse on mount.
+ Add a hamburger/toggle button in the top bar (Menu icon from Lucide).
+ Clicking it toggles the sidebar between:
+ Expanded: 240px wide, shows full nav text
+ Collapsed (icon rail): 64px wide, shows only icons with Tooltip on hover
+
+ When collapsed:
+ - Logo section shows only the "B" monogram
+ - Nav items show only the icon, no text
+ - Section headers are hidden
+ - Tooltip shows full label on hover
+
+ Transition: add CSS transition-width duration-200 ease-in-out.
+
+─── 6. VIRTUAL LISTS FOR LARGE TABLES ───
+Install @tanstack/react-virtual if not already installed.
+Apply windowed rendering to:
+ - /resources roster (when > 100 rows)
+ - /tasks list view (when > 100 rows)
+ - /timesheets/approval table (when > 100 rows)
+ - /customers list (when > 50 rows)
+
+Implementation pattern:
+ import { useVirtualizer } from '@tanstack/react-virtual'
+ const parentRef = useRef<HTMLDivElement>(null)
+ const rowVirtualizer = useVirtualizer({
+ count: data.length,
+ getScrollElement: () => parentRef.current,
+ estimateSize: () => 56, // row height in px
+ })
+
+Only apply virtualization when data.length exceeds the threshold.
+Existing non-virtual tables stay as-is for small datasets.
+
+─── 7. EMPTY STATES ───
+For every page that can have an empty list/table, add an empty state component:
+ When data.length === 0 AND no loading:
+ Show: a centered card with:
+ - An icon (from Lucide, relevant to the entity)
+ - A title: "No [entities] yet" or "No [entities] match your filters"
+ - A subtitle with helpful guidance
+ - A CTA button if applicable: "Add your first X" → opens the add modal
+
+Pages that need empty states:
+ /customers — "No customers yet. Add your first customer."
+ /prospects — "No prospects yet. Add your first prospect."
+ /projects — "No projects found. Create a new project."
+ /tasks  — "No tasks match your filters. Try adjusting your search."
+ /resources — "No resources found."
+ /timesheets — "No time logged this week. Click any cell to start logging."
+ /invoices — "No invoices yet."
+ /opportunities — "No opportunities in this stage."
+ /milestones — "No milestones found for the selected project."
+
+─── 8. LOADING SKELETONS ───
+Replace all spinner/loading states with shadcn Skeleton components:
+ Tables: render 5 skeleton rows matching the column count and shape
+ Cards: render skeleton with avatar + 2 text lines (matches actual card shape)
+ Heatmap: render grey skeleton cells in a grid pattern
+ KPI cards: render 4 skeleton cards matching the actual KPI card size
+ Use: import { Skeleton } from "@/components/ui/skeleton"
+
+─── 9. TOAST NOTIFICATIONS ───
+Audit all create/update/delete operations and ensure they have toasts:
+ Create success: "[Entity] created successfully"
+ Update success: "[Entity] updated"
+ Delete success: "[Entity] deleted"
+ Error: "Something went wrong. Please try again." (destructive variant)
+ Specific toasts:
+ Timesheet approved: "X entries approved"
+ Invoice generated: "Invoice #INV-XXXX generated"
+ Prospect converted: "[Name] converted to Customer"
+ Template saved: "Template saved successfully"
+ Stage change (Kanban):"Moved to [Stage]"
+
+─── 10. ERROR BOUNDARIES ───
+Create components/shared/error-boundary.tsx:
+ A class component ErrorBoundary that catches render errors.
+ Shows a friendly card:
+ Title: "Something went wrong"
+ Body: "This section encountered an error. Please try refreshing."
+ Buttons: "Retry" (calls window.location.reload) and "Go to Dashboard" (navigate('/'))
+
+Wrap every page-level component in <ErrorBoundary>:
+ In router.tsx, wrap each route's component.
+
+─── 11. FORM VALIDATION CONSISTENCY ───
+Audit all modals and forms for:
+ - Required fields are marked with a red asterisk (* ) in the label
+ - Inline error messages appear below the field on submit attempt
+ - Zod schema validation on the server side returns field-level errors:
+ { errors: { fieldName: "Error message" } }
+ - Frontend maps these errors to their respective fields
+
+─── 12. REACT QUERY CACHING TUNING ───
+In src/lib/query-client.ts (or wherever QueryClient is configured):
+ Set these staleTime values:
+ const queryClient = new QueryClient({
+ defaultOptions: {
+ queries: {
+ staleTime: 60_000, // 1 minute default
+ retry: 1,
+ }
+ }
+ })
+
+For specific queries, override staleTime:
+ Resources, Accounts, Rate Cards: staleTime: 60_000 (reference data, slow-changing)
+ Projects list: staleTime: 30_000
+ Timesheets, Notifications: staleTime: 15_000 (frequently changing)
+
+─── 13. SEARCH DEBOUNCE ───
+All search inputs across the app should debounce at 300ms before firing
+the filter/query update. If not already using a debounce hook:
+
+ function useDebounce<T>(value: T, delay: number): T {
+ const [debounced, setDebounced] = useState(value)
+ useEffect(() => {
+ const t = setTimeout(() => setDebounced(value), delay)
+ return () => clearTimeout(t)
+ }, [value, delay])
+ return debounced
+ }
+
+Apply this to all search inputs in: /resources, /tasks, /customers,
+/opportunities, /projects, /timesheets/approval.
+ 
+
+**✅ Bucket 7 Validation — Full System Walkthrough:**
+
+ 
+DELIVERY DIRECTOR login:
+ [ ] /dashboard/admin loads with KPIs, cost variance alert shows if variance exists
+ [ ] /rate-cards: buy rates visible; 8 roles in global template
+ [ ] /prospects/:id: confidential fields visible (contact, LinkedIn, sentiment)
+ [ ] Add Opportunity modal: "Linked To" shows Customer/Prospect radio
+ [ ] Kanban drag to Negotiation → "Trigger Staffing Request" prompt appears
+
+PROJECT MANAGER login:
+ [ ] PM Dashboard shows pending approval count
+ [ ] /timesheets/approval: bulk approve works; approved entries update consultant's grid
+ [ ] /projects/:id all 6 tabs load correctly
+ [ ] Task hierarchy tree expands/collapses; leaf tasks only allow time entry
+ [ ] ETC field saves correctly (not derived from planned-actual)
+ [ ] Payment milestone complete → notification appears in bell
+
+CONSULTANT login:
+ [ ] Redirected to /timesheets by default
+ [ ] Administrative project row always present in timesheet grid
+ [ ] Daily Comment is required — cannot save without it
+ [ ] Collaboration row visible; logs entry with isCollaboration=true
+ [ ] Billable Hours row shows below Day Total
+ [ ] Network tab: costRate and buyRate NOT returned by API
+ [ ] /prospects → redirected to home (no access)
+
+ACCOUNT MANAGER login:
+ [ ] /prospects accessible; confidential fields visible
+ [ ] Convert Prospect flow: creates customer, redirects, prospect retains FK link
+ [ ] /customers accessible; no financial rates visible
+
+FINANCE login:
+ [ ] /finance: cost variance banner shows
+ [ ] Revenue table shows Cost + Margin % columns
+ [ ] Rate card buy rates visible on /rate-cards
+
+CROSS-CUTTING:
+ [ ] Sidebar collapses to icon rail on screens < 1024px
+ [ ] Dark mode toggle in /settings/pmo works
+ [ ] All empty states show (test by clearing all filter values)
+ [ ] Loading skeletons appear on initial page load (not spinners)
+ [ ] All toasts show on create/update/delete
+ [ ] Search inputs are debounced (no network call per keystroke)
+ [ ] /customers shows Table/Kanban toggle
+ [ ] /projects shows Table/Kanban toggle
+ [ ] /prospects visible to authorized; confidential API fields stripped for others
+ [ ] 404 page shows for unknown routes
+ [ ] No console errors on any page
+ [ ] API: no 500 errors in server logs
+ [ ] Page refresh on any route works (SPA routing correctly configured)
+ [ ] Sign out clears all state and returns to /login
+ 

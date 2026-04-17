@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,6 +75,15 @@ export default function TimesheetApprovalPage() {
     entries.forEach(e => { if (e.resourceId && e.resourceName) map.set(e.resourceId, e.resourceName); });
     return Array.from(map.entries());
   }, [entries]);
+
+  const useVirtual = filtered.length > 100;
+  const tableParentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => tableParentRef.current,
+    estimateSize: () => 56,
+    enabled: useVirtual,
+  });
 
   const toggleSelect = (id: number) => {
     setSelected(prev => {
@@ -243,9 +253,13 @@ export default function TimesheetApprovalPage() {
             <p className="text-sm text-muted-foreground">No entries match the current filters</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            ref={useVirtual ? tableParentRef : undefined}
+            className="overflow-x-auto"
+            style={useVirtual ? { overflowY: "auto", maxHeight: "600px" } : undefined}
+          >
             <table className="w-full text-sm">
-              <thead>
+              <thead className={useVirtual ? "sticky top-0 z-10" : undefined}>
                 <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
                   <th className="px-4 py-3 w-8">
                     <input
@@ -267,12 +281,16 @@ export default function TimesheetApprovalPage() {
                   <th className="text-right px-3 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map((entry, idx) => {
+              <tbody style={useVirtual ? { height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" } : undefined}>
+                {(useVirtual ? rowVirtualizer.getVirtualItems().map(vr => ({ entry: filtered[vr.index], start: vr.start, key: filtered[vr.index].id })) : filtered.map((entry) => ({ entry, start: null, key: entry.id }))).map(({ entry, start, key }) => {
                   const isSelected = selected.has(entry.id);
                   const isSubmitted = entry.status === "submitted";
                   return (
-                    <tr key={entry.id} className={`border-b border-border/50 transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-muted/10"}`}>
+                    <tr
+                      key={key}
+                      style={useVirtual && start !== null ? { position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${start}px)` } : undefined}
+                      className={`border-b border-border/50 transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-muted/10"}`}
+                    >
                       <td className="px-4 py-3">
                         {isSubmitted && (
                           <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(entry.id)} className="rounded" />

@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useListAccounts } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
@@ -474,6 +475,15 @@ export default function AccountsList() {
     churned:  { label: "Churned",  className: "bg-muted text-muted-foreground" },
   };
 
+  const useVirtual = filtered.length > 50;
+  const tableParentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => tableParentRef.current,
+    estimateSize: () => 56,
+    enabled: useVirtual,
+  });
+
   if (isLoading) {
     return (
       <div className="p-6 space-y-5 max-w-[1600px] mx-auto">
@@ -568,81 +578,137 @@ export default function AccountsList() {
       )}
 
       {/* Table */}
-      {view === "table" && <div className="border rounded-xl overflow-hidden bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="min-w-[180px]">Customer</TableHead>
-              <TableHead>Industry</TableHead>
-              <TableHead>Segment</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="min-w-[120px]">Health</TableHead>
-              <TableHead>Region</TableHead>
-              <TableHead>OTM Version</TableHead>
-              <TableHead>Renewal</TableHead>
-              <TableHead className="text-right">ACV</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((account) => {
-              const sc = statusConfig[account.status] ?? { label: account.status, className: "bg-muted text-muted-foreground" };
-              return (
-                <TableRow key={account.id} className="hover:bg-muted/30 cursor-pointer">
-                  <TableCell className="font-medium">
-                    <Link href={`/accounts/${account.id}`} className="hover:underline text-primary font-semibold">
-                      {account.name}
-                    </Link>
-                    {(account as any).region && (
-                      <p className="text-xs text-muted-foreground font-normal">{(account as any).region}</p>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{account.industry || "—"}</TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground capitalize">{account.segment?.replace("_", " ") || "—"}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sc.className}`}>
-                      {sc.label}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <HealthBar score={account.healthScore ?? null} />
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{(account as any).region || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      {(account as any).cloudDeployment
-                        ? <Cloud className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                        : <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                      }
-                      <span className="text-xs text-muted-foreground">
-                        {(account as any).otmVersion || "—"}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <RenewalBadge date={(account as any).renewalDate} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="font-semibold text-sm">
-                      {account.annualContractValue && Number(account.annualContractValue) > 0
-                        ? `$${Number(account.annualContractValue).toLocaleString()}`
-                        : <span className="text-muted-foreground font-normal">—</span>}
-                    </span>
-                  </TableCell>
+      {view === "table" && (
+        <div className="border rounded-xl overflow-hidden bg-card">
+          {useVirtual ? (
+            <div ref={tableParentRef} style={{ overflow: "auto", maxHeight: "600px" }}>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="border-b border-border text-xs font-medium text-muted-foreground">
+                    <th className="text-left px-4 py-3 min-w-[180px]">Customer</th>
+                    <th className="text-left px-4 py-3">Industry</th>
+                    <th className="text-left px-4 py-3">Segment</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-left px-4 py-3 min-w-[120px]">Health</th>
+                    <th className="text-left px-4 py-3">Region</th>
+                    <th className="text-left px-4 py-3">OTM Version</th>
+                    <th className="text-left px-4 py-3">Renewal</th>
+                    <th className="text-right px-4 py-3">ACV</th>
+                  </tr>
+                </thead>
+                <tbody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
+                  {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                    const account = filtered[virtualRow.index];
+                    const sc = statusConfig[account.status] ?? { label: account.status, className: "bg-muted text-muted-foreground" };
+                    return (
+                      <tr
+                        key={account.id}
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualRow.start}px)` }}
+                        className="border-b border-border/50 hover:bg-muted/30 cursor-pointer"
+                      >
+                        <td className="px-4 py-3 font-medium">
+                          <Link href={`/accounts/${account.id}`} className="hover:underline text-primary font-semibold">{account.name}</Link>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-sm">{account.industry || "—"}</td>
+                        <td className="px-4 py-3"><span className="text-xs text-muted-foreground capitalize">{account.segment?.replace("_", " ") || "—"}</span></td>
+                        <td className="px-4 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sc.className}`}>{sc.label}</span></td>
+                        <td className="px-4 py-3"><HealthBar score={account.healthScore ?? null} /></td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{(account as any).region || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {(account as any).cloudDeployment ? <Cloud className="h-3.5 w-3.5 text-blue-500" /> : <Server className="h-3.5 w-3.5 text-muted-foreground" />}
+                            <span className="text-xs text-muted-foreground">{(account as any).otmVersion || "—"}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><RenewalBadge date={(account as any).renewalDate} /></td>
+                        <td className="px-4 py-3 text-right font-semibold text-sm">
+                          {account.annualContractValue && Number(account.annualContractValue) > 0
+                            ? `$${Number(account.annualContractValue).toLocaleString()}`
+                            : <span className="text-muted-foreground font-normal">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="min-w-[180px]">Customer</TableHead>
+                  <TableHead>Industry</TableHead>
+                  <TableHead>Segment</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="min-w-[120px]">Health</TableHead>
+                  <TableHead>Region</TableHead>
+                  <TableHead>OTM Version</TableHead>
+                  <TableHead>Renewal</TableHead>
+                  <TableHead className="text-right">ACV</TableHead>
                 </TableRow>
-              );
-            })}
-            {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
-                  No customers match the current filters.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>}
+              </TableHeader>
+              <TableBody>
+                {filtered.map((account) => {
+                  const sc = statusConfig[account.status] ?? { label: account.status, className: "bg-muted text-muted-foreground" };
+                  return (
+                    <TableRow key={account.id} className="hover:bg-muted/30 cursor-pointer">
+                      <TableCell className="font-medium">
+                        <Link href={`/accounts/${account.id}`} className="hover:underline text-primary font-semibold">
+                          {account.name}
+                        </Link>
+                        {(account as any).region && (
+                          <p className="text-xs text-muted-foreground font-normal">{(account as any).region}</p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{account.industry || "—"}</TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground capitalize">{account.segment?.replace("_", " ") || "—"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${sc.className}`}>
+                          {sc.label}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <HealthBar score={account.healthScore ?? null} />
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{(account as any).region || "—"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {(account as any).cloudDeployment
+                            ? <Cloud className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                            : <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          }
+                          <span className="text-xs text-muted-foreground">
+                            {(account as any).otmVersion || "—"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <RenewalBadge date={(account as any).renewalDate} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-semibold text-sm">
+                          {account.annualContractValue && Number(account.annualContractValue) > 0
+                            ? `$${Number(account.annualContractValue).toLocaleString()}`
+                            : <span className="text-muted-foreground font-normal">—</span>}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center h-24 text-muted-foreground">
+                      No customers match the current filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-1">
