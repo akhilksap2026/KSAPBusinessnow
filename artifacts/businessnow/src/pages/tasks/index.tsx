@@ -286,14 +286,8 @@ export default function TasksPage() {
   const [filterProject, setFilterProject] = useState("all");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  // Virtual list for task rows
+  // Virtual list ref — virtualizer is declared after filtered (below)
   const taskListRef = useRef<HTMLDivElement>(null);
-  const taskVirtualizer = useVirtualizer({
-    count: filtered.length,
-    getScrollElement: () => taskListRef.current,
-    estimateSize: () => 64,
-    overscan: 8,
-  });
 
   // Saved filters
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
@@ -375,6 +369,14 @@ export default function TasksPage() {
       return true;
     });
   }, [localTasks, filterStatus, filterPriority, filterProject, debouncedSearch]);
+
+  // Virtualizer — declared here so it has access to filtered
+  const taskVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => taskListRef.current,
+    estimateSize: () => 64,
+    overscan: 8,
+  });
 
   const counts = useMemo(() => {
     if (!localTasks) return {};

@@ -15,12 +15,27 @@ import {
   notificationsTable,
   phasesTable,
   opportunitiesTable,
+  rateCardsTable,
+  prospectsTable,
+  proposalsTable,
+  templatesTable,
+  templateTasksTable,
+  automationsTable,
+  formsTable,
+  renewalSignalsTable,
+  closureChecklistsTable,
+  handoverSummariesTable,
+  timeEntryCategoriesTable,
+  taskCommentsTable,
+  milestoneCommentsTable,
+  staffingRequestsTable,
 } from "@workspace/db";
 
 export async function autoSeedIfEmpty() {
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(accountsTable);
   if (Number(count) > 0) {
     console.log("[auto-seed] Database already has data — skipping seed.");
+    await seedSupplementalIfEmpty();
     return;
   }
   await runSeed();
@@ -436,6 +451,173 @@ export async function runSeed() {
   console.log("[auto-seed] Inserted opportunities");
 
   console.log("[auto-seed] ✅ Seed complete.");
+}
+
+// ── Supplemental seed — fills tables left empty by original seed ──────────────
+export async function seedSupplementalIfEmpty() {
+  const checks = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(timeEntryCategoriesTable),
+    db.select({ count: sql<number>`count(*)` }).from(rateCardsTable),
+    db.select({ count: sql<number>`count(*)` }).from(prospectsTable),
+  ]);
+  const [catCount, rcCount, prospCount] = checks.map(r => Number(r[0].count));
+
+  if (catCount === 0) {
+    await db.insert(timeEntryCategoriesTable).values([
+      { name: "OTM Configuration",   code: "OTM-CONFIG",   defaultBillable: true,  sortOrder: 1,  isActive: true },
+      { name: "Integration Build",   code: "INT-BUILD",    defaultBillable: true,  sortOrder: 2,  isActive: true },
+      { name: "Testing & QA",        code: "TEST-QA",      defaultBillable: true,  sortOrder: 3,  isActive: true },
+      { name: "Project Management",  code: "PM",           defaultBillable: true,  sortOrder: 4,  isActive: true },
+      { name: "Client Workshop",     code: "WORKSHOP",     defaultBillable: true,  sortOrder: 5,  isActive: true },
+      { name: "UAT Support",         code: "UAT",          defaultBillable: true,  sortOrder: 6,  isActive: true },
+      { name: "Documentation",       code: "DOCS",         defaultBillable: false, sortOrder: 7,  isActive: true },
+      { name: "Internal Training",   code: "TRAIN-INT",    defaultBillable: false, sortOrder: 8,  isActive: true },
+      { name: "Client Training",     code: "TRAIN-CLIENT", defaultBillable: true,  sortOrder: 9,  isActive: true },
+      { name: "AMS / Support",       code: "AMS",          defaultBillable: true,  sortOrder: 10, isActive: true },
+      { name: "Hypercare",           code: "HYPERCARE",    defaultBillable: true,  sortOrder: 11, isActive: true },
+      { name: "Pre-Sales / Scoping", code: "PRE-SALES",    defaultBillable: false, sortOrder: 12, isActive: true },
+      { name: "Travel",              code: "TRAVEL",       defaultBillable: false, sortOrder: 13, isActive: false },
+      { name: "Admin",               code: "ADMIN",        defaultBillable: false, sortOrder: 14, isActive: false },
+    ]);
+    console.log("[auto-seed] Seeded time_entry_categories");
+  }
+
+  if (rcCount === 0) {
+    await db.insert(rateCardsTable).values([
+      { name: "Standard OTM Architect",        role: "OTM Architect",             practiceArea: "Implementation", billingRate: "285.00", sellRate: "240.00", costRate: "135.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: true,  currency: "CAD", notes: "Blended NA + EMEA rate" },
+      { name: "Senior OTM Functional",         role: "Senior OTM Consultant",     practiceArea: "Implementation", billingRate: "235.00", sellRate: "195.00", costRate: "110.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: true,  currency: "CAD", notes: null },
+      { name: "OTM Rate Engine Specialist",    role: "Rate Engine Specialist",    practiceArea: "Rate Services",  billingRate: "260.00", sellRate: "215.00", costRate: "125.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: true,  currency: "CAD", notes: "Carrier rate management expertise" },
+      { name: "Project Manager — Standard",    role: "Project Manager",           practiceArea: "Delivery",       billingRate: "210.00", sellRate: "175.00", costRate: "100.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: true,  currency: "CAD", notes: null },
+      { name: "AMS Support Rate",              role: "OTM Functional Consultant", practiceArea: "AMS",            billingRate: "195.00", sellRate: "160.00", costRate: "90.00",  effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: true,  currency: "CAD", notes: "Applied Managed Support accounts" },
+      { name: "GlobalTrans — Premium Rate",    role: "OTM Architect",             practiceArea: "Implementation", billingRate: "310.00", sellRate: "265.00", costRate: "135.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: false, currency: "CAD", accountId: 1, notes: "Negotiated premium rate for GlobalTrans enterprise agreement" },
+      { name: "Apex Logistics — Blended Rate", role: "Senior OTM Consultant",    practiceArea: "Implementation", billingRate: "248.00", sellRate: "205.00", costRate: "110.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: false, currency: "CAD", accountId: 2, notes: "Account-specific blended rate per MSA" },
+      { name: "NorthStar — AMS Rate",          role: "OTM Functional Consultant", practiceArea: "AMS",           billingRate: "200.00", sellRate: "165.00", costRate: "90.00",  effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: false, currency: "CAD", accountId: 3, notes: "Dedicated AMS support retainer rate" },
+    ]);
+    console.log("[auto-seed] Seeded rate_cards");
+  }
+
+  if (prospCount === 0) {
+    await db.insert(prospectsTable).values([
+      { name: "Cascade Freight Solutions", type: "new_logo",  industry: "Third-Party Logistics",      segment: "mid_market", status: "active",  primaryContactName: "Brian Kato",    primaryContactEmail: "b.kato@cascadefreight.com",    sentiment: "positive",     ownerId: 13, touchPoints: [{ date: "2026-01-15", type: "intro_call", note: "Initial discovery call" }, { date: "2026-02-10", type: "demo", note: "Full OTM demo" }],                                       notes: "Strong interest in OTM Cloud. Q3 target start." },
+      { name: "Irongate Transport Group",  type: "new_logo",  industry: "Freight Brokerage",          segment: "enterprise", status: "active",  primaryContactName: "Wendy Park",    primaryContactEmail: "wpark@irongatetransport.com",  sentiment: "neutral",      ownerId: 14, touchPoints: [{ date: "2026-02-01", type: "intro_call", note: "Cold outreach" }, { date: "2026-03-12", type: "demo", note: "Rate Management demo" }],                                          notes: "Evaluating three vendors. Decision Q4 2026." },
+      { name: "Redline Logistics Inc.",    type: "expansion", industry: "E-Commerce Fulfillment",     segment: "mid_market", status: "active",  primaryContactName: "Tomás García",  primaryContactEmail: "tgarcia@redlinelogistics.com", sentiment: "very_positive", ownerId: 13, touchPoints: [{ date: "2026-01-20", type: "intro_call", note: "Referral from GlobalTrans" }, { date: "2026-02-14", type: "workshop", note: "2-day scoping workshop" }],                           notes: "Expanding to LATAM. Wants full implementation + AMS." },
+      { name: "Delta Forwarding",          type: "new_logo",  industry: "Air & Ocean Freight",        segment: "enterprise", status: "nurture", primaryContactName: "Sandra Bates",  primaryContactEmail: "s.bates@deltaforwarding.com",  sentiment: "neutral",      ownerId: 14, touchPoints: [{ date: "2026-01-08", type: "event", note: "Met at Gartner SC Summit" }, { date: "2026-02-28", type: "intro_call", note: "Discovery call, budget TBC" }],                        notes: "RFP expected H2 2026. Keep warm." },
+      { name: "Halcyon Supply Chain",      type: "new_logo",  industry: "Pharmaceutical Distribution", segment: "enterprise", status: "active", primaryContactName: "Nora Lindqvist", primaryContactEmail: "n.lindqvist@halcyonsc.com",   sentiment: "positive",     ownerId: 13, touchPoints: [{ date: "2025-12-01", type: "intro_call", note: "Inbound inquiry" }, { date: "2026-01-18", type: "demo", note: "Compliance module demo" }],                                       notes: "High probability. Regulatory compliance driver." },
+      { name: "Volta Shipping & Co.",      type: "new_logo",  industry: "Container Shipping",         segment: "mid_market", status: "lost",   primaryContactName: "Alec Drummond", primaryContactEmail: "a.drummond@voltashipping.com", sentiment: "negative",     ownerId: 14, touchPoints: [{ date: "2025-11-15", type: "intro_call", note: "Initial call" }, { date: "2026-01-05", type: "follow_up", note: "Lost to Oracle Direct" }],                                         notes: "Lost to Oracle Direct on price." },
+    ]);
+    console.log("[auto-seed] Seeded prospects");
+  }
+
+  // Templates
+  const [{ count: tplCount }] = await db.select({ count: sql<number>`count(*)` }).from(templatesTable);
+  if (Number(tplCount) === 0) {
+    const tpls = await db.insert(templatesTable).values([
+      { name: "OTM Cloud Implementation — Standard", type: "implementation", description: "Full-lifecycle OTM Cloud implementation template.", phases: [{ name: "Discovery & Architecture", order: 1, durationWeeks: 4 }, { name: "Build & Configuration", order: 2, durationWeeks: 10 }, { name: "Testing", order: 3, durationWeeks: 4 }, { name: "Go-Live & Hypercare", order: 4, durationWeeks: 4 }], conditions: { cloudDeployment: true } },
+      { name: "OTM AMS Retainer — Managed Support",  type: "ams",            description: "Template for Applied Managed Support engagements.",  phases: [{ name: "Onboarding", order: 1, durationWeeks: 2 }, { name: "Monthly AMS Cycle", order: 2, durationWeeks: 4, repeating: true }], conditions: {} },
+      { name: "OTM Certification — Quarterly",        type: "certification",  description: "Quarterly OTM regression certification package.",    phases: [{ name: "Test Planning", order: 1, durationWeeks: 1 }, { name: "Test Execution", order: 2, durationWeeks: 3 }, { name: "Sign-Off", order: 3, durationWeeks: 1 }], conditions: {} },
+    ]).returning();
+    const [t1, t2, t3] = tpls;
+    await db.insert(templateTasksTable).values([
+      { templateId: t1.id, name: "Current-State Integration Inventory",    taskType: "work", sortOrder: 1,  estimatedHours: "32",  durationDays: 4,  resourceRole: "OTM Architect",           depType: "FS", predecessorIds: [] },
+      { templateId: t1.id, name: "Architecture Design Document",           taskType: "work", sortOrder: 2,  estimatedHours: "40",  durationDays: 5,  resourceRole: "OTM Architect",           depType: "FS", predecessorIds: [1] },
+      { templateId: t1.id, name: "OTM Baseline Configuration",             taskType: "work", sortOrder: 3,  estimatedHours: "80",  durationDays: 10, resourceRole: "Senior OTM Consultant",   depType: "FS", predecessorIds: [2] },
+      { templateId: t1.id, name: "Integration Build — Carrier Interfaces", taskType: "work", sortOrder: 4,  estimatedHours: "160", durationDays: 20, resourceRole: "Integration Lead",         depType: "SS", predecessorIds: [2] },
+      { templateId: t1.id, name: "SIT Execution & Defect Log",             taskType: "work", sortOrder: 5,  estimatedHours: "80",  durationDays: 10, resourceRole: "OTM Architect",           depType: "FS", predecessorIds: [3, 4] },
+      { templateId: t1.id, name: "UAT Execution Support",                  taskType: "work", sortOrder: 6,  estimatedHours: "60",  durationDays: 8,  resourceRole: "Senior OTM Consultant",   depType: "FS", predecessorIds: [5] },
+      { templateId: t1.id, name: "Cutover & Go-Live",                      taskType: "work", sortOrder: 7,  estimatedHours: "40",  durationDays: 5,  resourceRole: "OTM Architect",           depType: "FS", predecessorIds: [6] },
+      { templateId: t1.id, name: "Hypercare Support (30 days)",            taskType: "work", sortOrder: 8,  estimatedHours: "120", durationDays: 20, resourceRole: "Senior OTM Consultant",   depType: "FS", predecessorIds: [7] },
+      { templateId: t2.id, name: "AMS Onboarding & Runbook",               taskType: "work", sortOrder: 1,  estimatedHours: "24",  durationDays: 3,  resourceRole: "Senior OTM Consultant",   depType: "FS", predecessorIds: [] },
+      { templateId: t2.id, name: "Monthly Support Allocation",             taskType: "work", sortOrder: 2,  estimatedHours: "160", durationDays: 20, resourceRole: "OTM Functional Consultant",depType: "FS", predecessorIds: [] },
+      { templateId: t2.id, name: "Monthly Health Report",                  taskType: "work", sortOrder: 3,  estimatedHours: "8",   durationDays: 1,  resourceRole: "Project Manager",          depType: "FS", predecessorIds: [] },
+      { templateId: t3.id, name: "Test Plan & Scenario Matrix",            taskType: "work", sortOrder: 1,  estimatedHours: "24",  durationDays: 3,  resourceRole: "OTM Architect",            depType: "FS", predecessorIds: [] },
+      { templateId: t3.id, name: "SIT Regression Execution — Core OTM",   taskType: "work", sortOrder: 2,  estimatedHours: "80",  durationDays: 10, resourceRole: "Senior OTM Consultant",    depType: "FS", predecessorIds: [1] },
+      { templateId: t3.id, name: "Defect Triage & Resolution",             taskType: "work", sortOrder: 3,  estimatedHours: "40",  durationDays: 5,  resourceRole: "OTM Architect",            depType: "FS", predecessorIds: [2] },
+      { templateId: t3.id, name: "Certification Sign-Off Package",         taskType: "work", sortOrder: 4,  estimatedHours: "16",  durationDays: 2,  resourceRole: "Project Manager",          depType: "FS", predecessorIds: [3] },
+    ]);
+    console.log("[auto-seed] Seeded templates + template_tasks");
+  }
+
+  // Automations
+  const [{ count: autoCount }] = await db.select({ count: sql<number>`count(*)` }).from(automationsTable);
+  if (Number(autoCount) === 0) {
+    await db.insert(automationsTable).values([
+      { name: "Milestone Overdue Alert",   trigger: "milestone.due_date_passed",  description: "Sends a notification when a milestone passes its due date without completion.", conditions: { status: { not_in: ["complete", "cancelled"] } }, actions: [{ type: "create_notification", target: "project_manager", template: "milestone_overdue" }], enabled: true, runCount: 47, lastRunAt: "2026-04-16" },
+      { name: "Timesheet Late Reminder",   trigger: "schedule.weekly_friday_4pm", description: "Reminds consultants who have not submitted timesheets by Friday 4 PM.",          conditions: { timesheet_submitted: false },                    actions: [{ type: "email", template: "timesheet_reminder" }],                                        enabled: true, runCount: 23, lastRunAt: "2026-04-11" },
+      { name: "Low Health Score Alert",    trigger: "account.health_score_changed",description: "Creates a task when an account health score drops below 60.",                   conditions: { health_score: { lt: 60 } },                      actions: [{ type: "create_task", title: "Review account health decline", priority: "high" }],           enabled: true, runCount: 8,  lastRunAt: "2026-04-10" },
+      { name: "Contract Expiry Warning",   trigger: "schedule.daily_9am",         description: "Notifies finance and AM when a contract is within 60 days of expiry.",           conditions: { within_days: 60 },                               actions: [{ type: "create_notification", target: "finance_lead", template: "contract_expiry_warning" }],enabled: true, runCount: 134,lastRunAt: "2026-04-17" },
+    ]);
+    console.log("[auto-seed] Seeded automations");
+  }
+
+  // Forms
+  const [{ count: formCount }] = await db.select({ count: sql<number>`count(*)` }).from(formsTable);
+  if (Number(formCount) === 0) {
+    await db.insert(formsTable).values([
+      { name: "Project Closure Sign-Off",      type: "closure",   description: "Client-facing project closure sign-off form.", fields: [{ id: "satisfaction", label: "Overall Satisfaction", type: "rating", scale: 5, required: true }, { id: "comments", label: "Additional Comments", type: "textarea", required: false }], triggers: [{ event: "milestone.status_changed", filter: { status: "complete", is_final: true } }], status: "active" },
+      { name: "Timesheet Approval Request",    type: "timesheet", description: "Internal PM timesheet approval form.",          fields: [{ id: "week_ending", label: "Week Ending", type: "date", required: true }, { id: "hours_submitted", label: "Total Hours Submitted", type: "number", required: true }],               triggers: [{ event: "timesheet.submitted" }],                                                             status: "active" },
+      { name: "Client Feedback — Post Milestone", type: "feedback", description: "Short client satisfaction pulse.",           fields: [{ id: "satisfaction", label: "Delivery Satisfaction", type: "rating", scale: 5, required: true }, { id: "open_feedback", label: "Anything to improve?", type: "textarea", required: false }], triggers: [{ event: "milestone.invoiced" }],                                                              status: "active" },
+    ]);
+    console.log("[auto-seed] Seeded forms");
+  }
+
+  // Renewal Signals
+  const [{ count: rnCount }] = await db.select({ count: sql<number>`count(*)` }).from(renewalSignalsTable);
+  if (Number(rnCount) === 0) {
+    await db.insert(renewalSignalsTable).values([
+      { accountId: 2, accountName: "Apex Logistics",         signalType: "contract_expiry", description: "AMS contract expires Aug 15. Renewal 60-day window open.",              dueDate: "2025-08-15", estimatedValue: "320000", status: "open",        priority: "high",     assignedTo: "Yuki Nakamura",  notes: "Client satisfaction 71%. Prepare case study." },
+      { accountId: 1, accountName: "GlobalTrans Corp",       signalType: "expansion",       description: "Phase 2 nearing completion. AMS expansion signal confirmed.",            dueDate: "2026-06-30", estimatedValue: "480000", status: "open",        priority: "high",     assignedTo: "Yuki Nakamura",  notes: "Position AMS renewal alongside Phase 2 close-out." },
+      { accountId: 5, accountName: "Meridian Carriers",      signalType: "contract_expiry", description: "Support retainer ends Q2 2026. Upgrade may convert to AMS.",            dueDate: "2026-05-31", estimatedValue: "144000", status: "in_progress", priority: "medium",   assignedTo: "Carlos Rivera",  notes: "AMS option included in upgrade SOW." },
+      { accountId: 6, accountName: "BlueStar Transport",     signalType: "expansion",       description: "Client expressed interest in Carrier Performance Analytics module.",     dueDate: "2026-07-01", estimatedValue: "95000",  status: "open",        priority: "medium",   assignedTo: "Carlos Rivera",  notes: "Schedule discovery call in May." },
+      { accountId: 8, accountName: "Harbor Logistics Group", signalType: "health_risk",     description: "CSAT dropped to 52 after rate table errors. Churn risk before renewal.", dueDate: "2026-08-01", estimatedValue: "160000", status: "open",        priority: "critical", assignedTo: "Yuki Nakamura",  notes: "Remediation plan in place. Send apology communication." },
+    ]);
+    console.log("[auto-seed] Seeded renewal_signals");
+  }
+
+  // Staffing Requests
+  const [{ count: srCount }] = await db.select({ count: sql<number>`count(*)` }).from(staffingRequestsTable);
+  if (Number(srCount) === 0) {
+    await db.insert(staffingRequestsTable).values([
+      { projectId: 1, projectName: "GlobalTrans OTM Cloud Migration",    requestedRole: "OTM Integration Architect",       requiredSkills: ["OTM","MuleSoft","EDI","Groovy"],                 startDate: "2026-05-01", endDate: "2026-08-31", hoursPerWeek: 40, allocationPct: 100, priority: "critical", status: "open",      notes: "Primary integration architect for Phase 2. MuleSoft certification required.", requestedByName: "Alex Okafor", practiceArea: "Implementation" },
+      { projectId: 6, projectName: "BlueStar OTM Cloud Implementation",  requestedRole: "Senior OTM Functional Consultant", requiredSkills: ["OTM","Carrier Management","Rate Engine"],       startDate: "2026-05-15", endDate: "2026-10-31", hoursPerWeek: 40, allocationPct: 100, priority: "high",     status: "in_review", notes: "Functional lead for BlueStar. OTM 23D experience mandatory.",               requestedByName: "Tom Kirkland", practiceArea: "Implementation" },
+      { projectId: 8, projectName: "Apex EMEA Order Management Module",  requestedRole: "OTM Rate Engine Specialist",       requiredSkills: ["OTM","Rate Records","Carrier Networks","EMEA"], startDate: "2026-06-01", endDate: "2026-09-30", hoursPerWeek: 32, allocationPct: 80,  priority: "high",     status: "open",      notes: "Must understand European carrier frameworks and multi-currency rates.",      requestedByName: "Priya Mehta",  practiceArea: "Rate Services" },
+      { projectId: 9, projectName: "GlobalTrans Integration Upgrade",    requestedRole: "Project Manager",                  requiredSkills: ["OTM","PMO","Delivery","Jira"],                  startDate: "2026-05-01", endDate: "2026-11-30", hoursPerWeek: 40, allocationPct: 100, priority: "high",     status: "fulfilled", notes: "PM for integration upgrade workstream.",                                     requestedByName: "Alex Okafor", practiceArea: "Delivery" },
+      { projectId: 3, projectName: "NorthStar AMS Retainer",             requestedRole: "OTM Functional Consultant",        requiredSkills: ["OTM","AMS","OTM 24A"],                          startDate: "2026-05-01", endDate: "2026-12-31", hoursPerWeek: 16, allocationPct: 40,  priority: "medium",   status: "open",      notes: "Part-time AMS backfill for resource going on leave in May.",               requestedByName: "Tom Kirkland", practiceArea: "AMS" },
+      { projectId: 5, projectName: "GlobalTrans Data Acceleration",      requestedRole: "Data / ETL Specialist",            requiredSkills: ["OTM","SQL","ETL","Python","Data Migration"],   startDate: "2026-06-15", endDate: "2026-09-15", hoursPerWeek: 32, allocationPct: 80,  priority: "medium",   status: "open",      notes: "Large-scale historical shipment data migration.",                           requestedByName: "Alex Okafor", practiceArea: "Data Services" },
+    ]);
+    console.log("[auto-seed] Seeded staffing_requests");
+  }
+
+  // Task comments
+  const [{ count: tcCount }] = await db.select({ count: sql<number>`count(*)` }).from(taskCommentsTable);
+  if (Number(tcCount) === 0) {
+    await db.insert(taskCommentsTable).values([
+      { taskId: 1, authorId: 7, body: "Integration inventory complete across all 14 integration points. SAP, WMS, and 3 carrier EDI feeds documented. Sharing working doc in SharePoint now.", mentionedUserIds: [], isExternal: false },
+      { taskId: 1, authorId: 4, body: "Thanks Derek — looks comprehensive. Flag the EDI 214 mapping — that one caused issues last engagement. Let's review Thursday.", mentionedUserIds: [7], isExternal: false },
+      { taskId: 2, authorId: 7, body: "Architecture draft complete. Hub-and-spoke model with MuleSoft middleware. Two open questions on VPN tunnel vs API Gateway — left as comments for Alex to decide.", mentionedUserIds: [4], isExternal: false },
+      { taskId: 3, authorId: 8, body: "SIT Wave 1 complete — 42 of 48 scenarios passed. 6 defects raised (all P2). Rate calculation on multi-stop shipments is the main issue. Fix ETA is EOD tomorrow.", mentionedUserIds: [], isExternal: false },
+      { taskId: 3, authorId: 4, body: "Good progress. Loop in Aisha on the rate calculation defect — she's done this fix before on the Apex engagement.", mentionedUserIds: [8], isExternal: false },
+      { taskId: 5, authorId: 8, body: "UAT scenarios uploaded to client portal. Flagging: Robert's team asked for 2 additional scenarios around cross-border shipments — added to backlog for PM approval.", mentionedUserIds: [4, 17], isExternal: false },
+      { taskId: 6, authorId: 4, body: "Go-live runbook v1 sent to client. Cut-over window locked — Sunday 2 AM. Standby team confirmed.", mentionedUserIds: [7, 8], isExternal: false },
+      { taskId: 7, authorId: 8, body: "EMEA carrier rate analysis complete. 23 carrier rate tables identified. 8 are non-standard format and will need manual conversion. Adding 12h to estimate.", mentionedUserIds: [5], isExternal: false },
+      { taskId: 10, authorId: 9, body: "24A regression suite complete. All 94 scenarios passed on first run — cleanest certification I've seen. Cert letter drafted and ready for Tom's review.", mentionedUserIds: [6], isExternal: false },
+      { taskId: 12, authorId: 6, body: "23D test plan v1 shared with Pacific team. Waiting on their UAT lead — Sarah mentioned she'll introduce us by end of week.", mentionedUserIds: [], isExternal: false },
+    ]);
+    console.log("[auto-seed] Seeded task_comments");
+  }
+
+  // Milestone comments
+  const [{ count: mcCount }] = await db.select({ count: sql<number>`count(*)` }).from(milestoneCommentsTable);
+  if (Number(mcCount) === 0) {
+    await db.insert(milestoneCommentsTable).values([
+      { milestoneId: 1, projectId: 1, authorName: "Alex Okafor",  authorRole: "project_manager",      body: "Integration assessment signed off by GlobalTrans IT. Robert confirmed all 14 integration points in scope. Moving to architecture phase next week.", isClientVisible: false },
+      { milestoneId: 3, projectId: 1, authorName: "Derek Tran",   authorRole: "technical_consultant",  body: "SIT execution complete. 6 defects raised, all P2 or below. Rate calculation defect #SIT-034 is highest risk — fix deployed and retested this morning.", isClientVisible: false },
+      { milestoneId: 3, projectId: 1, authorName: "Alex Okafor",  authorRole: "project_manager",       body: "SIT milestone conditionally approved pending final retest of #SIT-034. Aisha to confirm closure by EOD.", isClientVisible: false },
+      { milestoneId: 5, projectId: 1, authorName: "Alex Okafor",  authorRole: "project_manager",       body: "Go-live achieved on schedule. Hypercare team standing by. All 14 integrations live in production. First production shipment transmitted at 03:14 AM.", isClientVisible: true },
+      { milestoneId: 8, projectId: 3, authorName: "Tom Kirkland", authorRole: "project_manager",       body: "Q1 2025 certification complete. NorthStar formally received Oracle certification letter. Sending client summary report.", isClientVisible: true },
+      { milestoneId: 11, projectId: 4, authorName: "Tom Kirkland",authorRole: "project_manager",       body: "23D certification complete — all 178 test cases passed, 12 defects resolved. Certification letter sent to Oracle Certification Authority.", isClientVisible: true },
+    ]);
+    console.log("[auto-seed] Seeded milestone_comments");
+  }
 }
 
 // Keeps demo data fresh — extends allocation end dates that have already passed
