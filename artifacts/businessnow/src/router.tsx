@@ -45,6 +45,9 @@ import ProspectsPage from "@/pages/prospects/index";
 import ProspectDetail from "@/pages/prospects/detail";
 import RateCardsPage from "@/pages/rate-cards/index";
 
+// Resource Command extras
+import StaffingRequestsPage from "@/pages/resources/staffing-requests";
+
 // Templates
 import TemplatesPage from "@/pages/templates/index";
 
@@ -144,6 +147,9 @@ export function AppRouter() {
       <Route path="/allocations">
         <Guard roles={ROUTE_ROLES["/allocations"]}><AllocationsPage /></Guard>
       </Route>
+      <Route path="/staffing-requests">
+        <Guard roles={["admin", "delivery_director", "resource_manager", "project_manager"] as Role[]}><StaffingRequestsPage /></Guard>
+      </Route>
       <Route path="/capacity">
         <Guard roles={ROUTE_ROLES["/capacity"]}><CapacityPage /></Guard>
       </Route>
@@ -192,7 +198,7 @@ export function AppRouter() {
       {/* ── Detail pages ───────────────────────────────────────────────── */}
       <Route path="/projects/:id"><Guard><ProjectDetail /></Guard></Route>
       <Route path="/customers/:id"><Guard><AccountDetail /></Guard></Route>
-      <Route path="/accounts/:id"><Redirect to="/customers" /></Route>
+      <Route path="/accounts/:id">{(params) => <Redirect to={`/customers/${params.id}`} />}</Route>
       <Route path="/prospects/:id">
         <Guard roles={["account_manager", "delivery_director", "admin"] as Role[]}><ProspectDetail /></Guard>
       </Route>

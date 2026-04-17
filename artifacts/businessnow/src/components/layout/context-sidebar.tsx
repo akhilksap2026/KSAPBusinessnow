@@ -94,7 +94,6 @@ const ADVANCED_ITEMS: NavItem[] = [
   { name: "Capacity Forecast",  href: "/capacity",  icon: PieChart,    roles: ["admin", "delivery_director", "resource_manager", "project_manager"] },
   { name: "Contracts",          href: "/contracts", icon: ScrollText,  roles: ["admin", "finance_lead", "project_manager", "account_manager"] },
   { name: "Project Blueprints", href: "/templates", icon: Package,     roles: ["admin", "delivery_director", "project_manager"] },
-  { name: "Automations",        href: "/automations", icon: Zap,       roles: ["admin", "delivery_director"] },
 ];
 
 export function ContextSidebar() {

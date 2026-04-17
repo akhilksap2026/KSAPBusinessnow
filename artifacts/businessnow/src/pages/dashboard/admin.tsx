@@ -296,7 +296,7 @@ export default function AdminDashboard() {
               </CardTitle>
               <CardDescription>Sorted by health score</CardDescription>
             </div>
-            <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => navigate("/accounts")}>
+            <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => navigate("/customers")}>
               All <ArrowRight size={11} className="ml-1" />
             </Button>
           </CardHeader>
@@ -304,7 +304,7 @@ export default function AdminDashboard() {
             {sortedAccounts.map(acc => {
               const score = acc.healthScore ?? 100;
               return (
-                <button key={acc.id} onClick={() => navigate(`/accounts/${acc.id}`)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left">
+                <button key={acc.id} onClick={() => navigate(`/customers/${acc.id}`)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left">
                   <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-xs font-bold text-foreground shrink-0">
                     {acc.name?.[0] || "?"}
                   </div>

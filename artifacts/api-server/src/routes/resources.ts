@@ -310,6 +310,28 @@ router.get("/staffing-requests", async (req, res): Promise<void> => {
   res.json(reqs);
 });
 
+router.post("/staffing-requests", async (req, res): Promise<void> => {
+  const { id: _id, createdAt: _ca, ...body } = req.body;
+  const [created] = await db.insert(staffingRequestsTable).values(body).returning();
+  res.status(201).json(created);
+});
+
+router.put("/staffing-requests/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { id: _id, createdAt: _ca, ...updates } = req.body;
+  const [updated] = await db.update(staffingRequestsTable).set(updates).where(eq(staffingRequestsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(updated);
+});
+
+router.delete("/staffing-requests/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(staffingRequestsTable).where(eq(staffingRequestsTable.id, id));
+  res.status(204).end();
+});
+
 router.put("/resources/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

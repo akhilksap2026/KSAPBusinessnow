@@ -65,7 +65,7 @@ function InvoiceKanban({ invoices }: { invoices: any[] }) {
                     </div>
                     <div>
                       {inv.accountId ? (
-                        <Link href={`/accounts/${inv.accountId}`} onClick={e => e.stopPropagation()}
+                        <Link href={`/customers/${inv.accountId}`} onClick={e => e.stopPropagation()}
                           className="text-xs font-medium truncate hover:text-primary underline-offset-2 hover:underline block">
                           {inv.accountName || "—"}
                         </Link>
@@ -161,7 +161,7 @@ function InvoiceTable({ invoices }: { invoices: any[] }) {
                   <TableCell className="font-medium font-mono">{invoice.invoiceNumber}</TableCell>
                   <TableCell>
                     {invoice.accountId ? (
-                      <Link href={`/accounts/${invoice.accountId}`} onClick={e => e.stopPropagation()}
+                      <Link href={`/customers/${invoice.accountId}`} onClick={e => e.stopPropagation()}
                         className="hover:text-primary underline-offset-2 hover:underline">
                         {invoice.accountName}
                       </Link>
