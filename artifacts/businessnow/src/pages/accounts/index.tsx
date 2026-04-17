@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useListAccounts } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -418,6 +419,7 @@ export default function AccountsList() {
   const { data: accounts, isLoading, refetch } = useListAccounts();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSegment, setFilterSegment] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -428,15 +430,15 @@ export default function AccountsList() {
     return accounts.filter(a => {
       if (filterStatus !== "all" && a.status !== filterStatus) return false;
       if (filterSegment !== "all" && a.segment !== filterSegment) return false;
-      if (search) {
-        const s = search.toLowerCase();
+      if (debouncedSearch) {
+        const s = debouncedSearch.toLowerCase();
         if (!a.name.toLowerCase().includes(s) &&
             !(a.industry || "").toLowerCase().includes(s) &&
             !(a.region || "").toLowerCase().includes(s)) return false;
       }
       return true;
     });
-  }, [accounts, filterStatus, filterSegment, search]);
+  }, [accounts, filterStatus, filterSegment, debouncedSearch]);
 
   const kpis = useMemo(() => {
     const all = accounts || [];

@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Settings2, Tag, CreditCard, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Settings2, Tag, CreditCard, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X, Sun, Moon, Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -912,6 +913,75 @@ function FxRatesTab() {
   );
 }
 
+// ── Appearance Tab ────────────────────────────────────────────────────────────
+
+type ThemeMode = "light" | "dark" | "system";
+
+function AppearanceTab() {
+  const { toast } = useToast();
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    try { return (localStorage.getItem("theme") as ThemeMode) ?? "system"; } catch { return "system"; }
+  });
+
+  const applyTheme = (t: ThemeMode) => {
+    setTheme(t);
+    try { localStorage.setItem("theme", t); } catch { }
+    const root = document.documentElement;
+    if (t === "dark") {
+      root.classList.add("dark");
+    } else if (t === "light") {
+      root.classList.remove("dark");
+    } else {
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
+      else root.classList.remove("dark");
+    }
+    toast({ title: "Appearance updated", description: `Theme set to ${t}` });
+  };
+
+  const options: { value: ThemeMode; label: string; icon: React.ElementType; desc: string }[] = [
+    { value: "light", label: "Light",  icon: Sun,     desc: "Always use light mode" },
+    { value: "dark",  label: "Dark",   icon: Moon,    desc: "Always use dark mode" },
+    { value: "system", label: "System", icon: Monitor, desc: "Match your OS setting" },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-foreground">Appearance</CardTitle>
+          <p className="text-xs text-muted-foreground">Choose how BUSINESSNow looks for you.</p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-3">
+            {options.map(opt => {
+              const active = theme === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => applyTheme(opt.value)}
+                  className={cn(
+                    "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                    active ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/30 hover:bg-muted/30"
+                  )}
+                >
+                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                    <opt.icon className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="text-center">
+                    <p className={cn("text-xs font-semibold", active ? "text-primary" : "text-foreground")}>{opt.label}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{opt.desc}</p>
+                  </div>
+                  {active && <Check className="h-3.5 w-3.5 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function PMOSettingsPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -927,7 +997,7 @@ export default function PMOSettingsPage() {
 
       <div className="p-6">
         <Tabs defaultValue="categories">
-          <TabsList className="bg-card border border-border h-auto p-1 mb-6">
+          <TabsList className="bg-card border border-border h-auto p-1 mb-6 flex-wrap gap-1">
             <TabsTrigger value="categories" className="data-[state=active]:bg-muted text-xs gap-1.5">
               <Tag className="h-3.5 w-3.5" /> Time Entry Categories
             </TabsTrigger>
@@ -940,11 +1010,15 @@ export default function PMOSettingsPage() {
             <TabsTrigger value="fx-rates" className="data-[state=active]:bg-muted text-xs gap-1.5">
               <DollarSign className="h-3.5 w-3.5" /> FX Rates
             </TabsTrigger>
+            <TabsTrigger value="appearance" className="data-[state=active]:bg-muted text-xs gap-1.5">
+              <Sun className="h-3.5 w-3.5" /> Appearance
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="categories"><TimeEntryCategoriesTab /></TabsContent>
           <TabsContent value="rate-cards"><RateCardsTab /></TabsContent>
           <TabsContent value="templates"><TemplatesTab /></TabsContent>
           <TabsContent value="fx-rates"><FxRatesTab /></TabsContent>
+          <TabsContent value="appearance"><AppearanceTab /></TabsContent>
         </Tabs>
       </div>
     </div>

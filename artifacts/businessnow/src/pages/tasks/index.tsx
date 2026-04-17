@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useListTasks, useListProjects } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -278,10 +280,20 @@ export default function TasksPage() {
   const [localTasks, setLocalTasks] = useState<any[]>([]);
   const [view, setView] = useState<"list" | "board" | "hierarchy">("list");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterProject, setFilterProject] = useState("all");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  // Virtual list for task rows
+  const taskListRef = useRef<HTMLDivElement>(null);
+  const taskVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => taskListRef.current,
+    estimateSize: () => 64,
+    overscan: 8,
+  });
 
   // Saved filters
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
@@ -354,15 +366,15 @@ export default function TasksPage() {
       if (filterStatus !== "all" && t.status !== filterStatus) return false;
       if (filterPriority !== "all" && t.priority !== filterPriority) return false;
       if (filterProject !== "all" && String(t.projectId) !== filterProject) return false;
-      if (search) {
-        const s = search.toLowerCase();
+      if (debouncedSearch) {
+        const s = debouncedSearch.toLowerCase();
         if (!t.name.toLowerCase().includes(s) &&
             !(t.assignedToName || "").toLowerCase().includes(s) &&
             !((t as any).projectName || "").toLowerCase().includes(s)) return false;
       }
       return true;
     });
-  }, [localTasks, filterStatus, filterPriority, filterProject, search]);
+  }, [localTasks, filterStatus, filterPriority, filterProject, debouncedSearch]);
 
   const counts = useMemo(() => {
     if (!localTasks) return {};
@@ -376,7 +388,7 @@ export default function TasksPage() {
   }, [localTasks]);
 
   const hierarchyRoots = useMemo(() => buildHierarchy(filtered), [filtered]);
-  const hasActiveFilters = filterStatus !== "all" || filterPriority !== "all" || filterProject !== "all" || search;
+  const hasActiveFilters = filterStatus !== "all" || filterPriority !== "all" || filterProject !== "all" || debouncedSearch;
 
   if (isLoading) {
     return (

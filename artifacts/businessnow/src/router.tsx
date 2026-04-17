@@ -2,6 +2,7 @@ import React from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AccessDenied } from "@/components/access-denied";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { useAuthRole, ROUTE_ROLES } from "@/lib/auth";
 import type { Role } from "@/lib/auth";
 
@@ -52,12 +53,16 @@ import PortfolioPage from "@/pages/portfolio/index";
 import AdminPage from "@/pages/admin/index";
 import PMOSettingsPage from "@/pages/settings/pmo";
 
+// Portal
+import PortalPage from "@/pages/portal/index";
+
 // ─── DashboardRedirect — role-appropriate home landing ───────────────────────
 
 function DashboardRedirect() {
   const { role } = useAuthRole();
   if (!role) return <Redirect to="/login" />;
   switch (role) {
+    case "external":           return <Redirect to="/portal" />;
     case "executive":          return <Redirect to="/portfolio" />;
     case "delivery_director":  return <Redirect to="/portfolio" />;
     case "project_manager":    return <Redirect to="/dashboard/pm" />;
@@ -83,7 +88,7 @@ function Guard({ children, roles }: { children: React.ReactNode; roles?: readonl
     return <AppLayout><AccessDenied allowedRoles={roles} /></AppLayout>;
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return <AppLayout><ErrorBoundary>{children}</ErrorBoundary></AppLayout>;
 }
 
 // ─── Router ──────────────────────────────────────────────────────────────────
@@ -94,6 +99,16 @@ export function AppRouter() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+
+      {/* ── External Portal ─────────────────────────────────────────────── */}
+      <Route path="/portal">
+        {role === "external"
+          ? <ErrorBoundary><PortalPage /></ErrorBoundary>
+          : role
+            ? <Redirect to="/" />
+            : <Redirect to="/login" />
+        }
+      </Route>
 
       <Route path="/">
         {role ? <AppLayout><DashboardRedirect /></AppLayout> : <Redirect to="/login" />}
@@ -156,9 +171,7 @@ export function AppRouter() {
       </Route>
 
       {/* ── Intelligence ───────────────────────────────────────────────── */}
-      <Route path="/portfolio/director">
-        <Redirect to="/portfolio" />
-      </Route>
+      <Route path="/portfolio/director"><Redirect to="/portfolio" /></Route>
       <Route path="/portfolio">
         <Guard roles={ROUTE_ROLES["/portfolio"]}><PortfolioPage /></Guard>
       </Route>
@@ -168,12 +181,12 @@ export function AppRouter() {
         <Guard roles={ROUTE_ROLES["/admin"]}><AdminPage /></Guard>
       </Route>
       <Route path="/settings/pmo">
-        <Guard roles={["admin", "delivery_director", "project_manager"]}><PMOSettingsPage /></Guard>
+        <Guard roles={["admin", "delivery_director", "project_manager"] as Role[]}><PMOSettingsPage /></Guard>
       </Route>
 
       {/* ── Project sub-routes (before /projects/:id) ──────────────────── */}
       <Route path="/projects/:id/command">
-        {role ? <AppLayout><ProjectCommand /></AppLayout> : <Redirect to="/login" />}
+        {role ? <AppLayout><ErrorBoundary><ProjectCommand /></ErrorBoundary></AppLayout> : <Redirect to="/login" />}
       </Route>
 
       {/* ── Detail pages ───────────────────────────────────────────────── */}
@@ -181,7 +194,7 @@ export function AppRouter() {
       <Route path="/customers/:id"><Guard><AccountDetail /></Guard></Route>
       <Route path="/accounts/:id"><Redirect to="/customers" /></Route>
       <Route path="/prospects/:id">
-        <Guard roles={["account_manager", "delivery_director", "admin"]}><ProspectDetail /></Guard>
+        <Guard roles={["account_manager", "delivery_director", "admin"] as Role[]}><ProspectDetail /></Guard>
       </Route>
       <Route path="/resources/:id">
         <Guard roles={ROUTE_ROLES["/resources/:id"]}><ResourceDetail /></Guard>

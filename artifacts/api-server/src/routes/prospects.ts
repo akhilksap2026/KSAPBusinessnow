@@ -15,7 +15,10 @@ function stripConfidential(prospect: any, role: string) {
 }
 
 function getRole(req: any): string {
-  return (req as any).session?.role ?? (req as any).session?.user?.role ?? "consultant";
+  return (req as any).session?.role
+    ?? (req as any).session?.user?.role
+    ?? (req.headers["x-user-role"] as string)
+    ?? "consultant";
 }
 
 router.get("/prospects", async (req, res): Promise<void> => {

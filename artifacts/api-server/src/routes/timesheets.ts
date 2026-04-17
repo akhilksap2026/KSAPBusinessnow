@@ -94,7 +94,16 @@ router.get("/timesheets", async (req, res): Promise<void> => {
     if (query.data.status) timesheets = timesheets.filter((t) => t.status === query.data.status);
     if (query.data.weekStart) timesheets = timesheets.filter((t) => t.weekStart === query.data.weekStart);
   }
-  res.json(timesheets.map(parseTimesheet));
+  const role = ((req.headers["x-user-role"] as string) || "consultant") as any;
+  const SELL_RATE_ROLES = ["delivery_director", "project_manager", "finance_lead", "admin"];
+  const COST_RATE_ROLES = ["delivery_director", "finance_lead", "admin"];
+  const parsed = timesheets.map(parseTimesheet).map(t => {
+    const out = { ...t };
+    if (!SELL_RATE_ROLES.includes(role)) delete (out as any).sellRate;
+    if (!COST_RATE_ROLES.includes(role)) delete (out as any).costRate;
+    return out;
+  });
+  res.json(parsed);
 });
 
 router.post("/timesheets", async (req, res): Promise<void> => {

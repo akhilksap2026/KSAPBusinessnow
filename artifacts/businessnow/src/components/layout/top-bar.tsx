@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, Search, CheckCheck, ExternalLink, X } from "lucide-react";
+import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthRole, DEMO_USERS, ROLE_LABELS } from "@/lib/auth";
+import { useSidebarCollapsed } from "@/lib/sidebar-state";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -84,6 +85,7 @@ interface TopBarProps {
 export function TopBar({ onSearchOpen }: TopBarProps) {
   const { role, user, setUser } = useAuthRole();
   const [location, setLocation] = useLocation();
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
   const pageName = resolvePageName(location);
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -156,6 +158,17 @@ export function TopBar({ onSearchOpen }: TopBarProps) {
 
   return (
     <header className="h-12 bg-background border-b border-border flex items-center px-4 sticky top-0 z-10 shrink-0 gap-3">
+      {/* Sidebar toggle */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+        onClick={toggleSidebar}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+      </Button>
+
       {/* Left: Search */}
       <div className="flex-none">
         <button

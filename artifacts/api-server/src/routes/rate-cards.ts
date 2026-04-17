@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { db, rateCardsTable } from "@workspace/db";
 import { eq, and, or, isNull, isNotNull } from "drizzle-orm";
+import { getRoleFromHeader, stripRateCardFields } from "../middleware/field-access";
 
 const router = Router();
+
+const BUY_RATE_ROLES = ["delivery_director", "finance_lead", "admin"];
 
 router.get("/rate-cards", async (req, res) => {
   try {
@@ -14,7 +17,8 @@ router.get("/rate-cards", async (req, res) => {
       const flag = isTemplate === "true";
       rows = rows.filter(r => !!r.isTemplate === flag);
     }
-    res.json(rows);
+    const role = getRoleFromHeader(req as any);
+    res.json(stripRateCardFields(rows, role));
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

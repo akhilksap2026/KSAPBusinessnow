@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
@@ -498,13 +499,14 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
 function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: (id: number) => void }) {
   const [filter, setFilter] = useState<"all" | "bench" | "overbooked" | "contractor">("all");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
 
   const filtered = resources.filter(r => {
     if (filter === "bench") { if (r.currentUtilization >= 20) return false; }
     else if (filter === "overbooked") { if (r.currentUtilization <= 100) return false; }
     else if (filter === "contractor") { if (r.employmentType === "employee") return false; }
-    if (search) {
-      const q = search.toLowerCase();
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
       if (!r.name.toLowerCase().includes(q) &&
           !(r.title || "").toLowerCase().includes(q) &&
           !(PRACTICE_LABELS[r.practiceArea] || r.practiceArea || "").toLowerCase().includes(q) &&
