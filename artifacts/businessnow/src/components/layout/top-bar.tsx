@@ -36,15 +36,9 @@ const PAGE_NAMES: [string, string][] = [
   ["/accounts",            "Customers"],
   ["/prospects",           "Prospects"],
   ["/rate-cards",          "Rate Cards"],
-  ["/proposals",           "Proposals"],
   ["/portfolio",           "Portfolio"],
-  ["/renewal-signals",     "Renewal Signals"],
   ["/templates",           "Project Blueprints"],
-  ["/forms",               "Forms"],
-  ["/automations",         "Automations"],
   ["/admin",               "System Settings"],
-  ["/handoff",             "Project Handoff"],
-  ["/handover",            "Client Handover"],
   ["/",                    "Dashboard"],
 ];
 

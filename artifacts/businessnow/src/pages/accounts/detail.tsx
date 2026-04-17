@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, DollarSign, Calendar, ExternalLink, RefreshCw, CheckCircle, XCircle, Plus } from "lucide-react";
+import { AlertTriangle, DollarSign, Calendar, ExternalLink, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 const API = "/api";
 
 function fmt(v: number) {
@@ -110,7 +110,6 @@ export default function AccountDetail() {
               Change Orders ({changeRequests.length})
             </TabsTrigger>
             <TabsTrigger value="info" className="data-[state=active]:bg-muted">Account Info</TabsTrigger>
-            <TabsTrigger value="contacts" className="data-[state=active]:bg-muted">Contacts</TabsTrigger>
           </TabsList>
 
           {/* Health Tab */}
@@ -367,15 +366,6 @@ export default function AccountDetail() {
             </div>
           </TabsContent>
 
-          <TabsContent value="contacts">
-            <Card className="bg-card border-border">
-              <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
-                <Plus className="h-10 w-10 text-muted-foreground/30" />
-                <p className="text-lg font-semibold text-foreground">Contacts</p>
-                <p className="text-sm text-muted-foreground">Coming soon — contact management for this account.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>
