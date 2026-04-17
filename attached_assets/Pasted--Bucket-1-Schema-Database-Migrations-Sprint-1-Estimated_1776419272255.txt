@@ -1,0 +1,270 @@
+## Bucket 1 — Schema & Database Migrations
+**Sprint 1 · Estimated: 1–2 days · Must be done before everything else**
+
+> These are pure additive changes. No existing columns are removed or renamed.
+> Every other bucket depends on this landing correctly.
+
+```
+You are making ONLY database schema changes to the BUSINESSNow pnpm monorepo.
+Do NOT touch any frontend pages, sidebar, routes, or API route logic yet.
+Do NOT remove or rename any existing columns or tables.
+All changes are purely additive (ALTER TABLE ADD COLUMN or CREATE TABLE).
+
+Work in this file only: lib/db/schema.ts
+After schema changes, run the Drizzle migration (db:push) to apply them.
+Also update auto-seed.ts to populate the new columns/tables with realistic data.
+
+Make the following schema changes in this exact order:
+
+─── 1. TABLE: prospects (CREATE NEW) ───
+CREATE TABLE prospects (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT DEFAULT 'enterprise',
+  industry TEXT,
+  segment TEXT,
+  status TEXT NOT NULL DEFAULT 'active',     -- 'active'|'qualified'|'converted'|'dead'
+  primaryContactName TEXT,                   -- confidential
+  primaryContactEmail TEXT,                  -- confidential
+  linkedinUrl TEXT,                          -- confidential
+  sentiment TEXT,                            -- confidential: 'positive'|'neutral'|'negative'
+  touchPoints JSONB DEFAULT '[]',            -- confidential: [{ date, type, notes }]
+  ownerId INTEGER REFERENCES resources(id),
+  notes TEXT,
+  convertedToAccountId INTEGER,              -- set when prospect converts to customer
+  convertedAt TIMESTAMPTZ,
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 2. TABLE: accounts — ADD COLUMNS ───
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'enterprise';
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS paymentTerms TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS contractHeader TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS convertedFromProspectId INTEGER;
+
+─── 3. TABLE: projects — ADD COLUMNS ───
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS isInternal BOOLEAN DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS isExternal BOOLEAN DEFAULT true;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS isAdministrative BOOLEAN DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS healthBudget TEXT DEFAULT 'green';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS healthHours TEXT DEFAULT 'green';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS healthTimeline TEXT DEFAULT 'green';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS healthRisks TEXT DEFAULT 'green';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS templateId INTEGER;
+
+─── 4. TABLE: milestones — ADD COLUMNS ───
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS milestoneType TEXT NOT NULL DEFAULT 'project';
+  -- values: 'payment' | 'project' | 'external'
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS invoiceAlertSent BOOLEAN DEFAULT false;
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS signoffStatus TEXT DEFAULT 'pending';
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS parentTaskId INTEGER REFERENCES tasks(id);
+
+─── 5. TABLE: tasks — ADD COLUMNS ───
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parentTaskId INTEGER REFERENCES tasks(id);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS hierarchyLevel INTEGER DEFAULT 0;
+  -- 0=root/phase, 1=task, 2=subtask, ...6=leaf
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS isLeaf BOOLEAN DEFAULT true;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS etcHours NUMERIC(8,2);
+  -- ETC = Estimated Time to Complete. NEVER derive as estimatedHours - actualHours.
+  -- It is an independently editable field.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS isMilestoneGate BOOLEAN DEFAULT false;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS commentCount INTEGER DEFAULT 0;
+
+─── 6. TABLE: task_dependencies — ADD COLUMN ───
+-- Table already exists. Add lagDays only.
+ALTER TABLE task_dependencies ADD COLUMN IF NOT EXISTS lagDays INTEGER DEFAULT 0;
+  -- positive = lag (delay), negative = lead (overlap)
+
+─── 7. TABLE: task_assignments (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS task_assignments (
+  id SERIAL PRIMARY KEY,
+  taskId INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  resourceId INTEGER NOT NULL REFERENCES resources(id),
+  roleOnTask TEXT,
+  estimatedHours NUMERIC(8,2),
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 8. TABLE: task_comments (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS task_comments (
+  id SERIAL PRIMARY KEY,
+  taskId INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  authorId INTEGER NOT NULL REFERENCES resources(id),
+  body TEXT NOT NULL,
+  mentionedUserIds INTEGER[] DEFAULT '{}',
+  isExternal BOOLEAN DEFAULT false,
+  createdAt TIMESTAMPTZ DEFAULT NOW(),
+  updatedAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 9. TABLE: saved_filters (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS saved_filters (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  ownerId INTEGER NOT NULL REFERENCES resources(id),
+  isShared BOOLEAN DEFAULT false,
+  filterContext TEXT NOT NULL,  -- 'tasks'|'projects'|'resources'|'opportunities'
+  filterJson JSONB NOT NULL,
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 10. TABLE: resources — ADD COLUMNS ───
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS defaultRole TEXT;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS skillsWithYears JSONB DEFAULT '{}';
+  -- shape: { "OTM Configuration": 5, "Rate Management": 3 }
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS vacationAllocationDays INTEGER DEFAULT 15;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS hireDate TEXT;
+
+─── 11. TABLE: timesheets — ADD COLUMNS ───
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS billedRole TEXT;
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS sellRate NUMERIC(8,2);
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS costRate NUMERIC(8,2);
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS dailyComment TEXT;
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS isCollaboration BOOLEAN DEFAULT false;
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS approvedAt TIMESTAMPTZ;
+ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS approvedById INTEGER REFERENCES resources(id);
+-- Also update the status enum to include 'approved' and 'rejected':
+-- existing: 'draft'|'submitted'
+-- new:      'draft'|'submitted'|'approved'|'rejected'|'invoiced'
+
+─── 12. TABLE: rate_cards (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS rate_cards (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  projectId INTEGER REFERENCES projects(id),  -- NULL = global template
+  isTemplate BOOLEAN DEFAULT false,
+  effectiveDate TEXT NOT NULL,
+  expiryDate TEXT,
+  currency TEXT DEFAULT 'CAD',
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 13. TABLE: rate_card_roles (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS rate_card_roles (
+  id SERIAL PRIMARY KEY,
+  rateCardId INTEGER NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
+  roleName TEXT NOT NULL,
+  sellRate NUMERIC(8,2) NOT NULL,   -- billed to customer
+  buyRate NUMERIC(8,2) NOT NULL,    -- internal resource cost
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 14. TABLE: opportunities — ADD COLUMNS ───
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS prospectId INTEGER REFERENCES prospects(id);
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS staffingRequestTriggered BOOLEAN DEFAULT false;
+-- prospectId and accountId are mutually exclusive (one must be non-null)
+
+─── 15. TABLE: staffing_requests — ensure complete ───
+-- If table doesn't exist yet, create it:
+CREATE TABLE IF NOT EXISTS staffing_requests (
+  id SERIAL PRIMARY KEY,
+  opportunityId INTEGER NOT NULL REFERENCES opportunities(id),
+  projectId INTEGER REFERENCES projects(id),
+  roleRequired TEXT NOT NULL,
+  practiceArea TEXT,
+  requiredSkills TEXT[] DEFAULT '{}',
+  startDate TEXT,
+  endDate TEXT,
+  allocationPct INTEGER DEFAULT 100,
+  status TEXT DEFAULT 'open',  -- 'open'|'filled'|'cancelled'
+  assignedResourceId INTEGER REFERENCES resources(id),
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+-- If table already exists, add missing columns only:
+ALTER TABLE staffing_requests ADD COLUMN IF NOT EXISTS opportunityId INTEGER REFERENCES opportunities(id);
+
+─── 16. TABLE: project_templates (CREATE NEW) ───
+CREATE TABLE IF NOT EXISTS project_templates (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  phaseCount INTEGER DEFAULT 0,
+  taskCount INTEGER DEFAULT 0,
+  estimatedWeeks INTEGER,
+  templateData JSONB NOT NULL DEFAULT '{}',
+  createdById INTEGER REFERENCES resources(id),
+  lastUsedAt TIMESTAMPTZ,
+  usageCount INTEGER DEFAULT 0,
+  createdAt TIMESTAMPTZ DEFAULT NOW()
+)
+
+─── 17. TABLE: invoices — ADD COLUMN ───
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS milestoneId INTEGER REFERENCES milestones(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS invoiceType TEXT DEFAULT 'tm';
+  -- 'tm' = time & material, 'fixed' = milestone-based fixed fee
+
+─── 18. TABLE: allocations — ADD COLUMN ───
+ALTER TABLE allocations ADD COLUMN IF NOT EXISTS opportunityId INTEGER;
+  -- for soft allocations that reference a prospective opportunity
+
+─── 19. UPDATE auto-seed.ts ───
+After schema changes, update auto-seed.ts to:
+- Seed 1 global rate card (isTemplate=true, projectId=null) with these 8 roles:
+    Delivery Director    | sellRate: 195 | buyRate: 120
+    Practice Lead        | sellRate: 175 | buyRate: 105
+    Solution Architect   | sellRate: 165 | buyRate: 98
+    Senior OTM Consultant| sellRate: 150 | buyRate: 88
+    OTM Consultant       | sellRate: 130 | buyRate: 75
+    Business Analyst     | sellRate: 120 | buyRate: 68
+    QA Specialist        | sellRate: 110 | buyRate: 62
+    Rate Mgmt Specialist | sellRate: 105 | buyRate: 60
+- Seed 3 prospects (with primaryContactName, sentiment, touchPoints populated)
+- Add milestoneType to existing milestone seeds:
+    "Requirements Sign-off" → 'external'
+    "Design Approved"       → 'external'
+    "UAT Complete"          → 'payment'
+    "Go-Live"               → 'payment'
+    "Hypercare Complete"    → 'project'
+- Add parentTaskId to create a 3-level task hierarchy for each project:
+    Level 0 (phase, isLeaf=false): "Discovery & Requirements", "Solution Design",
+      "Build & Configure", "Testing", "Go-Live & Hypercare"
+    Level 1 (task, isLeaf=false): 2–3 tasks per phase
+    Level 2 (leaf, isLeaf=true): 2–3 subtasks per task (time entry here)
+- Set defaultRole on all 32 resources to match their title
+- Set skillsWithYears JSON on all 32 resources
+- Create the Administrative project:
+    name: "Administrative — KSAP Internal"
+    isInternal: true, isAdministrative: true, status: 'active'
+    Tasks (all isLeaf=true): Vacation/PTO, Sick Leave, Training, Public Holidays,
+      Internal Meetings, Business Development
+- Seed 2 pre-built saved_filters (isShared=true):
+    { name: "Open Tasks", filterContext: "tasks",
+      filterJson: { status: ["not_started", "in_progress"] } }
+    { name: "Blocked Tasks", filterContext: "tasks",
+      filterJson: { status: ["blocked"] } }
+- Seed 2–3 task_comments per in-progress task with realistic text
+- Seed 2 open staffing_requests linked to the 2 negotiation-stage opportunities
+
+─── 20. DRIZZLE SCHEMA.TS ───
+After writing all the raw SQL above as Drizzle table definitions,
+export every new and updated table from schema.ts.
+Run: pnpm --filter @workspace/db run db:push
+Confirm no errors before proceeding.
+```
+
+**✅ Bucket 1 Validation:**
+```
+psql $DATABASE_URL -c "\dt" | grep -E "prospects|task_assignments|task_comments|saved_filters|rate_cards|rate_card_roles|project_templates|staffing_requests"
+# Must show all 7 new tables
+
+psql $DATABASE_URL -c "\d tasks" | grep -E "parentTaskId|hierarchyLevel|isLeaf|etcHours|commentCount"
+# Must show all 5 new task columns
+
+psql $DATABASE_URL -c "\d timesheets" | grep -E "billedRole|sellRate|costRate|dailyComment|isCollaboration|approvedAt"
+# Must show all 6 new timesheet columns
+
+psql $DATABASE_URL -c "\d resources" | grep -E "defaultRole|skillsWithYears|vacationAllocationDays"
+# Must show all 3 new resource columns
+
+psql $DATABASE_URL -c "\d projects" | grep -E "isInternal|isAdministrative|healthBudget|healthHours|healthTimeline|healthRisks"
+# Must show all 6 new project columns
+
+psql $DATABASE_URL -c "\d milestones" | grep -E "milestoneType|invoiceAlertSent|signoffStatus"
+# Must show all 3 new milestone columns
+
+SELECT COUNT(*) FROM rate_cards;         -- must return 1
+SELECT COUNT(*) FROM rate_card_roles;    -- must return 8
+SELECT COUNT(*) FROM prospects;          -- must return 3
+SELECT COUNT(*) FROM tasks WHERE is_leaf = false; -- must return phase/task parent rows
+SELECT name FROM projects WHERE is_administrative = true; -- must return "Administrative — KSAP Internal"
+SELECT COUNT(*) FROM saved_filters WHERE is_shared = true; -- must return 2
