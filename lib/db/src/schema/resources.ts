@@ -17,6 +17,7 @@ export const resourcesTable = pgTable("resources", {
   status: text("status").notNull().default("available"),
   hourlyRate: numeric("hourly_rate", { precision: 8, scale: 2 }),
   costRate: numeric("cost_rate", { precision: 8, scale: 2 }),
+  defaultRole: text("default_role"),
   location: text("location"),
   timezone: text("timezone"),
   isContractor: boolean("is_contractor").default(false),

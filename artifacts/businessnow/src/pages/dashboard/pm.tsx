@@ -379,8 +379,8 @@ export default function PMDashboard() {
                   <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200">{pendingApprovals.length}</Badge>
                 )}
               </CardTitle>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLocation("/timesheets")}>
-                Review <ArrowRight className="h-3 w-3 ml-1" />
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLocation("/timesheets/approval")}>
+                Review Queue <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
           </CardHeader>
@@ -394,7 +394,7 @@ export default function PMDashboard() {
               <ScrollArea className="h-[180px] pr-2">
                 <div className="space-y-1.5">
                   {pendingApprovals.slice(0, 10).map(ts => (
-                    <div key={ts.id} className="flex items-center justify-between p-2.5 rounded border hover:bg-muted/30 cursor-pointer transition-colors" onClick={() => setLocation("/timesheets")}>
+                    <div key={ts.id} className="flex items-center justify-between p-2.5 rounded border hover:bg-muted/30 cursor-pointer transition-colors" onClick={() => setLocation("/timesheets/approval")}>
                       <div className="min-w-0">
                         <p className="text-xs font-medium truncate">{ts.resourceName || "Unknown resource"}</p>
                         <p className="text-[10px] text-muted-foreground truncate">{ts.projectName} · {ts.entryDate ? format(new Date(ts.entryDate + "T00:00:00"), "MMM d") : "—"}</p>

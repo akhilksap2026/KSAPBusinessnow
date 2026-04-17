@@ -396,21 +396,21 @@ function MarginTab() {
 function TimesheetQueueTab() {
   const [queue, setQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState<Set<number>>(new Set());
+  const [, navigate] = useLocation();
 
-  useEffect(() => { fetch(`${API}/finance/timesheet-queue`).then(r => r.json()).then(setQueue); }, []);
+  useEffect(() => {
+    fetch(`${API}/timesheets/pending-approval`)
+      .then(r => r.json()).then(d => setQueue(Array.isArray(d) ? d : []))
+      .catch(() => {
+        fetch(`${API}/finance/timesheet-queue`).then(r => r.json()).then(d => setQueue(Array.isArray(d) ? d : [])).catch(() => {});
+      });
+  }, []);
 
-  const approve = async (id: number) => {
-    setLoading(prev => new Set([...prev, id]));
-    await fetch(`${API}/timesheets/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approvedByName: "Finance Lead" }) });
-    setQueue(prev => prev.filter(t => t.id !== id));
-    setLoading(prev => { const n = new Set(prev); n.delete(id); return n; });
-  };
-
-  const reject = async (id: number) => {
-    setLoading(prev => new Set([...prev, id]));
-    await fetch(`${API}/timesheets/${id}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rejectedReason: "Pending review" }) });
-    setQueue(prev => prev.filter(t => t.id !== id));
-    setLoading(prev => { const n = new Set(prev); n.delete(id); return n; });
+  const bulkApproveAll = async () => {
+    if (queue.length === 0) return;
+    const ids = queue.map(t => t.id);
+    await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, approvedByName: "Finance Lead" }) });
+    setQueue([]);
   };
 
   return (
@@ -419,6 +419,16 @@ function TimesheetQueueTab() {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Timesheets Pending Approval</h3>
           <p className="text-xs text-muted-foreground/70">{queue.length} entries awaiting review</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {queue.length > 0 && (
+            <Button size="sm" variant="outline" onClick={bulkApproveAll} className="h-7 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+              <CheckCircle className="h-3 w-3 mr-1" /> Approve All ({queue.length})
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => navigate("/timesheets/approval")} className="h-7 text-xs">
+            Full Review Queue <ExternalLink className="h-3 w-3 ml-1" />
+          </Button>
         </div>
       </div>
       {queue.length === 0 ? (
@@ -450,11 +460,25 @@ function TimesheetQueueTab() {
                     <td className="p-4 text-right text-emerald-400">{t.billableHours ? `${t.billableHours}h` : "—"}</td>
                     <td className="p-4 text-right">
                       <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="ghost" onClick={() => approve(t.id)} disabled={loading.has(t.id)}
+                        <Button size="sm" variant="ghost"
+                          onClick={async () => {
+                            setLoading(prev => new Set([...prev, t.id]));
+                            await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], approvedByName: "Finance Lead" }) });
+                            setQueue(prev => prev.filter(x => x.id !== t.id));
+                            setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
+                          }}
+                          disabled={loading.has(t.id)}
                           className="h-7 px-3 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
                           <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => reject(t.id)} disabled={loading.has(t.id)}
+                        <Button size="sm" variant="ghost"
+                          onClick={async () => {
+                            setLoading(prev => new Set([...prev, t.id]));
+                            await fetch(`${API}/timesheets/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], reason: "Rejected by finance" }) });
+                            setQueue(prev => prev.filter(x => x.id !== t.id));
+                            setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
+                          }}
+                          disabled={loading.has(t.id)}
                           className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
                           <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
                         </Button>

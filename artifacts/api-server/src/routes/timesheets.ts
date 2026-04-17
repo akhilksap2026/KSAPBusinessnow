@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, timesheetsTable, resourcesTable, tasksTable } from "@workspace/db";
+import { eq, sql, and, inArray } from "drizzle-orm";
+import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   ListTimesheetsQueryParams,
@@ -10,20 +10,22 @@ import {
 // Accepts hoursLogged / billableHours as either string or number (Drizzle stores them as
 // numeric strings in Postgres, but the frontend sends JS floats).
 const CreateTimesheetInput = z.object({
-  projectId:    z.number().int(),
-  projectName:  z.string().optional().nullable(),
-  resourceId:   z.number().int(),
-  resourceName: z.string().optional().nullable(),
-  weekStart:    z.string(),
-  entryDate:    z.string().optional().nullable(),
-  hoursLogged:  z.union([z.string(), z.number()]).transform(v => String(v)),
+  projectId:     z.number().int(),
+  projectName:   z.string().optional().nullable(),
+  resourceId:    z.number().int(),
+  resourceName:  z.string().optional().nullable(),
+  weekStart:     z.string(),
+  entryDate:     z.string().optional().nullable(),
+  hoursLogged:   z.union([z.string(), z.number()]).transform(v => String(v)),
   billableHours: z.union([z.string(), z.number(), z.null()]).optional().transform(v => (v != null ? String(v) : null)),
-  status:       z.string().optional(),
-  notes:        z.string().optional().nullable(),
-  taskId:       z.number().int().optional().nullable(),
-  categoryId:   z.number().int().optional().nullable(),
-  isBillable:   z.boolean().optional(),
-  activityType: z.string().optional(),
+  status:        z.string().optional(),
+  notes:         z.string().optional().nullable(),
+  dailyComment:  z.string().optional().nullable(),
+  taskId:        z.number().int().optional().nullable(),
+  categoryId:    z.number().int().optional().nullable(),
+  isBillable:    z.boolean().optional(),
+  activityType:  z.string().optional(),
+  isCollaboration: z.boolean().optional(),
 });
 
 function parseTimesheet(t: typeof timesheetsTable.$inferSelect) {
@@ -96,12 +98,43 @@ router.get("/timesheets", async (req, res): Promise<void> => {
 });
 
 router.post("/timesheets", async (req, res): Promise<void> => {
+  // dailyComment is required
+  if (!req.body?.dailyComment?.trim()) {
+    res.status(400).json({ error: "dailyComment is required" });
+    return;
+  }
   const parsed = CreateTimesheetInput.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [timesheet] = await db.insert(timesheetsTable).values(parsed.data).returning();
+
+  // ── Role auto-population ────────────────────────────────────────────────────
+  // Attempt to auto-set billedRole, sellRate, costRate from resource + rate card.
+  let billedRole: string | null = null;
+  let sellRate: string | null = null;
+  let costRate: string | null = null;
+  try {
+    const { projectId, resourceId } = parsed.data;
+    // Get resource defaultRole + costRate
+    const [resource] = await db.select({ defaultRole: resourcesTable.defaultRole, costRate: resourcesTable.costRate })
+      .from(resourcesTable).where(eq(resourcesTable.id, resourceId));
+    if (resource?.defaultRole) {
+      billedRole = resource.defaultRole;
+      costRate = resource.costRate ? String(resource.costRate) : null;
+      // Find matching rate card (project-specific first, then template)
+      const allCards = await db.select().from(rateCardsTable).where(eq(rateCardsTable.role, resource.defaultRole));
+      const projectCard = allCards.find(c => c.projectId === projectId);
+      const templateCard = allCards.find(c => c.isTemplate && !c.projectId);
+      const card = projectCard ?? templateCard;
+      if (card) {
+        sellRate = card.sellRate ? String(card.sellRate) : card.billingRate ? String(card.billingRate) : null;
+      }
+    }
+  } catch { /* non-blocking — proceed without rates */ }
+
+  const values = { ...parsed.data, billedRole, sellRate, costRate } as any;
+  const [timesheet] = await db.insert(timesheetsTable).values(values).returning();
   res.status(201).json(parseTimesheet(timesheet));
 });
 
@@ -219,6 +252,66 @@ router.patch("/timesheets/:id", async (req, res): Promise<void> => {
   }
 
   res.json(parseTimesheet(timesheet));
+});
+
+// ── Pending Approval — for managers/directors ────────────────────────────────
+router.get("/timesheets/pending-approval", async (req, res): Promise<void> => {
+  try {
+    const { projectId, resourceId, startDate, endDate } = req.query as Record<string, string>;
+    let rows = await db.select().from(timesheetsTable)
+      .where(eq(timesheetsTable.status, "submitted"));
+    if (projectId) rows = rows.filter(r => r.projectId === parseInt(projectId));
+    if (resourceId) rows = rows.filter(r => r.resourceId === parseInt(resourceId));
+    if (startDate) rows = rows.filter(r => !r.entryDate || r.entryDate >= startDate);
+    if (endDate) rows = rows.filter(r => !r.entryDate || r.entryDate <= endDate);
+    res.json(rows.map(parseTimesheet));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Bulk Approve ──────────────────────────────────────────────────────────────
+router.post("/timesheets/approve", async (req, res): Promise<void> => {
+  try {
+    const { ids, approvedByName } = req.body as { ids: number[]; approvedByName?: string };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: "ids array required" }); return;
+    }
+    const now = new Date().toISOString();
+    const updated = await db.update(timesheetsTable)
+      .set({ status: "approved", approvedAt: now, approvedByName: approvedByName ?? "Manager", rejectedAt: null, rejectedReason: null })
+      .where(inArray(timesheetsTable.id, ids))
+      .returning();
+    // Adjust loggedHours for each newly-approved entry
+    for (const t of updated) {
+      await adjustTaskLoggedHours(t.taskId, parseFloat(t.hoursLogged));
+    }
+    res.json({ approved: updated.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Bulk Reject ───────────────────────────────────────────────────────────────
+router.post("/timesheets/reject", async (req, res): Promise<void> => {
+  try {
+    const { ids, reason } = req.body as { ids: number[]; reason?: string };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: "ids array required" }); return;
+    }
+    const now = new Date().toISOString();
+    const updated = await db.update(timesheetsTable)
+      .set({ status: "rejected", rejectedAt: now, rejectedReason: reason ?? null, approvedAt: null })
+      .where(inArray(timesheetsTable.id, ids))
+      .returning();
+    // If any were previously approved, subtract hours from task
+    for (const t of updated) {
+      if (t.status === "approved") await adjustTaskLoggedHours(t.taskId, -parseFloat(t.hoursLogged));
+    }
+    res.json({ rejected: updated.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete a timesheet entry.

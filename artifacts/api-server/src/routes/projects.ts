@@ -166,12 +166,16 @@ function computeHealth(project: any, milestones: any[], tasks: any[]) {
 const router: IRouter = Router();
 
 router.get("/projects", async (req, res): Promise<void> => {
-  const { status, type, accountId, pmId } = req.query as Record<string, string>;
+  const { status, type, accountId, pmId, isAdministrative } = req.query as Record<string, string>;
   let projects = await db.select().from(projectsTable).orderBy(projectsTable.createdAt);
   if (status) projects = projects.filter((p) => p.status === status);
   if (type) projects = projects.filter((p) => p.type === type);
   if (accountId) projects = projects.filter((p) => p.accountId === parseInt(accountId));
   if (pmId) projects = projects.filter((p) => p.pmId === parseInt(pmId));
+  if (isAdministrative !== undefined) {
+    const flag = isAdministrative === "true";
+    projects = projects.filter((p) => !!(p as any).isAdministrative === flag);
+  }
   res.json(projects.map(parseProject));
 });
 

@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle, CheckCircle2, XCircle, Clock, RotateCcw, Plus, Eye,
   Rocket, AlarmClock, ChevronLeft, ChevronRight, LayoutGrid, List, Receipt,
+  Users, ShieldCheck,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -198,7 +199,7 @@ function CellContextModal({
             resourceId, resourceName, weekStart, entryDate: date,
             hoursLogged: h, isBillable, taskId: row.taskId ?? null,
             categoryId: categoryIdNum, activityType: "consulting",
-            notes: notes.trim(), status: "draft",
+            notes: notes.trim(), dailyComment: notes.trim(), status: "draft",
           }),
         });
       }
@@ -263,9 +264,9 @@ function CellContextModal({
           )}
           {errors.task && <p className="text-xs text-destructive font-medium">⚠ {errors.task}</p>}
 
-          {/* Description — mandatory */}
+          {/* Daily Comment — mandatory */}
           <div className="grid gap-1.5">
-            <Label>Description <span className="text-destructive">*</span></Label>
+            <Label>Daily Comment <span className="text-destructive">*</span></Label>
             <Textarea
               placeholder="Brief description of work done…"
               className="resize-none"
@@ -318,6 +319,126 @@ function CellContextModal({
   );
 }
 
+const ADMIN_TASK_TYPES = ["Vacation / PTO", "Sick Leave", "Training", "Public Holidays", "Internal Meetings", "Business Development"];
+
+// ── CollaborationModal ────────────────────────────────────────────────────────
+function CollaborationModal({ open, onClose, projects, resourceId, resourceName, weekStart, onSaved }: {
+  open: boolean; onClose: () => void;
+  projects: any[]; resourceId: number; resourceName: string; weekStart: string;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [projectId, setProjectId] = useState("");
+  const [taskId, setTaskId] = useState("");
+  const [hours, setHours] = useState("1");
+  const [comment, setComment] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!open) { setProjectId(""); setTaskId(""); setHours("1"); setComment(""); setErrors({}); setDate(format(new Date(), "yyyy-MM-dd")); }
+  }, [open]);
+  useEffect(() => {
+    if (!projectId) { setTasks([]); setTaskId(""); return; }
+    fetch(`${API_BASE}/tasks?projectId=${projectId}&isLeaf=true`)
+      .then(r => r.json()).then(d => setTasks(Array.isArray(d) ? d : []))
+      .catch(() => setTasks([]));
+  }, [projectId]);
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!projectId) e.projectId = "Project is required";
+    const h = parseFloat(hours);
+    if (!hours || isNaN(h) || h <= 0) e.hours = "Hours must be > 0";
+    else if (Math.abs(Math.round(h / 0.25) * 0.25 - h) > 0.001) e.hours = "Must be 0.25 increments";
+    if (!comment.trim()) e.comment = "Daily comment is required";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      const ws = format(startOfWeek(parseISO(date), { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const selectedProject = projects.find(p => String(p.id) === projectId);
+      const res = await fetch(`${API_BASE}/timesheets`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: parseInt(projectId), projectName: selectedProject?.name ?? "",
+          resourceId, resourceName, weekStart: ws, entryDate: date,
+          hoursLogged: parseFloat(hours), isBillable: false, isCollaboration: true,
+          taskId: taskId ? parseInt(taskId) : null, activityType: "collaboration",
+          notes: comment.trim(), dailyComment: comment.trim(), status: "draft",
+        }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Failed"); }
+      toast({ title: "Collaboration hours logged" });
+      onSaved(); onClose();
+    } catch (err: any) {
+      toast({ title: err.message || "Failed to save", variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle className="text-base">Add Collaboration Hours</DialogTitle>
+          <p className="text-xs text-muted-foreground">Log time spent collaborating on another team's project</p>
+        </DialogHeader>
+        <div className="grid gap-3 py-2">
+          <div className="space-y-1.5">
+            <Label>Project <span className="text-destructive">*</span></Label>
+            <Select value={projectId || "__none__"} onValueChange={v => setProjectId(v === "__none__" ? "" : v)}>
+              <SelectTrigger className={errors.projectId ? "border-destructive" : ""}><SelectValue placeholder="Select project…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select project…</SelectItem>
+                {projects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {errors.projectId && <p className="text-xs text-destructive">{errors.projectId}</p>}
+          </div>
+          {tasks.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Task</Label>
+              <Select value={taskId || "__none__"} onValueChange={v => setTaskId(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="— Optional task —" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— No task —</SelectItem>
+                  {tasks.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Hours <span className="text-destructive">*</span></Label>
+              <Input type="number" min="0.25" step="0.25" value={hours} onChange={e => setHours(e.target.value)} className={errors.hours ? "border-destructive" : ""} />
+              {errors.hours && <p className="text-xs text-destructive">{errors.hours}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Daily Comment <span className="text-destructive">*</span></Label>
+            <Textarea rows={2} placeholder="Describe the collaboration work…" className={`resize-none ${errors.comment ? "border-destructive" : ""}`} value={comment} onChange={e => setComment(e.target.value)} />
+            {errors.comment && <p className="text-xs text-destructive">{errors.comment}</p>}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Log Hours"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── WeeklyGrid ────────────────────────────────────────────────────────────────
 // Mon–Sun columns. Cells are clickable — opens CellContextModal.
 // allocatedProjectIds restricts the project picker for consultants.
@@ -343,6 +464,10 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
   const [taskMeta, setTaskMeta] = useState<Record<number, { etcHours: string | null; estimatedHours: string | null; loggedHours: number }>>({});
   const [taskNames, setTaskNames] = useState<Record<number, string>>({});
   const [submitBusy, setSubmitBusy] = useState<string | null>(null);
+  // Admin project row (always visible, not removable)
+  const [adminProject, setAdminProject] = useState<{ id: number; name: string } | null>(null);
+  // Collaboration modal
+  const [collabOpen, setCollabOpen] = useState(false);
 
   const weekStart = format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset), "yyyy-MM-dd");
   const days = Array.from({ length: 7 }, (_, i) => addDays(parseISO(weekStart), i));
@@ -393,6 +518,17 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
   }, [resourceId, weekStart, loadTaskMeta]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
+
+  // Fetch the administrative project once
+  useEffect(() => {
+    fetch(`${API_BASE}/projects?isAdministrative=true`)
+      .then(r => r.json())
+      .then(d => {
+        const projects = Array.isArray(d) ? d : [];
+        if (projects.length > 0) setAdminProject({ id: projects[0].id, name: projects[0].name });
+      })
+      .catch(() => {});
+  }, []);
 
   // Build grouped rows from entries — includes per-cell notes/isBillable/categoryId
   const groupedRows = useMemo<GroupedRow[]>(() => {
@@ -454,6 +590,27 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
     });
     return totals;
   }, [entries, dayKeys]);
+
+  const billableByDay = useMemo(() => {
+    const totals: Record<string, number> = {};
+    dayKeys.forEach(d => { totals[d] = 0; });
+    entries.forEach(e => {
+      if (e.entryDate && e.isBillable && totals[e.entryDate] !== undefined)
+        totals[e.entryDate] += parseFloat(String(e.hoursLogged ?? 0));
+    });
+    return totals;
+  }, [entries, dayKeys]);
+
+  // Build admin project row from entries
+  const adminRow = useMemo<GroupedRow | null>(() => {
+    if (!adminProject) return null;
+    const key = `${adminProject.id}-`;
+    const byDay: Record<string, CellEntry> = {};
+    entries.filter(e => e.projectId === adminProject.id && !e.taskId).forEach(e => {
+      if (e.entryDate) byDay[e.entryDate] = { id: e.id, hours: String(e.hoursLogged ?? ""), status: e.status, notes: e.notes ?? "", isBillable: e.isBillable ?? false };
+    });
+    return { key, projectId: adminProject.id, projectName: adminProject.name, taskId: undefined, taskName: undefined, categoryId: undefined, isBillable: false, byDay };
+  }, [adminProject, entries]);
 
   const weekTotal = Object.values(totalByDay).reduce((a, b) => a + b, 0);
 
@@ -682,6 +839,56 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
               );
             })}
 
+            {/* ── Collaboration row — dashed, additive ── */}
+            <tr className="border-t border-dashed border-amber-500/30 bg-amber-950/10">
+              <td colSpan={9} className="px-4 py-1.5 sticky left-0 z-10 bg-amber-950/10">
+                <button
+                  onClick={() => setCollabOpen(true)}
+                  className="flex items-center gap-1.5 text-[11px] text-amber-400 hover:text-amber-300 transition-colors font-medium"
+                >
+                  <Users className="h-3 w-3" />
+                  + Add collaboration hours
+                </button>
+              </td>
+            </tr>
+
+            {/* ── Admin project row (always visible, not removable) ── */}
+            {adminRow && (() => {
+              const rowTotal = dayKeys.reduce((s, d) => s + (parseFloat(adminRow.byDay[d]?.hours ?? "0") || 0), 0);
+              return (
+                <tr key={adminRow.key} className="group hover:bg-muted/10 transition-colors border-t border-border/50 bg-muted/5">
+                  <td className="px-4 py-2.5 sticky left-0 bg-muted/5 group-hover:bg-muted/10 transition-colors z-10">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                      <div className="font-medium text-foreground/70 truncate max-w-[160px] leading-tight text-[11px]">{adminRow.projectName}</div>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/40 ml-5">Administrative</div>
+                  </td>
+                  {dayKeys.map(d => {
+                    const cell = adminRow.byDay[d];
+                    const locked = cell?.status === "submitted" || cell?.status === "approved";
+                    const isWeekend = parseISO(d).getDay() === 0 || parseISO(d).getDay() === 6;
+                    const hasHours = !!(cell?.hours && parseFloat(cell.hours) > 0);
+                    const badgeCls = cell?.status === "submitted" ? "text-amber-300 bg-amber-950/40 border border-amber-400/40" :
+                      cell?.status === "approved" ? "text-emerald-300 bg-emerald-950/40 border border-emerald-400/40" :
+                      "text-foreground/60 bg-muted/40 border border-border";
+                    return (
+                      <td key={d} onClick={() => !locked && !isWeekend && setCellModal({ row: adminRow, date: d, entry: cell })}
+                        className={["px-1.5 py-2 text-center transition-all", isWeekend ? "bg-muted/5" : "", !locked && !isWeekend ? "cursor-pointer" : ""].join(" ")}
+                      >
+                        {isWeekend ? <span className="text-muted-foreground/15 text-[10px]">—</span>
+                          : hasHours ? <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-md px-2 py-0.5 ${badgeCls}`}>{parseFloat(cell!.hours)}h</span>
+                          : <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border/30 text-muted-foreground/20 hover:border-amber-500/40 hover:text-amber-400/40 transition-colors"><Plus className="h-3 w-3" /></span>}
+                      </td>
+                    );
+                  })}
+                  <td className={`px-3 py-2 text-center font-semibold text-[11px] ${rowTotal > 0 ? "text-foreground/60" : "text-muted-foreground/30"}`}>
+                    {rowTotal > 0 ? `${rowTotal}h` : "—"}
+                  </td>
+                </tr>
+              );
+            })()}
+
             {/* ── Day totals row ── */}
             <tr className="border-t-2 border-border bg-muted/20">
               <td className="px-4 py-2 text-[11px] font-semibold text-muted-foreground sticky left-0 bg-muted/20 z-10">
@@ -704,6 +911,34 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
               })}
               <td className="px-3 py-2 text-center text-[11px] font-bold text-foreground">
                 {weekTotal > 0 ? `${weekTotal}h` : "—"}
+              </td>
+            </tr>
+
+            {/* ── Billable Hours row ── */}
+            <tr className="border-t border-border/40 bg-muted/10">
+              <td className="px-4 py-1.5 text-[10px] font-medium text-muted-foreground/60 sticky left-0 bg-muted/10 z-10">
+                Billable Hours
+              </td>
+              {dayKeys.map(d => {
+                const isWeekend = parseISO(d).getDay() === 0 || parseISO(d).getDay() === 6;
+                const billable = billableByDay[d] ?? 0;
+                const dayTotal = totalByDay[d] ?? 0;
+                const nonBillable = dayTotal - billable;
+                return (
+                  <td key={d} className={`px-2 py-1.5 text-center text-[10px] ${isWeekend ? "text-muted-foreground/15" : billable > 0 ? "text-emerald-400/80" : "text-muted-foreground/30"}`}>
+                    {isWeekend ? "—" : billable > 0 ? (
+                      <span>
+                        {billable}h
+                        {nonBillable > 0 && <span className="text-muted-foreground/40 block text-[9px]">({nonBillable}h NB)</span>}
+                      </span>
+                    ) : "—"}
+                  </td>
+                );
+              })}
+              <td className="px-3 py-1.5 text-center text-[10px] text-muted-foreground/50">
+                {Object.values(billableByDay).reduce((a, b) => a + b, 0) > 0
+                  ? `${Object.values(billableByDay).reduce((a, b) => a + b, 0)}h`
+                  : "—"}
               </td>
             </tr>
 
@@ -844,6 +1079,17 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
           onSaved={load}
         />
       )}
+
+      {/* Collaboration modal */}
+      <CollaborationModal
+        open={collabOpen}
+        onClose={() => setCollabOpen(false)}
+        projects={projects}
+        resourceId={resourceId}
+        resourceName={resourceName}
+        weekStart={weekStart}
+        onSaved={load}
+      />
     </div>
   );
 }
@@ -1128,6 +1374,18 @@ export default function TimesheetsList() {
                 <List className="h-4 w-4" />
               </button>
             </div>
+          )}
+          {canApprove && (
+            <Link href="/timesheets/approval">
+              <Button variant="outline" className="gap-2">
+                <CheckCircle2 className="h-4 w-4" /> Review Queue
+                {stats.submitted > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-semibold h-4 min-w-4 px-1">
+                    {stats.submitted}
+                  </span>
+                )}
+              </Button>
+            </Link>
           )}
           {canLog && (
             <Button onClick={() => { setForm(defaultForm()); setLogOpen(true); }} className="gap-2">

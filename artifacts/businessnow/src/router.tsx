@@ -17,6 +17,7 @@ import ProjectsList from "@/pages/projects/index";
 import AccountsList from "@/pages/accounts/index";
 import ResourcesList from "@/pages/resources/index";
 import TimesheetsList from "@/pages/timesheets/index";
+import TimesheetApprovalPage from "@/pages/timesheets/approval";
 import InvoicesList from "@/pages/invoices/index";
 import MilestonesList from "@/pages/milestones/index";
 import TasksPage from "@/pages/tasks/index";
@@ -111,6 +112,9 @@ export function AppRouter() {
       <Route path="/milestones"><Guard><MilestonesList /></Guard></Route>
       <Route path="/tasks"><Guard><TasksPage /></Guard></Route>
       <Route path="/timesheets"><Guard><TimesheetsList /></Guard></Route>
+      <Route path="/timesheets/approval">
+        <Guard roles={["admin", "delivery_director", "project_manager"] as Role[]}><TimesheetApprovalPage /></Guard>
+      </Route>
 
       {/* ── Customer Management ────────────────────────────────────────── */}
       <Route path="/customers"><Guard><AccountsList /></Guard></Route>

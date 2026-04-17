@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,12 +8,15 @@ export const rateCardsTable = pgTable("rate_cards", {
   role: text("role").notNull(),
   practiceArea: text("practice_area"),
   billingRate: numeric("billing_rate", { precision: 8, scale: 2 }).notNull(),
+  sellRate: numeric("sell_rate", { precision: 8, scale: 2 }),
   costRate: numeric("cost_rate", { precision: 8, scale: 2 }),
   projectId: integer("project_id"),
   accountId: integer("account_id"),
   effectiveDate: text("effective_date"),
   expiryDate: text("expiry_date"),
   notes: text("notes"),
+  isTemplate: boolean("is_template").default(false),
+  currency: text("currency").default("CAD"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
