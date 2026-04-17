@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose, Sun, Moon, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthRole, DEMO_USERS, ROLE_LABELS } from "@/lib/auth";
 import { useSidebarCollapsed } from "@/lib/sidebar-state";
@@ -82,12 +82,40 @@ interface TopBarProps {
   onSearchOpen?: () => void;
 }
 
+type ThemeValue = "light" | "dark" | "system";
+
+function applyTheme(t: ThemeValue) {
+  const root = document.documentElement;
+  if (t === "dark") {
+    root.classList.add("dark");
+  } else if (t === "light") {
+    root.classList.remove("dark");
+  } else {
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? root.classList.add("dark")
+      : root.classList.remove("dark");
+  }
+  localStorage.setItem("theme", t);
+}
+
 export function TopBar({ onSearchOpen }: TopBarProps) {
   const { role, user, setUser } = useAuthRole();
   const [location, setLocation] = useLocation();
   const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
   const pageName = resolvePageName(location);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [theme, setTheme] = useState<ThemeValue>(
+    () => (localStorage.getItem("theme") as ThemeValue) ?? "system"
+  );
+
+  const cycleTheme = () => {
+    const next: ThemeValue = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+    setTheme(next);
+    applyTheme(next);
+  };
+
+  const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+  const themeLabel = theme === "dark" ? "Dark" : theme === "light" ? "Light" : "System";
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -191,6 +219,17 @@ export function TopBar({ onSearchOpen }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 relative flex-none">
+        {/* Theme Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={cycleTheme}
+          title={`Theme: ${themeLabel} — click to cycle`}
+        >
+          <ThemeIcon className="h-4 w-4" />
+        </Button>
+
         {/* Notification Bell */}
         <div className="relative" ref={panelRef}>
           <Button
