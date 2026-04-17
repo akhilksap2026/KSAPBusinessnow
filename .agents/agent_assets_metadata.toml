@@ -6,3 +6,9 @@ id = "KYkyths7zVNQ8W4AceQyM"
 uri = "file://REBUILD_PROMPT_GUIDE.md"
 type = "text"
 title = "BUSINESSNow — Phase-by-Phase Rebuild Guide"
+
+[[outputs]]
+id = "i-jb5exYMFR0rPtSEdbdJ"
+uri = "file://BUSINESSNow_Product_JobCard.md"
+type = "text"
+title = "BUSINESSNow — Comprehensive Product Job Card"
