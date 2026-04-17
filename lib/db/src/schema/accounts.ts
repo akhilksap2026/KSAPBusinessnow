@@ -15,6 +15,10 @@ export const accountsTable = pgTable("accounts", {
   otmVersion: text("otm_version"),
   cloudDeployment: boolean("cloud_deployment").default(false),
   renewalDate: text("renewal_date"),
+  type: text("type"),
+  paymentTerms: text("payment_terms"),
+  contractHeader: text("contract_header"),
+  convertedFromProspectId: integer("converted_from_prospect_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -39,8 +39,8 @@ import ChangesPage from "@/pages/changes/index";
 // Opportunities
 import OpportunitiesPage from "@/pages/opportunities/index";
 
-// Stubs
 import ProspectsPage from "@/pages/prospects/index";
+import ProspectDetail from "@/pages/prospects/detail";
 import RateCardsPage from "@/pages/rate-cards/index";
 
 // Templates
@@ -176,6 +176,9 @@ export function AppRouter() {
       <Route path="/projects/:id"><Guard><ProjectDetail /></Guard></Route>
       <Route path="/customers/:id"><Guard><AccountDetail /></Guard></Route>
       <Route path="/accounts/:id"><Redirect to="/customers" /></Route>
+      <Route path="/prospects/:id">
+        <Guard roles={["account_manager", "delivery_director", "admin"]}><ProspectDetail /></Guard>
+      </Route>
       <Route path="/resources/:id">
         <Guard roles={ROUTE_ROLES["/resources/:id"]}><ResourceDetail /></Guard>
       </Route>

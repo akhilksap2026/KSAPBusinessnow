@@ -28,7 +28,7 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 | Sprint 2 | Terminology rename (Account→Customer) + nav (Prospects, Rate Cards nav items) | ✅ Complete |
 | Sprint 3 | Resource module enhancements (heatmap tree, soft/hard visual, skills matrix) | ✅ Complete |
 | Sprint 4 | Project/Task module (7-level hierarchy, ETC, comments, dependencies) | ✅ Complete |
-| Sprint 5 | CRM: Prospects module + milestone types + payment alerts | Pending |
+| Sprint 5 | CRM: Prospects module + milestone types + payment alerts + opportunity prospect link + customer kanban | ✅ Complete |
 | Sprint 6 | Timesheets + Rate Cards + Billing (admin project, collaboration, PM approval) | Pending |
 | Sprint 7 | Security middleware + polish (dark mode, virtual lists, empty states) | Pending |
 

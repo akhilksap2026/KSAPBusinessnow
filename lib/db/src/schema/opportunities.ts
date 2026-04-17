@@ -15,7 +15,8 @@ export const GONOGO_STATUS = ["pending", "approved", "rejected", "deferred"] as 
 export const opportunitiesTable = pgTable("opportunities", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  accountId: integer("account_id").notNull(),
+  accountId: integer("account_id"),
+  prospectId: integer("prospect_id"),
   accountName: text("account_name"),
   stage: text("stage").notNull().default("lead"),
   type: text("type").notNull().default("implementation"),

@@ -25,6 +25,9 @@ export const milestonesTable = pgTable("milestones", {
   approvalStatus: text("approval_status").default("not_required"),
   clientAction: text("client_action"),
   sequence: integer("sequence").default(1),
+  milestoneType: text("milestone_type").default("project"),
+  invoiceAmount: numeric("invoice_amount", { precision: 14, scale: 2 }),
+  invoiceAlertSent: boolean("invoice_alert_sent").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

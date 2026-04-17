@@ -110,6 +110,7 @@ export default function AccountDetail() {
               Change Orders ({changeRequests.length})
             </TabsTrigger>
             <TabsTrigger value="info" className="data-[state=active]:bg-muted">Account Info</TabsTrigger>
+            <TabsTrigger value="contacts" className="data-[state=active]:bg-muted">Contacts</TabsTrigger>
           </TabsList>
 
           {/* Health Tab */}
@@ -330,12 +331,23 @@ export default function AccountDetail() {
                     ["Status", account.status || "—"],
                     ["Annual Contract Value", fmt(account.annualContractValue || 0)],
                     ["Renewal Date", account.renewalDate || "—"],
+                    ["Payment Terms", (account as any).paymentTerms || "—"],
+                    ["Contract Header", (account as any).contractHeader || "—"],
                   ].map(([label, value]) => (
                     <div key={label} className="flex justify-between">
                       <span className="text-muted-foreground/70">{label}</span>
                       <span className="text-foreground font-medium capitalize">{value}</span>
                     </div>
                   ))}
+                  {(account as any).convertedFromProspectId && (
+                    <div className="pt-2 border-t border-border flex justify-between items-center">
+                      <span className="text-muted-foreground/70">Converted From</span>
+                      <Link href={`/prospects/${(account as any).convertedFromProspectId}`}
+                        className="text-primary hover:underline text-sm flex items-center gap-1 font-medium">
+                        View Prospect <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               <Card className="bg-card border-border">
@@ -353,6 +365,16 @@ export default function AccountDetail() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="contacts">
+            <Card className="bg-card border-border">
+              <CardContent className="flex flex-col items-center justify-center py-16 gap-3">
+                <Plus className="h-10 w-10 text-muted-foreground/30" />
+                <p className="text-lg font-semibold text-foreground">Contacts</p>
+                <p className="text-sm text-muted-foreground">Coming soon — contact management for this account.</p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

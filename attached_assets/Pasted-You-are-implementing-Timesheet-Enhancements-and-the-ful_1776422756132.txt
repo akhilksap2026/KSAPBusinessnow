@@ -1,0 +1,291 @@
+You are implementing Timesheet Enhancements and the full Billing / Rate Cards module.
+
+STRICT RULES:
+- DO NOT modify:
+  - /projects tasks tab
+  - /resources heatmap
+  - /prospects pages
+- DO NOT change:
+  - existing weekly timesheet grid layout
+  - existing submit flow
+- ALL changes must be additive to the existing timesheet system
+
+Dependencies:
+- Bucket 1 (timesheet columns, rate_cards, isAdministrative on projects)
+- Bucket 2 (Rate Cards navigation entry)
+
+---
+
+## 1. Administrative Project in Timesheet Grid
+
+Frontend:
+- On timesheet grid load:
+  - Always include the Administrative project as a row
+  - Fetch via: GET /api/projects?isAdministrative=true (returns 1 project)
+  - Insert this row:
+    - At bottom of project rows
+    - Above "Day Total" row
+  - Row is NOT removable
+
+- Tasks popover for this row must include:
+  - Vacation/PTO
+  - Sick Leave
+  - Training
+  - Public Holidays
+  - Internal Meetings
+  - Business Development
+
+Backend:
+- Update projects route:
+  - Allow query filter: isAdministrative
+
+- IMPORTANT:
+  Administrative projects MUST be excluded from ALL finance APIs:
+  - GET /api/finance/summary
+  - GET /api/projects/:id/revenue
+  - GET /api/invoices
+  - ALL billing reports
+
+---
+
+## 2. Collaboration Time Row
+
+Frontend:
+- Add row above Administrative project row:
+  - Label: "+ Add collaboration hours"
+  - Style: dashed row
+
+On click → open dialog:
+- Fields:
+  - Project (searchable, ALL projects)
+  - Task (leaf tasks of selected project)
+  - Hours (0.25 increments)
+  - Daily Comment (required)
+  - Date (default today, editable)
+
+Submit:
+- POST /api/timesheets
+- Include: isCollaboration = true
+
+Display:
+- Show as separate rows in grid
+- Style: distinct left border (orange/amber)
+
+---
+
+## 3. Role Auto-Population (Backend)
+
+File: api-server/src/routes/timesheets.ts
+
+On POST /api/timesheets:
+Before insert:
+
+1. Get allocation:
+   SELECT allocationType FROM allocations
+   WHERE resourceId=? AND projectId=? LIMIT 1
+
+2. Get applicable rate card:
+   SELECT id FROM rate_cards
+   WHERE projectId=?
+      OR (projectId IS NULL AND isTemplate=true)
+   ORDER BY projectId DESC NULLS LAST
+   LIMIT 1
+
+3. Match role:
+   SELECT sellRate, buyRate FROM rate_card_roles
+   WHERE rateCardId=? AND roleName=resource.defaultRole
+
+4. Set fields:
+   IF match:
+     billedRole = defaultRole
+     sellRate = sellRate
+     costRate = resource.costRate
+   ELSE:
+     billedRole = defaultRole
+     sellRate = null
+     costRate = resource.costRate
+
+- This is NOT visible in UI
+- Only stored for margin calculations
+
+---
+
+## 4. Daily Comment Required
+
+Frontend:
+- Label: "Daily Comment *"
+- Validate:
+  - Must not be empty or whitespace
+  - Show inline error: "Daily comment is required"
+
+Backend:
+- Reject request if missing:
+  return 400 "dailyComment is required"
+
+---
+
+## 5. Billable Toggle Behavior
+
+- Default value comes from selected task (task.isBillable)
+- User can override
+- Store override on timesheet entry
+
+---
+
+## 6. Billable Hours Row
+
+Add row below "Day Total":
+
+- Each cell:
+  SUM(hours WHERE isBillable = true)
+
+- In Day Total:
+  show non-billable as:
+  "(Xh non-billable)" in grey
+
+- Display-only (non-interactive)
+
+---
+
+## 7. Timesheet Approval Page
+
+Route: /timesheets/approval
+
+Access:
+- project_manager
+- delivery_director
+- admin
+
+UI:
+- Filters:
+  - Project
+  - Date range
+  - Resource
+  - Status (All / Submitted / Approved / Rejected)
+
+Table columns:
+- Checkbox
+- Resource
+- Date
+- Project
+- Task
+- Hours
+- Billable
+- Daily Comment
+- Billed Role
+- Status
+- Actions
+
+Status colors:
+- submitted → blue
+- approved → green
+- rejected → red
+
+Bulk actions:
+- Approve → POST /api/timesheets/approve
+- Reject → POST /api/timesheets/reject (with reason)
+
+Backend APIs:
+- POST /api/timesheets/approve
+- POST /api/timesheets/reject
+- GET /api/timesheets/pending-approval
+
+---
+
+## 8. Submit Row Status Logic
+
+Update timesheet grid submit row:
+
+- ALL approved → "Approved ✓" (green)
+- ALL submitted → "Submitted ✓" (grey)
+- ANY rejected → "Rejected" (red)
+- Mixed draft/submitted → show "Submit"
+
+---
+
+## 9. Rate Cards Page
+
+Route: /rate-cards
+
+Section 1: Global Templates
+- GET /api/rate-cards?isTemplate=true
+- Create template
+- Duplicate template
+
+Section 2: Project Rate Cards
+- GET /api/rate-cards?isTemplate=false
+- Copy from template
+
+Role Table:
+- Columns:
+  - Role Name
+  - Sell Rate
+  - Buy Rate (restricted by permissions)
+  - Assigned Resources
+
+APIs:
+- CRUD for rate cards
+- CRUD for roles
+- Copy template to project
+
+---
+
+## 10. Finance Enhancements
+
+### Cost Variance Alert
+- Banner:
+  "⚠️ N entries have cost variance"
+
+Definition:
+- costRate > buyRate
+
+### Revenue Table Updates
+- Add:
+  - Cost
+  - Margin %
+  - Variance Flag
+
+### Pending Approvals Section
+- Show count
+- Link to approval page
+
+---
+
+## 11. Invoice Generation
+
+### Step 1:
+Select type:
+- Time & Material
+- Fixed Fee
+
+### T&M:
+- Use approved, billable timesheets only
+- POST /api/invoices/generate-from-timesheets
+
+### Fixed Fee:
+- Use completed milestones
+- POST /api/invoices/generate-from-milestone
+
+---
+
+## 12. PM Dashboard
+
+- Add "Pending Approvals" section
+- Fetch:
+  GET /api/timesheets/pending-approval
+- Show count + link
+
+---
+
+## VALIDATION CHECKLIST
+
+- Admin project always visible in timesheet
+- Collaboration row works and saves correctly
+- Daily comment validation enforced
+- billedRole, sellRate, costRate saved in DB
+- Billable Hours row visible
+- Approval flow works (bulk + individual)
+- Rate cards page fully functional
+- Finance page shows variance + margin
+- Invoice generation works for both types
+- PM dashboard shows approval count

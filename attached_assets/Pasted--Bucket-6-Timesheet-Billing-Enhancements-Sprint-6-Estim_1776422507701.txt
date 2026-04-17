@@ -1,0 +1,258 @@
+## Bucket 6 — Timesheet & Billing Enhancements
+**Sprint 6 · Estimated: 3–4 days**
+
+> Depends on Bucket 1 (timesheets columns, rate_cards, isAdministrative on projects)
+> and Bucket 2 (Rate Cards nav entry).
+> Do NOT touch /projects tasks tab, /resources heatmap, or /prospects pages.
+
+```
+You are building timesheet enhancements and the full billing/rate cards module.
+Do NOT change the existing weekly timesheet grid layout or existing submit flow.
+Do NOT change any resource, project, or CRM pages.
+All changes are additive to the existing timesheet page.
+
+─── 1. ADMINISTRATIVE PROJECT IN TIMESHEET GRID ───
+In the timesheet weekly grid component:
+  On load, always include the Administrative project as a row in the grid,
+  regardless of whether the resource is formally allocated to it.
+  Fetch the admin project: GET /api/projects?isAdministrative=true (returns 1 result)
+  Insert this row at the BOTTOM of the project rows, above the Day Total row.
+  This row cannot be removed by the resource.
+  The tasks popover for this row shows: Vacation/PTO, Sick Leave, Training,
+  Public Holidays, Internal Meetings, Business Development (the seeded admin tasks).
+
+In api-server/src/routes/projects.ts:
+  Add isAdministrative to the allowed query filters.
+  IMPORTANT: In ALL finance-related API responses, filter out isAdministrative=true
+  projects. They must NEVER appear in:
+    - GET /api/finance/summary
+    - GET /api/projects/:id/revenue
+    - GET /api/invoices
+    - Any billing report
+
+─── 2. COLLABORATION TIME ROW ───
+At the bottom of the timesheet project rows (above the admin project row),
+add a dashed "+ Add collaboration hours" row:
+  Clicking opens a dialog:
+    Project (searchable select — shows ALL projects, not just assigned ones)
+    Task (select from chosen project's leaf tasks)
+    Hours (number input, 0.25 increments)
+    Daily Comment (required)
+    Date (pre-filled with today's date, editable)
+  On submit: POST /api/timesheets with isCollaboration=true
+  These entries appear as additional rows in the grid, styled with a different
+  left-border color (orange/amber) to distinguish from regular entries.
+
+─── 3. ROLE AUTO-POPULATION ON TIMESHEET POST ───
+In api-server/src/routes/timesheets.ts, update POST /api/timesheets:
+  After receiving the body, before inserting to DB:
+  1. Look up the resource's allocation for this project:
+       SELECT allocationType FROM allocations
+       WHERE resourceId=:resourceId AND projectId=:projectId
+       LIMIT 1
+  2. Look up the project's rate card:
+       SELECT rc.id FROM rate_cards rc
+       WHERE rc.projectId=:projectId
+       OR (rc.projectId IS NULL AND rc.isTemplate=true)
+       ORDER BY rc.projectId DESC NULLS LAST
+       LIMIT 1
+  3. Look up the resource's defaultRole and find a matching rate_card_role:
+       SELECT sellRate, buyRate FROM rate_card_roles
+       WHERE rateCardId=:rateCardId AND roleName=:defaultRole
+  4. If found: set billedRole=defaultRole, sellRate=sellRate, costRate=resource.costRate
+  5. If not found (role not on rate card): set billedRole=defaultRole,
+     sellRate=null, costRate=resource.costRate
+  This auto-population is silent — the user never sees these fields in the UI,
+  but they are stored for margin calculations.
+
+─── 4. DAILY COMMENT REQUIRED ───
+In the timesheet entry popover (cell click opens this):
+  Make the "Daily Comment" field required.
+  Add red asterisk to label: "Daily Comment *"
+  On submit: if dailyComment is empty or whitespace, show inline error:
+    "Daily comment is required"
+  Do NOT call POST /api/timesheets until dailyComment is present.
+  In api-server/src/routes/timesheets.ts: also validate server-side:
+    if (!body.dailyComment?.trim()) return 400 "dailyComment is required"
+
+─── 5. BILLABLE / NON-BILLABLE OVERRIDE ───
+In the timesheet entry popover:
+  The "Billable" toggle already exists. Ensure its DEFAULT value comes from the task:
+  1. When a task is selected in the popover, fetch the task's isBillable default
+     (this may already be on the task object from the API).
+  2. Pre-fill the toggle to match the task's billable setting.
+  3. User can override to non-billable (e.g., for rework or waived hours).
+  4. The override is stored at the timesheet entry level (isBillable on timesheets).
+
+─── 6. BILLABLE HOURS ROW IN GRID ───
+In the timesheet weekly grid, below the "Day Total" row, add a "Billable Hours" row:
+  Each cell = sum of hours for that day where isBillable=true.
+  Non-billable hours are shown in grey text: "(Xh non-billable)" in the Day Total cell.
+  This is a display-only row — not interactive.
+
+─── 7. PM APPROVAL SCREEN (/timesheets/approval) ───
+Create a new page at /timesheets/approval:
+  Guard: roles=["project_manager", "delivery_director", "admin"]
+
+  Header: "Timesheet Approval"
+  Filter bar: Project (select) | Date range | Resource (select) | Status filter
+  (All / Submitted / Approved / Rejected)
+
+  Table columns:
+    Checkbox | Resource | Date | Project | Task | Hours | Billable |
+    Daily Comment | Billed Role | Status badge | Actions
+
+  Status badges:
+    submitted=blue, approved=emerald, rejected=red
+
+  Bulk actions bar (appears when checkboxes selected):
+    "Approve Selected" → POST /api/timesheets/approve { timesheetIds, approverId }
+    "Reject Selected" → opens a dialog for rejection reason →
+      POST /api/timesheets/reject { timesheetIds, approverId, reason }
+
+  Individual row actions:
+    Approve button → approve single entry
+    Reject button → rejection reason dialog → reject single entry
+
+  On approval:
+    Status becomes 'approved', approvedAt=NOW(), approvedById=current user's resource id.
+    The consultant's timesheet submit row shows "Approved ✓" for that day.
+
+  On rejection:
+    Status becomes 'rejected'.
+    Consultant sees a "Rejected" badge on that day's submit row with rejection reason.
+
+  API endpoints needed in api-server/src/routes/timesheets.ts:
+    POST /api/timesheets/approve — accepts { timesheetIds: number[], approverId: number }
+    POST /api/timesheets/reject  — accepts { timesheetIds: number[], approverId: number, reason: string }
+    GET /api/timesheets/pending-approval?projectId= — for PM's approval queue
+
+─── 8. APPROVED STATUS ON SUBMIT ROW ───
+In the existing timesheet grid, update the Submit row:
+  Current: Disabled | Submit | Submitted ✓
+  New:     Disabled | Submit | Submitted ✓ | Approved ✓ (green)
+  Logic:
+    - If ALL entries for that day have status='approved' → show "Approved ✓" (green)
+    - If ALL entries for that day have status='submitted' → show "Submitted ✓" (grey)
+    - If ANY entries are 'rejected' → show "Rejected" badge (red)
+    - If mix of submitted/draft → show "Submit" button
+
+─── 9. RATE CARDS PAGE (/rate-cards) ───
+Replace the stub page with the full Rate Cards implementation:
+
+Section 1: Global Templates
+  GET /api/rate-cards?isTemplate=true
+  List of template rate cards.
+  Each card shows: name, effectiveDate, expiryDate, currency.
+  Click to expand and see the role table (see below).
+  "New Template" button → modal: name, effectiveDate, expiryDate, currency
+    POST /api/rate-cards { name, isTemplate: true, effectiveDate, currency }
+  Copy icon on each template → duplicate with new effective date prompt.
+
+Section 2: Project Rate Cards
+  GET /api/rate-cards?isTemplate=false
+  Shows rate cards linked to specific projects.
+  "Copy from Global Template" button per project:
+    POST /api/rate-cards/project/:projectId/copy-from-template { templateRateCardId }
+
+Rate Card Role Table (shown when a rate card is expanded):
+  Columns: Role Name | Sell Rate | Buy Rate [hidden unless useCanSee('financial_rates')] |
+           Resources in This Role
+  "Add Role" button → inline row appended: role name input, sell rate input, buy rate input
+  Save row: POST /api/rate-cards/:id/roles
+  Edit existing row inline.
+  Delete row: DELETE /api/rate-cards/:id/roles/:roleId
+
+API needed in api-server/src/routes/rate-cards.ts:
+  GET /api/rate-cards?isTemplate=&projectId=
+  POST /api/rate-cards
+  GET /api/rate-cards/:id
+  PUT /api/rate-cards/:id
+  POST /api/rate-cards/:id/roles
+  DELETE /api/rate-cards/:id/roles/:roleId
+  GET /api/rate-cards/project/:projectId
+  POST /api/rate-cards/project/:projectId/copy-from-template
+
+Register in routes/index.ts.
+
+─── 10. FINANCE PAGE: COST VARIANCE ALERT + MARGIN TABLE ───
+In the /finance page:
+
+a) Cost Variance Alert:
+   Add a banner at the top of the page:
+   GET /api/finance/summary (update this endpoint to return costVarianceCount)
+   costVarianceCount = COUNT of timesheet entries where costRate > buyRate for their role
+   Banner: "⚠️ [N] timesheet entries have cost variance — resource cost exceeds budgeted role rate"
+   Show in amber if > 0, hide if 0.
+
+b) Revenue by Project Table:
+   Update to include: Cost column, Margin % column, Variance Flag column
+   Variance Flag: ⚠️ icon if any entries for that project have costRate > buyRate
+
+c) Pending Approvals Summary:
+   At the bottom of the finance page, add a "Pending Timesheet Approvals" section:
+   Table: Project | Submitted entries awaiting approval | Link to /timesheets/approval
+
+In api-server/src/routes/finance.ts:
+  Update GET /api/finance/summary to return costVarianceCount.
+  costVarianceCount: SELECT COUNT(*) FROM timesheets
+    WHERE costRate IS NOT NULL AND sellRate IS NOT NULL
+    AND costRate > (SELECT buyRate FROM rate_card_roles WHERE roleName = timesheets.billedRole LIMIT 1)
+
+─── 11. INVOICE GENERATION ───
+In the /invoices page, update the "New Invoice" button to a two-step flow:
+
+Step 1: Choose invoice type
+  "Time & Material" | "Fixed-Fee (Milestone)"
+
+Step 2a — T&M Invoice:
+  Project select → fetches approved timesheets for that project
+  Date range picker
+  Preview table: Resource | Date | Task | Hours | Rate | Amount | Daily Comment
+  (only entries with status='approved' and isBillable=true, isAdministrative=false)
+  "Generate Invoice" button:
+  POST /api/invoices/generate-from-timesheets
+    { projectId, startDate, endDate, includeApprovedOnly: true }
+  Server creates the invoice with lineItems JSON populated from timesheet entries.
+  On success: navigate to /invoices/:newId.
+
+Step 2b — Fixed-Fee Invoice:
+  Project select → fetches payment milestones for that project
+    (milestoneType='payment' AND status='completed' AND isBillable=true)
+  Select milestone from list → shows invoiceAmount
+  "Generate Invoice" button:
+  POST /api/invoices/generate-from-milestone { milestoneId }
+  Server creates invoice with single line item: milestone name + invoiceAmount.
+
+API needed in api-server/src/routes/invoices.ts:
+  POST /api/invoices/generate-from-timesheets
+  POST /api/invoices/generate-from-milestone
+
+─── 12. PM DASHBOARD: PENDING APPROVALS COUNT ───
+In the /dashboard/pm page:
+  Add a "Pending Timesheet Approvals" section:
+  GET /api/timesheets/pending-approval (for all projects this PM manages)
+  Shows count of submitted entries awaiting approval.
+  Link → /timesheets/approval
+  This count also shows in the PM's notification bell if > 0 unreviewed entries.
+```
+
+**✅ Bucket 6 Validation:**
+```
+- /timesheets: Administrative project row appears for all users, cannot be removed
+- /timesheets: "+ Add collaboration hours" row visible at bottom of project rows
+- Logging collaboration hours creates entry with isCollaboration=true (check DB)
+- Entering hours without daily comment shows validation error, does not save
+- After saving a timesheet entry: check DB — billedRole, sellRate, costRate are populated
+- Billable Hours row visible below Day Total row in timesheet grid
+- /timesheets/approval accessible to PM, not to consultant (redirected)
+- Bulk approve 3 entries in /timesheets/approval → entries show "Approved ✓" on consultant's grid
+- Reject an entry → consultant sees "Rejected" badge
+- /rate-cards: Global template section shows the 1 seeded rate card with 8 roles
+- Buy rate column hidden for consultant role on rate-cards page (check useCanSee)
+- /finance: Cost Variance banner shows (if variance entries exist in DB)
+- /finance: Revenue by project table shows Cost and Margin % columns
+- "New Invoice" T&M flow: preview shows only approved, billable entries
+- Generated T&M invoice has correct line items in lineItems JSON
+- "New Invoice" Fixed-Fee flow: selects completed payment milestone, generates invoice
+- PM dashboard shows pending approvals count with link to /timesheets/approval

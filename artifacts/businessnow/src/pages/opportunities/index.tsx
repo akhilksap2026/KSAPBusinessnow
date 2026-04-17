@@ -54,7 +54,7 @@ const STAGE_HEADER: Record<Stage, string> = {
 };
 
 const STAGE_PROB: Record<Stage, number> = {
-  lead: 10, qualified: 20, discovery: 30, proposal: 50,
+  lead: 10, qualified: 30, discovery: 10, proposal: 50,
   negotiation: 70, won: 100, lost: 0, parked: 0,
 };
 
@@ -139,9 +139,11 @@ function KanbanCard({ opp, overlay = false }: { opp: any; overlay?: boolean }) {
         <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2 flex-1">{opp.name}</p>
       </div>
 
-      {/* Account */}
+      {/* Account / Prospect */}
       <div className="flex items-center gap-1 text-[11px] text-muted-foreground pl-5">
-        <Building2 className="h-2.5 w-2.5 shrink-0" />
+        {opp.prospectId
+          ? <Target className="h-2.5 w-2.5 shrink-0 text-violet-400" />
+          : <Building2 className="h-2.5 w-2.5 shrink-0" />}
         <span className="truncate">{opp.accountName ?? "—"}</span>
       </div>
 
@@ -238,14 +240,15 @@ function KanbanColumn({ stage, opps }: { stage: Stage; opps: any[] }) {
 // ── Add Opportunity Modal ─────────────────────────────────────────────────────
 
 type OppForm = {
-  name: string; accountId: string; stage: Stage; type: string;
+  name: string; accountId: string; prospectId: string; linkType: "customer" | "prospect";
+  stage: Stage; type: string;
   value: string; probability: string; expectedCloseDate: string;
   expectedStartDate: string; expectedDurationWeeks: string;
   ownerName: string; deliveryComplexity: string; summary: string;
 };
 
 const defaultOppForm = (): OppForm => ({
-  name: "", accountId: "", stage: "lead", type: "implementation",
+  name: "", accountId: "", prospectId: "", linkType: "customer", stage: "lead", type: "implementation",
   value: "", probability: "10", expectedCloseDate: "", expectedStartDate: "",
   expectedDurationWeeks: "", ownerName: "", deliveryComplexity: "medium", summary: "",
 });
@@ -258,6 +261,7 @@ function AddOpportunityModal({ open, onClose, onCreated, initialStage }: {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof OppForm, string>>>({});
   const [accounts, setAccounts] = useState<{ id: number; name: string }[]>([]);
+  const [prospects, setProspects] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -265,6 +269,10 @@ function AddOpportunityModal({ open, onClose, onCreated, initialStage }: {
         .then(r => r.json())
         .then(d => setAccounts(Array.isArray(d) ? d.map((a: any) => ({ id: a.id, name: a.name })) : []))
         .catch(() => setAccounts([]));
+      fetch(`${API_BASE}/prospects`)
+        .then(r => r.json())
+        .then(d => setProspects(Array.isArray(d) ? d.filter((p: any) => p.status !== "converted").map((p: any) => ({ id: p.id, name: p.name })) : []))
+        .catch(() => setProspects([]));
       setForm({ ...defaultOppForm(), stage: initialStage ?? "lead", probability: String(STAGE_PROB[initialStage ?? "lead"]) });
     }
   }, [open, initialStage]);
@@ -276,7 +284,8 @@ function AddOpportunityModal({ open, onClose, onCreated, initialStage }: {
   const validate = () => {
     const e: typeof errors = {};
     if (!form.name.trim()) e.name = "Name is required";
-    if (!form.accountId)   e.accountId = "Account is required";
+    if (form.linkType === "customer" && !form.accountId) e.accountId = "Account is required";
+    if (form.linkType === "prospect" && !form.prospectId) e.prospectId = "Prospect is required";
     if (form.value && isNaN(parseFloat(form.value))) e.value = "Must be a valid number";
     if (form.probability) {
       const p = parseInt(form.probability);
@@ -291,9 +300,13 @@ function AddOpportunityModal({ open, onClose, onCreated, initialStage }: {
     setSaving(true);
     try {
       const selectedAccount = accounts.find(a => String(a.id) === form.accountId);
+      const selectedProspect = prospects.find(p => String(p.id) === form.prospectId);
       const payload: Record<string, unknown> = {
-        name: form.name.trim(), accountId: Number(form.accountId),
-        accountName: selectedAccount?.name ?? "", stage: form.stage, type: form.type,
+        name: form.name.trim(),
+        accountId: form.linkType === "customer" ? Number(form.accountId) : 0,
+        accountName: form.linkType === "customer" ? (selectedAccount?.name ?? "") : (selectedProspect?.name ?? ""),
+        prospectId: form.linkType === "prospect" ? Number(form.prospectId) : undefined,
+        stage: form.stage, type: form.type,
         probability: parseInt(form.probability) || 0, deliveryComplexity: form.deliveryComplexity,
       };
       if (form.value) payload.value = parseFloat(form.value);
@@ -335,20 +348,55 @@ function AddOpportunityModal({ open, onClose, onCreated, initialStage }: {
               className={errors.name ? "border-red-500" : ""} autoFocus />
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Account <span className="text-red-500">*</span></Label>
-              <Select value={form.accountId || "__none__"} onValueChange={v => set("accountId", v === "__none__" ? "" : v)}>
-                <SelectTrigger className={errors.accountId ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select account…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— Select account —</SelectItem>
-                  {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {errors.accountId && <p className="text-xs text-red-500">{errors.accountId}</p>}
+          <div className="space-y-1.5">
+            <Label>Link To <span className="text-red-500">*</span></Label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => set("linkType", "customer")}
+                className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
+                  ${form.linkType === "customer" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+              >
+                <Building2 className="h-4 w-4" /> Customer
+              </button>
+              <button
+                type="button"
+                onClick={() => set("linkType", "prospect")}
+                className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
+                  ${form.linkType === "prospect" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+              >
+                <Target className="h-4 w-4" /> Prospect
+              </button>
             </div>
+            {form.linkType === "customer" ? (
+              <div>
+                <Select value={form.accountId || "__none__"} onValueChange={v => set("accountId", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className={errors.accountId ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Select account…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Select account —</SelectItem>
+                    {accounts.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {errors.accountId && <p className="text-xs text-red-500">{errors.accountId}</p>}
+              </div>
+            ) : (
+              <div>
+                <Select value={form.prospectId || "__none__"} onValueChange={v => set("prospectId", v === "__none__" ? "" : v)}>
+                  <SelectTrigger className={(errors as any).prospectId ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Select prospect…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Select prospect —</SelectItem>
+                    {prospects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {(errors as any).prospectId && <p className="text-xs text-red-500">{(errors as any).prospectId}</p>}
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Stage</Label>
               <Select value={form.stage} onValueChange={v => handleStageChange(v as Stage)}>
@@ -671,7 +719,7 @@ export default function OpportunitiesPage() {
                   <thead>
                     <tr className="border-b border-border bg-muted/20 text-muted-foreground text-xs font-medium">
                       <th className="text-left px-4 py-3">Opportunity</th>
-                      <th className="text-left px-3 py-3">Account</th>
+                      <th className="text-left px-3 py-3">Customer / Prospect</th>
                       <th className="text-left px-3 py-3">Stage</th>
                       <th className="text-left px-3 py-3">Type</th>
                       <th className="text-right px-3 py-3">Value</th>
@@ -693,7 +741,9 @@ export default function OpportunitiesPage() {
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1.5 text-xs text-foreground">
-                              <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                              {o.prospectId
+                                ? <Target className="h-3 w-3 text-violet-400 shrink-0" />
+                                : <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />}
                               <span className="truncate max-w-[120px]">{o.accountName ?? "—"}</span>
                             </div>
                           </td>

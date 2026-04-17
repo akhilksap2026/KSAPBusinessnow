@@ -13,7 +13,7 @@ import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Building2, TrendingUp, AlertTriangle, DollarSign,
-  Cloud, Server, Calendar, CheckCircle2, Plus, X,
+  Cloud, Server, Calendar, CheckCircle2, Plus, X, LayoutList, Columns3,
 } from "lucide-react";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
@@ -44,6 +44,8 @@ type AddAccountForm = {
   cloudDeployment: boolean;
   annualContractValue: string;
   renewalDate: string;
+  paymentTerms: string;
+  contractHeader: string;
 };
 
 const defaultForm = (): AddAccountForm => ({
@@ -56,6 +58,8 @@ const defaultForm = (): AddAccountForm => ({
   cloudDeployment: false,
   annualContractValue: "",
   renewalDate: "",
+  paymentTerms: "",
+  contractHeader: "",
 });
 
 function HealthBar({ score }: { score: number | null }) {
@@ -140,6 +144,8 @@ function AddAccountModal({ open, onClose, onCreated }: {
       if (form.otmVersion)          payload.otmVersion = form.otmVersion;
       if (form.annualContractValue) payload.annualContractValue = parseFloat(form.annualContractValue);
       if (form.renewalDate)         payload.renewalDate = form.renewalDate;
+      if (form.paymentTerms)        payload.paymentTerms = form.paymentTerms;
+      if (form.contractHeader)      payload.contractHeader = form.contractHeader;
 
       const res = await fetch(`${API_BASE}/accounts`, {
         method: "POST",
@@ -282,6 +288,28 @@ function AddAccountModal({ open, onClose, onCreated }: {
             />
           </div>
 
+          {/* Payment Terms + Contract Header */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="acc-payment">Payment Terms</Label>
+              <Input
+                id="acc-payment"
+                placeholder="e.g. Net 30"
+                value={form.paymentTerms}
+                onChange={e => set("paymentTerms", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="acc-contract">Contract Header</Label>
+              <Input
+                id="acc-contract"
+                placeholder="e.g. MSA 2024"
+                value={form.contractHeader}
+                onChange={e => set("contractHeader", e.target.value)}
+              />
+            </div>
+          </div>
+
           {/* Cloud Deployment toggle */}
           <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/20">
             <div className="space-y-0.5">
@@ -320,12 +348,80 @@ function AddAccountModal({ open, onClose, onCreated }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+type ViewMode = "table" | "kanban";
+
+const KANBAN_COLUMNS = [
+  { id: "active",   label: "Active",   color: "border-t-emerald-500" },
+  { id: "at_risk",  label: "At Risk",  color: "border-t-red-500" },
+  { id: "inactive", label: "Inactive", color: "border-t-slate-400" },
+];
+
+function CustomerKanban({ accounts, onStatusChange }: { accounts: any[]; onStatusChange: (id: number, status: string) => void }) {
+  const byStatus: Record<string, any[]> = { active: [], at_risk: [], inactive: [] };
+  accounts.forEach(a => { if (byStatus[a.status]) byStatus[a.status].push(a); });
+
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="flex gap-4 min-w-max">
+        {KANBAN_COLUMNS.map(col => {
+          const items = byStatus[col.id] ?? [];
+          return (
+            <div key={col.id} className="w-72 shrink-0">
+              <div className={`flex items-center justify-between mb-3 pb-2 border-b-2 ${col.color.replace("border-t-", "border-b-")}`}>
+                <span className="text-xs font-semibold">{col.label}</span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{items.length}</span>
+              </div>
+              <div className="space-y-2">
+                {items.map(a => (
+                  <div key={a.id} className="bg-card border border-border rounded-lg p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link href={`/customers/${a.id}`} className="text-sm font-semibold text-primary hover:underline leading-tight line-clamp-2">{a.name}</Link>
+                      <Select value={a.status} onValueChange={v => onStatusChange(a.id, v)}>
+                        <SelectTrigger className="h-5 w-5 p-0 border-0 bg-transparent [&>svg]:hidden shrink-0 opacity-40 hover:opacity-100" />
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="at_risk">At Risk</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {a.annualContractValue && Number(a.annualContractValue) > 0 && (
+                      <div className="flex items-center gap-1 text-xs font-semibold text-foreground">
+                        <DollarSign className="h-3 w-3 text-muted-foreground" />
+                        ${Number(a.annualContractValue).toLocaleString()}
+                      </div>
+                    )}
+                    <HealthBar score={a.healthScore ?? null} />
+                    {a.renewalDate && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        <RenewalBadge date={a.renewalDate} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {items.length === 0 && (
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                    <p className="text-xs text-muted-foreground">No accounts</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function AccountsList() {
   const { data: accounts, isLoading, refetch } = useListAccounts();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSegment, setFilterSegment] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
+  const [view, setView] = useState<ViewMode>("table");
 
   const filtered = useMemo(() => {
     if (!accounts) return [];
@@ -354,6 +450,19 @@ export default function AccountsList() {
     })();
     return { total: all.length, active, atRisk, totalACV, avgHealth };
   }, [accounts]);
+
+  const handleStatusChange = async (id: number, status: string) => {
+    try {
+      await fetch(`${API_BASE}/accounts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      refetch();
+    } catch {
+      toast({ title: "Error", description: "Failed to update account status.", variant: "destructive" });
+    }
+  };
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     active:   { label: "Active",   className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" },
@@ -385,10 +494,28 @@ export default function AccountsList() {
             {kpis.total} accounts · {kpis.active} active · ${kpis.totalACV.toLocaleString()} total ACV
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
-          <Plus className="h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border border-border rounded-lg p-0.5 gap-0.5 bg-muted/30">
+            <button
+              onClick={() => setView("table")}
+              className={`p-1.5 rounded-md transition-colors ${view === "table" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              title="Table view"
+            >
+              <LayoutList className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setView("kanban")}
+              className={`p-1.5 rounded-md transition-colors ${view === "kanban" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              title="Kanban view"
+            >
+              <Columns3 className="h-4 w-4" />
+            </button>
+          </div>
+          <Button onClick={() => setAddOpen(true)} className="gap-2 shrink-0">
+            <Plus className="h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </div>
 
       {/* KPI Row */}
@@ -433,8 +560,13 @@ export default function AccountsList() {
         <span className="ml-auto text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
+      {/* Kanban View */}
+      {view === "kanban" && (
+        <CustomerKanban accounts={filtered} onStatusChange={handleStatusChange} />
+      )}
+
       {/* Table */}
-      <div className="border rounded-xl overflow-hidden bg-card">
+      {view === "table" && <div className="border rounded-xl overflow-hidden bg-card">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
@@ -508,7 +640,7 @@ export default function AccountsList() {
             )}
           </TableBody>
         </Table>
-      </div>
+      </div>}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-1">

@@ -27,6 +27,7 @@ import opportunitiesRouter from "./opportunities";
 import taskCommentsRouter from "./task-comments";
 import savedFiltersRouter from "./saved-filters";
 import rateCardsRouter from "./rate-cards";
+import prospectsRouter from "./prospects";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(opportunitiesRouter);
 router.use(taskCommentsRouter);
 router.use(savedFiltersRouter);
 router.use(rateCardsRouter);
+router.use(prospectsRouter);
 
 export default router;
