@@ -2,6 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, resourcesTable, allocationsTable, timesheetsTable, staffingRequestsTable } from "@workspace/db";
 
+const COST_RATE_ROLES = ["delivery_director", "finance_lead", "admin", "finance"];
+
+function canSeeCostRate(req: any): boolean {
+  const role = (req.headers["x-user-role"] as string) || "";
+  return COST_RATE_ROLES.includes(role);
+}
+
 function parseResource(r: typeof resourcesTable.$inferSelect) {
   return {
     ...r,
@@ -50,7 +57,12 @@ router.get("/resources", async (req, res): Promise<void> => {
   if (status) resources = resources.filter(r => r.status === status);
   if (skill) resources = resources.filter(r => r.skills?.includes(skill));
   if (employmentType) resources = resources.filter(r => r.employmentType === employmentType);
-  res.json(resources.map(parseResource));
+  const showCost = canSeeCostRate(req);
+  res.json(resources.map(r => {
+    const parsed = parseResource(r);
+    if (!showCost) parsed.costRate = null;
+    return parsed;
+  }));
 });
 
 router.post("/resources", async (req, res): Promise<void> => {
@@ -101,6 +113,18 @@ router.get("/resources/utilization", async (req, res): Promise<void> => {
     const weeks_data = periods.map(p => {
       const hard = resAllocs.reduce((sum, a) => sum + overlapFn(p, a), 0);
       const soft = softAllocs.reduce((sum, a) => sum + overlapFn(p, a), 0);
+
+      // Project breakdown per period
+      const projMap: Record<number, { projectId: number; projectName: string; hard: number; soft: number }> = {};
+      [...resAllocs, ...softAllocs].forEach(a => {
+        const pct = overlapFn(p, a);
+        if (pct === 0) return;
+        const pid = a.projectId;
+        if (!projMap[pid]) projMap[pid] = { projectId: pid, projectName: a.projectName || `Project ${pid}`, hard: 0, soft: 0 };
+        if (a.allocationType === "soft") projMap[pid].soft += pct;
+        else projMap[pid].hard += pct;
+      });
+
       const target = r.utilizationTarget || 80;
       let band: string;
       if (hard === 0 && soft === 0) band = "bench";
@@ -109,7 +133,7 @@ router.get("/resources/utilization", async (req, res): Promise<void> => {
       else if (hard <= target + 15) band = "optimal";
       else if (hard <= 110) band = "booked";
       else band = "overbooked";
-      return { week: p, hard, soft, total: hard + soft, band };
+      return { week: p, hard, soft, total: hard + soft, band, projectBreakdown: Object.values(projMap) };
     });
 
     return {
@@ -172,7 +196,9 @@ router.get("/resources/:id", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [resource] = await db.select().from(resourcesTable).where(eq(resourcesTable.id, id));
   if (!resource) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(parseResource(resource));
+  const parsed = parseResource(resource);
+  if (!canSeeCostRate(req)) parsed.costRate = null;
+  res.json(parsed);
 });
 
 // Full resource profile
@@ -212,8 +238,11 @@ router.get("/resources/:id/full", async (req, res): Promise<void> => {
     return { week: w, load, softLoad, available: Math.max(0, (resource.utilizationTarget || 80) - load) };
   });
 
+  const parsed = parseResource(resource);
+  if (!canSeeCostRate(req)) parsed.costRate = null;
+
   res.json({
-    resource: parseResource(resource),
+    resource: parsed,
     allocations: allocations.map(parseAllocation),
     activeAllocations: activeAllocations.map(parseAllocation),
     softAllocations: softAllocations.map(parseAllocation),
@@ -271,6 +300,14 @@ router.get("/resources/:id/workload-check", async (req, res): Promise<void> => {
     margin: margin ? Math.round(margin) : null,
     activeAllocations: activeAllocs.map(parseAllocation),
   });
+});
+
+// ── Staffing requests list (open) ────────────────────────────────────────────
+router.get("/staffing-requests", async (req, res): Promise<void> => {
+  const { status } = req.query as Record<string, string>;
+  let reqs = await db.select().from(staffingRequestsTable);
+  if (status) reqs = reqs.filter(r => r.status === status);
+  res.json(reqs);
 });
 
 router.put("/resources/:id", async (req, res): Promise<void> => {

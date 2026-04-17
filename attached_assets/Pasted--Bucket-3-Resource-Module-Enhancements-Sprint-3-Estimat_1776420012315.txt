@@ -1,0 +1,114 @@
+## Bucket 3 — Resource Module Enhancements
+**Sprint 3 · Estimated: 2–3 days**
+
+> Depends on Bucket 1 (schema) and Bucket 2 (labels).
+> Do NOT touch projects, timesheets, or CRM pages.
+
+```
+You are enhancing ONLY the Resource Management module (/resources and /resources/:id).
+Do NOT change any other pages, routes, or API endpoints.
+Do NOT break the existing heatmap, roster, or staffing risks tabs.
+All changes are additive — keep everything that already works.
+
+─── 1. API: STRIP costRate FOR UNAUTHORIZED ROLES ───
+In api-server/src/routes/resources.ts, update GET /api/resources:
+  After fetching all resources, check req.headers['x-user-role'] (or however
+  the current auth context is passed to the API).
+  If role is NOT in ['delivery_director', 'finance', 'admin']:
+    delete each resource's costRate before sending the response.
+  Same for GET /api/resources/:id.
+
+─── 2. HEATMAP: SOFT vs HARD VISUAL DISTINCTION ───
+In the utilization heatmap component (wherever the cells are rendered):
+  Each cell already has allocationType stored. Now:
+  - Hard allocation cells: keep the existing solid color fill (bench/available/optimal/booked/overbooked)
+  - Soft allocation cells: apply a CSS diagonal stripe overlay on top of the same base color.
+    Use this CSS pattern:
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 4px,
+      rgba(255,255,255,0.35) 4px,
+      rgba(255,255,255,0.35) 8px
+    );
+  When a resource has BOTH hard and soft in the same week, show the hard
+  color as the base and the stripe overlay on top. Show the total % in the cell.
+  Add a legend row at the top of the heatmap:
+    ■ Solid = Hard allocation   ▨ Stripe = Soft allocation
+
+─── 3. HEATMAP: EXPANDABLE TREE VIEW ───
+In the heatmap component, add expand/collapse functionality to resource rows:
+  - Each resource row gets a chevron icon (ChevronRight / ChevronDown from Lucide)
+    at the left edge of the sticky name column.
+  - Clicking the chevron expands the row to show one sub-row per project
+    that resource is allocated to that week.
+  - Sub-row columns: project name (truncated to 20 chars) | allocation % per project |
+    allocation type badge (Hard/Soft)
+  - Sub-rows use a lighter background (e.g., bg-slate-50 in light mode).
+  - Clicking the chevron again collapses to single row.
+  - The API endpoint GET /api/resources/utilization already returns
+    projectBreakdown per resource — use that data.
+
+─── 4. HEATMAP: INVERTIBLE VIEW (by Project) ───
+Add a view toggle button to the heatmap controls area:
+  "View by Resource" | "View by Project"
+  (start with By Resource as default)
+
+When "View by Project" is selected:
+  - Rows = projects (from the projectBreakdown data already in the response)
+  - Columns = weeks (same as before)
+  - Each cell = sum of allocations for that project in that week
+  - Color band = same as resource view (bench/available/optimal/booked/overbooked
+    but based on % of project's total planned capacity)
+  - Left sticky column shows project name + customer name
+
+─── 5. HEATMAP: STAFFING REQUEST PHANTOM ROWS ───
+Call GET /api/staffing-requests?status=open to fetch open staffing requests.
+At the bottom of the heatmap (below all resource rows), for each open request:
+  - Add a "phantom row" with a dashed left border and label:
+    "REQUESTED: [roleRequired]" in italic text
+  - Color cells in the requested week range with the soft allocation stripe style
+    but using a purple/violet color (to distinguish from actual allocations)
+  - Clicking the row opens a small popover: role required, practice area, opportunity name, status
+  The phantom rows are always at the bottom, separated by a thin divider line.
+
+─── 6. RESOURCE ROSTER: DUAL UTILIZATION RING ───
+In the Resource Roster tab, each resource card currently shows a single SVG
+donut ring for utilization. Update it to show TWO concentric rings:
+  - Outer ring: total utilization % (hard + soft combined)
+  - Inner ring: hard allocation % only
+  This makes it immediately visible how much of their load is confirmed vs tentative.
+  Keep the same color band logic (bench/available/optimal/booked/overbooked).
+
+─── 7. RESOURCE DETAIL PAGE: SKILLS MATRIX WITH YEARS ───
+On /resources/:id, in the Profile tab, add a new "Skills & Experience" section
+below the existing flat skills tag cloud. This section reads from skillsWithYears
+(the new JSONB column added in Bucket 1):
+  Layout: a small table with two columns:
+    Skill Name | Years of Experience (shown as "X yrs")
+  If skillsWithYears is empty, fall back to rendering the existing skills[] array.
+  Add an edit button (pencil icon) that opens an inline edit panel:
+    For each skill in skillsWithYears: show a text input for skill name
+    and a number input for years.
+    "Add skill" link appends a new row.
+    Save: PUT /api/resources/:id with updated skillsWithYears JSON.
+
+─── 8. ADD RESOURCE MODAL: HIDE costRate FOR NON-FINANCE ROLES ───
+In the Add Resource modal (or form), wrap the Cost Rate ($) field:
+  {useCanSee('resource_costs') && (
+    <FormField label="Cost Rate ($/hr)" ... />
+  )}
+Also add these new fields to the Add Resource form (from Bucket 1 schema):
+  - Default Role (text input) — maps to defaultRole column
+  - Vacation Days Allocation (number input, default 15) — maps to vacationAllocationDays
+  - Hire Date (date input) — maps to hireDate
+  - Skills with Years: a simple key-value editor (skill name + years).
+    On submit, serialize to JSON for skillsWithYears column.
+
+─── 9. CONSISTENT LABEL: "Resource" everywhere ───
+In all resource module files (/resources page, /resources/:id page,
+the Add Resource modal, the heatmap, the roster), confirm these labels:
+  - Button: "Add Resource" (not "Add Employee")
+  - Section headers: "Resources" (not "Team Members" or "Employees")
+  - Individual person: "Resource" (not "Employee")
+  - Keep "Contractors" and "Partners" as distinct employment type labels.

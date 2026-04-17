@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { format } from "date-fns";
-import { ChevronLeft, MapPin, Clock, Briefcase, Star, CheckCircle2, AlertTriangle, Calendar, TrendingUp } from "lucide-react";
+import { ChevronLeft, MapPin, Clock, Briefcase, Star, CheckCircle2, AlertTriangle, Calendar, TrendingUp, Pencil, Plus, Trash2, Save, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { useAuthRole, useCanSee } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -24,10 +26,113 @@ function UtilBar({ pct, target }: { pct: number; target: number }) {
   );
 }
 
+type SkillYear = { skill: string; years: number };
+
+function SkillsMatrix({ resourceId, initial, skills }: { resourceId: number; initial: SkillYear[]; skills: string[] }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [rows, setRows] = useState<Array<{ skill: string; years: string }>>(
+    (initial && initial.length > 0)
+      ? initial.map(s => ({ skill: s.skill, years: String(s.years) }))
+      : skills.map(s => ({ skill: s, years: "" }))
+  );
+  const [saving, setSaving] = useState(false);
+
+  const addRow = () => setRows(r => [...r, { skill: "", years: "" }]);
+  const removeRow = (i: number) => setRows(r => r.filter((_, idx) => idx !== i));
+  const setField = (i: number, f: "skill" | "years", v: string) =>
+    setRows(r => r.map((row, idx) => idx === i ? { ...row, [f]: v } : row));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = rows.filter(r => r.skill.trim()).map(r => ({ skill: r.skill.trim(), years: parseFloat(r.years) || 0 }));
+      const res = await fetch(`${API}/resources/${resourceId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillsWithYears: payload }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      toast({ title: "Skills updated" });
+      setEditing(false);
+    } catch { toast({ title: "Error", description: "Could not save skills", variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const displayRows = (initial && initial.length > 0) ? initial : skills.map(s => ({ skill: s, years: 0 }));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Skills & Experience</p>
+        {!editing && (
+          <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Pencil size={11} /> Edit
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        displayRows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No skills recorded.</p>
+        ) : (
+          <table className="w-full text-xs border rounded-lg overflow-hidden">
+            <thead>
+              <tr className="bg-muted/50">
+                <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Skill</th>
+                <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Experience</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((s, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-3 py-1.5">{s.skill}</td>
+                  <td className="px-3 py-1.5 text-right text-muted-foreground">
+                    {s.years > 0 ? `${s.years} yr${s.years !== 1 ? "s" : ""}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      ) : (
+        <div className="space-y-2 border rounded-xl p-3">
+          {rows.map((row, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <input placeholder="Skill name" value={row.skill} onChange={e => setField(i, "skill", e.target.value)}
+                className="flex-1 h-7 text-xs border rounded px-2 bg-background" />
+              <input type="number" min="0" max="40" placeholder="Yrs" value={row.years}
+                onChange={e => setField(i, "years", e.target.value)}
+                className="w-16 h-7 text-xs border rounded px-2 bg-background" />
+              <button onClick={() => removeRow(i)} className="text-muted-foreground hover:text-destructive">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <button onClick={addRow} className="flex items-center gap-1 text-xs text-primary hover:underline">
+              <Plus size={10} /> Add skill
+            </button>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => setEditing(false)} className="h-6 px-2 text-xs rounded bg-muted text-muted-foreground flex items-center gap-1">
+                <X size={10} /> Cancel
+              </button>
+              <button onClick={save} disabled={saving} className="h-6 px-2 text-xs rounded bg-primary text-primary-foreground flex items-center gap-1 disabled:opacity-50">
+                <Save size={10} /> {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ResourceDetail() {
   const params = useParams();
   const [, navigate] = useLocation();
   const resourceId = Number(params.id);
+  const { role } = useAuthRole();
+  const canSeeCost = useCanSee("resource_costs");
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,12 +141,14 @@ export default function ResourceDetail() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API}/resources/${resourceId}/full`);
+      const headers: Record<string, string> = {};
+      if (role) headers["x-user-role"] = role;
+      const r = await fetch(`${API}/resources/${resourceId}/full`, { headers });
       if (!r.ok) throw new Error();
       setData(await r.json());
     } catch { setData(null); }
     finally { setLoading(false); }
-  }, [resourceId]);
+  }, [resourceId, role]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -129,7 +236,7 @@ export default function ResourceDetail() {
             <p className="text-xs text-muted-foreground">Bill Rate/hr</p>
           </div>
         )}
-        {resource.costRate && (
+        {resource.costRate && canSeeCost && (
           <div className="bg-muted/50 rounded-xl p-4 text-center">
             <p className="text-2xl font-bold">{resource.hourlyRate ? Math.round(((resource.hourlyRate - resource.costRate) / resource.hourlyRate) * 100) : "—"}%</p>
             <p className="text-xs text-muted-foreground">Margin</p>
@@ -166,6 +273,12 @@ export default function ResourceDetail() {
                 {(resource.skills || []).length === 0 && <p className="text-xs text-muted-foreground">No skills listed.</p>}
               </div>
             </div>
+            {/* Skills matrix with years */}
+            <SkillsMatrix
+              resourceId={resourceId}
+              initial={resource.skillsWithYears || []}
+              skills={resource.skills || []}
+            />
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">OTM Specializations</p>
               <div className="flex flex-wrap gap-1.5">
@@ -198,7 +311,7 @@ export default function ResourceDetail() {
                   <span className="font-medium">${resource.hourlyRate}/hr</span>
                 </div>
               )}
-              {resource.costRate && (
+              {resource.costRate && canSeeCost && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Cost rate</span>
                   <span className="font-medium">${resource.costRate}/hr</span>

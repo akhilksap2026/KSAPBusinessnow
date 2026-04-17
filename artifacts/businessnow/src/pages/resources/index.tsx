@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { format, addDays, startOfWeek } from "date-fns";
-import { User, Users, AlertTriangle, TrendingDown, Briefcase, MapPin, Star, Search, Plus, X, UserPlus } from "lucide-react";
-import { useAuthRole } from "@/lib/auth";
+import { format } from "date-fns";
+import {
+  User, Users, AlertTriangle, TrendingDown, Briefcase, MapPin, Star, Search,
+  Plus, X, UserPlus, ChevronRight, ChevronDown, Layers, LayoutList, Trash2,
+} from "lucide-react";
+import { useAuthRole, useCanSee } from "@/lib/auth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +22,19 @@ interface Resource {
   currentUtilization: number; utilizationTarget: number; status: string;
   hourlyRate?: number; costRate?: number; location?: string; timezone?: string;
   isContractor?: boolean; availableFrom?: string; bio?: string;
+  skillsWithYears?: Array<{ skill: string; years: number }>;
+  defaultRole?: string; vacationAllocationDays?: number; hireDate?: string;
 }
 
-interface WeekData { week: string; hard: number; soft: number; total: number; band: string; }
+interface ProjectBreakdown { projectId: number; projectName: string; hard: number; soft: number; }
+interface WeekData { week: string; hard: number; soft: number; total: number; band: string; projectBreakdown?: ProjectBreakdown[]; }
 interface HeatmapResource { resource: Resource; weeks: WeekData[]; avgUtilization: number; }
+
+interface StaffingRequest {
+  id: number; requestedRole: string; practiceArea?: string; status: string;
+  startDate?: string; endDate?: string; hoursPerWeek?: number;
+  projectName?: string; notes?: string; allocationPct?: number;
+}
 
 const BAND_COLORS: Record<string, string> = {
   bench: "bg-slate-100 text-slate-400",
@@ -34,6 +46,10 @@ const BAND_COLORS: Record<string, string> = {
 const BAND_BG: Record<string, string> = {
   bench: "bg-slate-100", available: "bg-emerald-200", optimal: "bg-blue-400",
   booked: "bg-amber-400", overbooked: "bg-red-500",
+};
+const BAND_HEX: Record<string, string> = {
+  bench: "#e2e8f0", available: "#6ee7b7", optimal: "#60a5fa",
+  booked: "#fbbf24", overbooked: "#ef4444",
 };
 
 const PRACTICE_LABELS: Record<string, string> = {
@@ -48,21 +64,34 @@ function UtilizationBadge({ pct, target }: { pct: number; target: number }) {
   return <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cls}`}>{pct}%</span>;
 }
 
-function UtilizationRing({ pct, size = 44 }: { pct: number; size?: number }) {
-  const r = (size / 2) - 5;
+// Dual concentric utilization ring: outer = total (hard+soft), inner = hard only
+function UtilizationRing({ hardPct = 0, softPct = 0, size = 52 }: { hardPct?: number; softPct?: number; pct?: number; size?: number }) {
+  const totalPct = hardPct + softPct;
+  const outerR = (size / 2) - 5;
+  const innerR = outerR - 9;
   const cx = size / 2;
-  const circumference = 2 * Math.PI * r;
-  const capped = Math.min(pct, 130);
-  const offset = circumference * (1 - capped / 130);
-  const color = pct === 0 ? "#94a3b8" : pct < 75 ? "#22c55e" : pct <= 105 ? "#3b82f6" : "#ef4444";
+  const outerCirc = 2 * Math.PI * outerR;
+  const innerCirc = 2 * Math.PI * innerR;
+  const cappedTotal = Math.min(totalPct, 130);
+  const cappedHard = Math.min(hardPct, 130);
+  const outerOffset = outerCirc * (1 - cappedTotal / 130);
+  const innerOffset = innerCirc * (1 - cappedHard / 130);
+  const totalColor = totalPct === 0 ? "#94a3b8" : totalPct < 75 ? "#22c55e" : totalPct <= 105 ? "#3b82f6" : "#ef4444";
+  const hardColor = hardPct === 0 ? "#cbd5e1" : hardPct < 75 ? "#16a34a" : hardPct <= 105 ? "#2563eb" : "#dc2626";
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
-      <circle cx={cx} cy={cx} r={r} fill="none" stroke={color} strokeWidth={4}
-        strokeDasharray={circumference} strokeDashoffset={offset}
+      <circle cx={cx} cy={cx} r={outerR} fill="none" stroke="#e2e8f0" strokeWidth={4} />
+      <circle cx={cx} cy={cx} r={innerR} fill="none" stroke="#f1f5f9" strokeWidth={3} />
+      <circle cx={cx} cy={cx} r={outerR} fill="none" stroke={totalColor} strokeWidth={4}
+        strokeDasharray={outerCirc} strokeDashoffset={outerOffset}
         strokeLinecap="round" transform={`rotate(-90 ${cx} ${cx})`} />
-      <text x={cx} y={cx} textAnchor="middle" dominantBaseline="central"
-        fontSize={9} fontWeight="700" fill={color}>{pct}%</text>
+      <circle cx={cx} cy={cx} r={innerR} fill="none" stroke={hardColor} strokeWidth={3}
+        strokeDasharray={innerCirc} strokeDashoffset={innerOffset}
+        strokeLinecap="round" transform={`rotate(-90 ${cx} ${cx})`} />
+      <text x={cx} y={cx - 3} textAnchor="middle" dominantBaseline="central"
+        fontSize={8} fontWeight="700" fill={totalColor}>{totalPct}%</text>
+      <text x={cx} y={cx + 7} textAnchor="middle" dominantBaseline="central"
+        fontSize={7} fill="#94a3b8">{hardPct}h</text>
     </svg>
   );
 }
@@ -76,6 +105,11 @@ function EmploymentBadge({ type }: { type: string }) {
   return <span className={`text-xs px-2 py-0.5 rounded font-medium ${styles[type] || styles.employee}`}>{type}</span>;
 }
 
+// Soft allocation stripe style
+const SOFT_STRIPE: React.CSSProperties = {
+  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.35) 4px, rgba(255,255,255,0.35) 8px)",
+};
+
 // ─── Heatmap Tab ────────────────────────────────────────────────────────────
 function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granularity: "week" | "month" }) {
   const [data, setData] = useState<{ weeks: string[]; resources: HeatmapResource[] } | null>(null);
@@ -84,18 +118,37 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
   const [fillForm, setFillForm] = useState({ resourceId: "", projectId: "", startDate: "", endDate: "", allocationPct: "100", allocationType: "hard" });
   const [fillSaving, setFillSaving] = useState(false);
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<"resource" | "project">("resource");
+  const [staffingReqs, setStaffingReqs] = useState<StaffingRequest[]>([]);
+  const [phantomPopover, setPhantomPopover] = useState<number | null>(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     setLoading(true);
-    fetch(`${API}/resources/utilization?weeks=${numWeeks}&granularity=${granularity}`)
-      .then(r => r.json()).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
-  }, [numWeeks, granularity]);
+    Promise.all([
+      fetch(`${API}/resources/utilization?weeks=${numWeeks}&granularity=${granularity}`).then(r => r.json()),
+      fetch(`${API}/staffing-requests?status=open`).then(r => r.json()).catch(() => []),
+    ]).then(([util, reqs]) => {
+      setData(util);
+      setStaffingReqs(Array.isArray(reqs) ? reqs : []);
+    }).catch(() => setData(null)).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchData(); }, [numWeeks, granularity]);
 
   useEffect(() => {
     if (fillOpen && projects.length === 0) {
       fetch(`${API}/projects`).then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {});
     }
   }, [fillOpen]);
+
+  const toggleRow = (id: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const handleFillRange = async () => {
     if (!fillForm.resourceId || !fillForm.projectId || !fillForm.startDate || !fillForm.endDate) return;
@@ -104,14 +157,44 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
       await fetch(`${API}/allocations/fill-range`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...fillForm, resourceId: parseInt(fillForm.resourceId), projectId: parseInt(fillForm.projectId), allocationPct: parseFloat(fillForm.allocationPct) }) });
       setFillOpen(false);
       setFillForm({ resourceId: "", projectId: "", startDate: "", endDate: "", allocationPct: "100", allocationType: "hard" });
-      setLoading(true);
-      fetch(`${API}/resources/utilization?weeks=${numWeeks}&granularity=${granularity}`)
-        .then(r => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false));
+      fetchData();
     } finally { setFillSaving(false); }
   };
 
   if (loading) return <div className="p-8 animate-pulse space-y-2">{[...Array(8)].map((_, i) => <div key={i} className="h-10 bg-muted rounded" />)}</div>;
   if (!data) return <div className="p-8 text-muted-foreground text-center">Could not load utilization data.</div>;
+
+  // ── Project view data ─────────────────────────────────────────────────────
+  type ProjRow = { projectId: number; projectName: string; weeks: { week: string; hard: number; soft: number; total: number; band: string }[] };
+  const projectViewMap: Record<number, ProjRow> = {};
+  if (viewMode === "project" && data) {
+    data.resources.forEach(({ weeks }) => {
+      weeks.forEach(w => {
+        (w.projectBreakdown || []).forEach(pb => {
+          if (!projectViewMap[pb.projectId]) {
+            projectViewMap[pb.projectId] = {
+              projectId: pb.projectId, projectName: pb.projectName,
+              weeks: data.weeks.map(wk => ({ week: wk, hard: 0, soft: 0, total: 0, band: "bench" })),
+            };
+          }
+          const idx = data.weeks.indexOf(w.week);
+          if (idx >= 0) {
+            projectViewMap[pb.projectId].weeks[idx].hard += pb.hard;
+            projectViewMap[pb.projectId].weeks[idx].soft += pb.soft;
+            projectViewMap[pb.projectId].weeks[idx].total += pb.hard + pb.soft;
+          }
+        });
+      });
+    });
+    // Compute bands for project rows
+    Object.values(projectViewMap).forEach(row => {
+      row.weeks.forEach(w => {
+        const h = w.hard;
+        w.band = h === 0 ? "bench" : h < 20 ? "bench" : h < 60 ? "available" : h < 90 ? "optimal" : h <= 110 ? "booked" : "overbooked";
+      });
+    });
+  }
+  const projectRows = Object.values(projectViewMap).sort((a, b) => a.projectName.localeCompare(b.projectName));
 
   const bands = [
     { key: "bench", label: "Bench / Idle", color: "bg-slate-200" },
@@ -123,8 +206,8 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
 
   return (
     <div className="p-4">
-      {/* Legend + Allocate Range */}
-      <div className="flex items-center gap-4 mb-4 flex-wrap">
+      {/* Legend row */}
+      <div className="flex items-center gap-4 mb-2 flex-wrap">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Legend:</span>
         {bands.map(b => (
           <div key={b.key} className="flex items-center gap-1.5">
@@ -132,6 +215,26 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
             <span className="text-xs text-muted-foreground">{b.label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-sm bg-blue-400" style={SOFT_STRIPE} />
+          <span className="text-xs text-muted-foreground">Stripe = Soft alloc</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        {/* View toggle */}
+        <div className="flex items-center border rounded-lg overflow-hidden text-xs font-medium">
+          <button onClick={() => setViewMode("resource")}
+            className={`flex items-center gap-1 px-3 py-1.5 transition-colors ${viewMode === "resource" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}>
+            <LayoutList className="h-3 w-3" /> By Resource
+          </button>
+          <button onClick={() => setViewMode("project")}
+            className={`flex items-center gap-1 px-3 py-1.5 transition-colors ${viewMode === "project" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}>
+            <Layers className="h-3 w-3" /> By Project
+          </button>
+        </div>
+
         <button onClick={() => setFillOpen(!fillOpen)}
           className={`ml-auto flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${fillOpen ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
           <Plus className="h-3.5 w-3.5" /> Allocate Range
@@ -190,40 +293,200 @@ function HeatmapView({ weeks: numWeeks, granularity }: { weeks: number; granular
         </div>
       )}
 
-
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs border-separate border-spacing-0">
           <thead>
             <tr>
-              <th className="text-left px-3 py-2 font-medium text-muted-foreground w-44 sticky left-0 bg-background z-10">Resource</th>
+              <th className="text-left px-3 py-2 font-medium text-muted-foreground w-48 sticky left-0 bg-background z-10 border-b">
+                {viewMode === "resource" ? "Resource" : "Project"}
+              </th>
               {data.weeks.map(w => (
-                <th key={w} className="px-1 py-2 font-medium text-muted-foreground text-center min-w-[52px]">
+                <th key={w} className="px-1 py-2 font-medium text-muted-foreground text-center min-w-[52px] border-b">
                   {granularity === "month" ? format(new Date(w + "T00:00:00"), "MMM yyyy") : format(new Date(w + "T00:00:00"), "MMM d")}
                 </th>
               ))}
-              <th className="px-3 py-2 font-medium text-muted-foreground text-center">Avg</th>
+              <th className="px-3 py-2 font-medium text-muted-foreground text-center border-b">Avg</th>
             </tr>
           </thead>
           <tbody>
-            {data.resources.map(({ resource, weeks, avgUtilization }) => (
-              <tr key={resource.id} className="border-t hover:bg-muted/20 transition-colors">
-                <td className="px-3 py-2 sticky left-0 bg-background z-10">
-                  <div className="font-medium truncate max-w-[160px]">{resource.name}</div>
-                  <div className="text-muted-foreground text-xs truncate">{PRACTICE_LABELS[resource.practiceArea] || resource.practiceArea}</div>
-                </td>
-                {weeks.map(w => (
-                  <td key={w.week} className="px-1 py-1 text-center">
-                    <div className={`rounded text-xs font-bold py-1 px-0.5 ${BAND_BG[w.band]} ${w.band === "bench" ? "text-slate-400" : w.band === "overbooked" ? "text-foreground" : w.band === "booked" ? "text-amber-800" : w.band === "optimal" ? "text-foreground" : "text-emerald-700"}`}
-                      title={`${resource.name}: ${w.hard}% hard, ${w.soft}% soft`}>
-                      {w.hard > 0 ? `${w.hard}%` : "—"}
-                    </div>
+            {viewMode === "resource" ? (
+              // ── By Resource view ────────────────────────────────────────
+              data.resources.map(({ resource, weeks, avgUtilization }) => {
+                const isExpanded = expandedRows.has(resource.id);
+                return (
+                  <React.Fragment key={resource.id}>
+                    {/* Resource row */}
+                    <tr className="border-t hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2 sticky left-0 bg-background z-10">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => toggleRow(resource.id)}
+                            className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                            {isExpanded
+                              ? <ChevronDown className="h-3.5 w-3.5" />
+                              : <ChevronRight className="h-3.5 w-3.5" />}
+                          </button>
+                          <div>
+                            <div className="font-medium truncate max-w-[140px]">{resource.name}</div>
+                            <div className="text-muted-foreground text-[10px] truncate">{PRACTICE_LABELS[resource.practiceArea] || resource.practiceArea}</div>
+                          </div>
+                        </div>
+                      </td>
+                      {weeks.map(w => {
+                        const hasSoftOnly = w.soft > 0 && w.hard === 0;
+                        const hasBoth = w.soft > 0 && w.hard > 0;
+                        const displayPct = w.hard > 0 ? w.hard : w.soft > 0 ? w.soft : 0;
+                        return (
+                          <td key={w.week} className="px-1 py-1 text-center">
+                            <div
+                              className={`rounded text-xs font-bold py-1 px-0.5 ${BAND_BG[w.band]} ${w.band === "bench" ? "text-slate-400" : w.band === "overbooked" ? "text-foreground" : w.band === "booked" ? "text-amber-800" : w.band === "optimal" ? "text-foreground" : "text-emerald-700"}`}
+                              style={(hasSoftOnly || hasBoth) ? SOFT_STRIPE : undefined}
+                              title={`${resource.name}: ${w.hard}% hard, ${w.soft}% soft`}>
+                              {displayPct > 0 ? `${displayPct}%` : "—"}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center">
+                        <UtilizationBadge pct={avgUtilization} target={resource.utilizationTarget || 80} />
+                      </td>
+                    </tr>
+                    {/* Expanded sub-rows: per project */}
+                    {isExpanded && weeks.some(w => (w.projectBreakdown || []).length > 0) && (() => {
+                      // Collect unique projects across all weeks
+                      const projSet: Record<number, string> = {};
+                      weeks.forEach(w => (w.projectBreakdown || []).forEach(pb => { projSet[pb.projectId] = pb.projectName; }));
+                      return Object.entries(projSet).map(([pidStr, pname]) => {
+                        const pid = parseInt(pidStr);
+                        return (
+                          <tr key={`${resource.id}-proj-${pid}`} className="bg-slate-50 dark:bg-slate-900/40">
+                            <td className="px-3 py-1.5 sticky left-0 bg-slate-50 dark:bg-slate-900/40 z-10 pl-9">
+                              <span className="text-[10px] text-muted-foreground truncate block max-w-[130px]" title={pname}>
+                                {pname.length > 22 ? pname.slice(0, 22) + "…" : pname}
+                              </span>
+                            </td>
+                            {weeks.map(w => {
+                              const pb = (w.projectBreakdown || []).find(p => p.projectId === pid);
+                              if (!pb || (pb.hard === 0 && pb.soft === 0)) {
+                                return <td key={w.week} className="px-1 py-1 text-center"><div className="rounded py-1 text-[10px] text-muted-foreground/30">—</div></td>;
+                              }
+                              const isSoft = pb.soft > 0 && pb.hard === 0;
+                              const isMixed = pb.soft > 0 && pb.hard > 0;
+                              const pct = pb.hard > 0 ? pb.hard : pb.soft;
+                              const type = pb.hard > 0 && pb.soft > 0 ? "Mixed" : pb.hard > 0 ? "Hard" : "Soft";
+                              const typeColor = type === "Hard" ? "text-blue-600 bg-blue-50" : type === "Soft" ? "text-amber-600 bg-amber-50" : "text-violet-600 bg-violet-50";
+                              return (
+                                <td key={w.week} className="px-1 py-1 text-center">
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className={`text-[10px] font-semibold rounded px-1 ${typeColor}`}
+                                      style={(isSoft || isMixed) ? SOFT_STRIPE : undefined}>
+                                      {pct}%
+                                    </span>
+                                    <span className={`text-[9px] px-1 rounded ${typeColor}`}>{type}</span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-3 py-1" />
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </React.Fragment>
+                );
+              })
+            ) : (
+              // ── By Project view ──────────────────────────────────────────
+              projectRows.length === 0 ? (
+                <tr>
+                  <td colSpan={data.weeks.length + 2} className="text-center py-8 text-muted-foreground text-xs">No project allocations found.</td>
+                </tr>
+              ) : (
+                projectRows.map(row => {
+                  const avg = Math.round(row.weeks.reduce((s, w) => s + w.hard, 0) / row.weeks.length);
+                  return (
+                    <tr key={row.projectId} className="border-t hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2 sticky left-0 bg-background z-10">
+                        <div className="font-medium truncate max-w-[160px]">{row.projectName}</div>
+                      </td>
+                      {row.weeks.map(w => {
+                        const hasSoft = w.soft > 0;
+                        const isSoftOnly = w.soft > 0 && w.hard === 0;
+                        const displayPct = w.hard > 0 ? w.hard : w.soft > 0 ? w.soft : 0;
+                        return (
+                          <td key={w.week} className="px-1 py-1 text-center">
+                            <div
+                              className={`rounded text-xs font-bold py-1 px-0.5 ${BAND_BG[w.band]} ${w.band === "bench" ? "text-slate-400" : "text-foreground"}`}
+                              style={hasSoft ? SOFT_STRIPE : undefined}>
+                              {displayPct > 0 ? `${displayPct}%` : "—"}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center">
+                        <span className="text-xs text-muted-foreground font-medium">{avg}%</span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )
+            )}
+
+            {/* ── Staffing Request Phantom Rows ─────────────────────────── */}
+            {staffingReqs.length > 0 && viewMode === "resource" && (
+              <>
+                <tr>
+                  <td colSpan={data.weeks.length + 2} className="pt-3 pb-1">
+                    <div className="border-t border-dashed border-violet-300" />
+                    <p className="text-[10px] uppercase tracking-wider text-violet-400 font-semibold mt-1 px-3">Open Staffing Requests</p>
                   </td>
-                ))}
-                <td className="px-3 py-2 text-center">
-                  <UtilizationBadge pct={avgUtilization} target={resource.utilizationTarget || 80} />
-                </td>
-              </tr>
-            ))}
+                </tr>
+                {staffingReqs.map(req => {
+                  const isOpen = phantomPopover === req.id;
+                  return (
+                    <tr key={`req-${req.id}`} className="border-l-2 border-l-violet-400 border-dashed cursor-pointer"
+                      onClick={() => setPhantomPopover(isOpen ? null : req.id)}>
+                      <td className="px-3 py-2 sticky left-0 bg-background z-10 border-l-2 border-l-violet-400">
+                        <div className="italic text-[10px] text-violet-500 truncate max-w-[160px]">
+                          REQUESTED: {req.requestedRole}
+                        </div>
+                        {req.practiceArea && <div className="text-[9px] text-muted-foreground">{req.practiceArea}</div>}
+                        {isOpen && (
+                          <div className="absolute z-50 mt-1 w-56 bg-card border rounded-xl shadow-xl p-3 space-y-1" onClick={e => e.stopPropagation()}>
+                            <p className="text-xs font-semibold text-violet-600">{req.requestedRole}</p>
+                            {req.practiceArea && <p className="text-[10px] text-muted-foreground">Practice: {req.practiceArea}</p>}
+                            {req.startDate && <p className="text-[10px] text-muted-foreground">Start: {format(new Date(req.startDate), "MMM d, yyyy")}</p>}
+                            {req.endDate && <p className="text-[10px] text-muted-foreground">End: {format(new Date(req.endDate), "MMM d, yyyy")}</p>}
+                            {req.hoursPerWeek && <p className="text-[10px] text-muted-foreground">{req.hoursPerWeek}h/wk</p>}
+                            <p className="text-[10px] font-medium text-violet-500 capitalize">{req.status}</p>
+                            <button onClick={() => setPhantomPopover(null)} className="text-[9px] text-muted-foreground mt-1">Close</button>
+                          </div>
+                        )}
+                      </td>
+                      {data.weeks.map(w => {
+                        const ws = req.startDate || "2000-01-01";
+                        const we = req.endDate || "2099-12-31";
+                        const inRange = w >= ws && w <= we;
+                        return (
+                          <td key={w} className="px-1 py-1 text-center">
+                            {inRange ? (
+                              <div className="rounded text-[10px] font-bold py-1 px-0.5 bg-violet-100 text-violet-600"
+                                style={SOFT_STRIPE}>
+                                {req.allocationPct ? `${req.allocationPct}%` : "TBD"}
+                              </div>
+                            ) : (
+                              <div className="rounded py-1 text-muted-foreground/20 text-[10px]">—</div>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center">
+                        <span className="text-[10px] bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full">open</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -262,13 +525,8 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
       <div className="flex gap-2 items-center flex-wrap">
         <div className="relative flex-none">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search name, role, skill…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-8 pr-3 h-7 text-xs border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-48"
-          />
+          <input type="text" placeholder="Search name, role, skill…" value={search} onChange={e => setSearch(e.target.value)}
+            className="pl-8 pr-3 h-7 text-xs border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring w-48" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {(["all", "bench", "overbooked", "contractor"] as const).map(f => (
@@ -279,6 +537,11 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
           ))}
         </div>
         <span className="ml-auto text-xs text-muted-foreground">{filtered.length} of {resources.length}</span>
+      </div>
+
+      <div className="text-xs text-muted-foreground flex items-center gap-3">
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full border-2 border-blue-400 bg-transparent" />Outer ring = total util (hard+soft)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full border border-blue-700 bg-transparent" />Inner ring = hard only</span>
       </div>
 
       {Object.entries(groups).sort().map(([area, areaResources]) => (
@@ -315,7 +578,8 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
                     </div>
                   </div>
                   <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                    <UtilizationRing pct={util} />
+                    {/* Dual ring: hardPct = currentUtilization (hard allocs from DB), softPct=0 (not in list endpoint) */}
+                    <UtilizationRing hardPct={util} softPct={0} size={52} />
                     {r.hourlyRate && <p className="text-xs text-muted-foreground">${r.hourlyRate}/hr</p>}
                   </div>
                 </div>
@@ -330,7 +594,7 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
 
 // ─── Risk Alerts ──────────────────────────────────────────────────────────────
 function RiskView({ resources }: { resources: Resource[] }) {
-  const risks = [];
+  const risks: any[] = [];
   const overbooked = resources.filter(r => r.currentUtilization > 100);
   const bench = resources.filter(r => r.currentUtilization < 20);
   const nearCapacity = resources.filter(r => r.currentUtilization >= 90 && r.currentUtilization <= 100);
@@ -339,8 +603,8 @@ function RiskView({ resources }: { resources: Resource[] }) {
   nearCapacity.forEach(r => risks.push({ type: "near_capacity", severity: "medium", resource: r, message: `${r.name} at ${r.currentUtilization}% — near capacity limit` }));
   bench.forEach(r => risks.push({ type: "underutilized", severity: "low", resource: r, message: `${r.name} at ${r.currentUtilization}% — bench risk` }));
 
-  const SEVERITY = { high: "bg-red-50 border-red-200 text-red-700", medium: "bg-amber-50 border-amber-200 text-amber-700", low: "bg-slate-50 border-slate-200 text-slate-600" };
-  const ICON = { high: "🔴", medium: "🟡", low: "⚪" };
+  const SEVERITY: Record<string, string> = { high: "bg-red-50 border-red-200 text-red-700", medium: "bg-amber-50 border-amber-200 text-amber-700", low: "bg-slate-50 border-slate-200 text-slate-600" };
+  const ICON: Record<string, string> = { high: "🔴", medium: "🟡", low: "⚪" };
 
   return (
     <div className="p-4 space-y-4">
@@ -364,8 +628,8 @@ function RiskView({ resources }: { resources: Resource[] }) {
       ) : (
         <div className="space-y-2">
           {risks.map((risk, i) => (
-            <div key={i} className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${SEVERITY[risk.severity as keyof typeof SEVERITY]}`}>
-              <span className="text-base">{ICON[risk.severity as keyof typeof ICON]}</span>
+            <div key={i} className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${SEVERITY[risk.severity]}`}>
+              <span className="text-base">{ICON[risk.severity]}</span>
               <div className="flex-1">
                 <p className="text-sm font-medium">{risk.message}</p>
                 <p className="text-xs opacity-70">{risk.resource.title} · {PRACTICE_LABELS[risk.resource.practiceArea]}</p>
@@ -381,34 +645,47 @@ function RiskView({ resources }: { resources: Resource[] }) {
 
 // ─── Add Resource Modal ───────────────────────────────────────────────────────
 
-type EmpForm = {
+type SkillYear = { skill: string; years: string };
+
+type ResForm = {
   name: string; title: string; practiceArea: string; employmentType: string;
-  status: string; location: string; hourlyRate: string; utilizationTarget: string;
-  skills: string; bio: string;
+  status: string; location: string; hourlyRate: string; costRate: string;
+  utilizationTarget: string; skills: string; bio: string;
+  defaultRole: string; vacationAllocationDays: string; hireDate: string;
+  skillsWithYears: SkillYear[];
 };
 
-const defaultEmpForm = (): EmpForm => ({
+const defaultResForm = (): ResForm => ({
   name: "", title: "", practiceArea: "implementation", employmentType: "employee",
-  status: "available", location: "", hourlyRate: "", utilizationTarget: "80",
-  skills: "", bio: "",
+  status: "available", location: "", hourlyRate: "", costRate: "",
+  utilizationTarget: "80", skills: "", bio: "",
+  defaultRole: "", vacationAllocationDays: "15", hireDate: "",
+  skillsWithYears: [],
 });
 
-function AddEmployeeModal({ open, onClose, onCreated }: {
+function AddResourceModal({ open, onClose, onCreated }: {
   open: boolean; onClose: () => void; onCreated: () => void;
 }) {
   const { toast } = useToast();
-  const [form, setForm] = useState<EmpForm>(defaultEmpForm());
+  const canSeeCost = useCanSee("resource_costs");
+  const [form, setForm] = useState<ResForm>(defaultResForm());
   const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<keyof EmpForm, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof ResForm, string>>>({});
 
-  useEffect(() => { if (open) { setForm(defaultEmpForm()); setErrors({}); } }, [open]);
+  useEffect(() => { if (open) { setForm(defaultResForm()); setErrors({}); } }, [open]);
 
-  const set = <K extends keyof EmpForm>(k: K, v: EmpForm[K]) => setForm(f => ({ ...f, [k]: v }));
+  const set = <K extends keyof ResForm>(k: K, v: ResForm[K]) => setForm(f => ({ ...f, [k]: v }));
+
+  const addSkillRow = () => setForm(f => ({ ...f, skillsWithYears: [...f.skillsWithYears, { skill: "", years: "" }] }));
+  const removeSkillRow = (i: number) => setForm(f => ({ ...f, skillsWithYears: f.skillsWithYears.filter((_, idx) => idx !== i) }));
+  const setSkillRow = (i: number, field: "skill" | "years", val: string) =>
+    setForm(f => ({ ...f, skillsWithYears: f.skillsWithYears.map((r, idx) => idx === i ? { ...r, [field]: val } : r) }));
 
   const validate = () => {
     const e: typeof errors = {};
     if (!form.name.trim()) e.name = "Name is required";
     if (form.hourlyRate && isNaN(parseFloat(form.hourlyRate))) e.hourlyRate = "Must be a valid number";
+    if (form.costRate && isNaN(parseFloat(form.costRate))) e.costRate = "Must be a valid number";
     const ut = parseInt(form.utilizationTarget);
     if (isNaN(ut) || ut < 0 || ut > 200) e.utilizationTarget = "Must be 0–200";
     setErrors(e);
@@ -419,9 +696,11 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
     if (!validate()) return;
     setSaving(true);
     try {
-      const skillsArr = form.skills.trim()
-        ? form.skills.split(",").map(s => s.trim()).filter(Boolean)
-        : [];
+      const skillsArr = form.skills.trim() ? form.skills.split(",").map(s => s.trim()).filter(Boolean) : [];
+      const skillsWithYearsArr = form.skillsWithYears
+        .filter(r => r.skill.trim())
+        .map(r => ({ skill: r.skill.trim(), years: parseFloat(r.years) || 0 }));
+
       const payload: Record<string, unknown> = {
         name: form.name.trim(),
         practiceArea: form.practiceArea,
@@ -434,15 +713,20 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
       if (form.title)      payload.title = form.title.trim();
       if (form.location)   payload.location = form.location.trim();
       if (form.hourlyRate) payload.hourlyRate = parseFloat(form.hourlyRate);
+      if (form.costRate && canSeeCost) payload.costRate = parseFloat(form.costRate);
       if (form.bio)        payload.bio = form.bio.trim();
+      if (form.defaultRole) payload.defaultRole = form.defaultRole.trim();
+      if (form.vacationAllocationDays) payload.vacationAllocationDays = parseInt(form.vacationAllocationDays);
+      if (form.hireDate)   payload.hireDate = form.hireDate;
+      if (skillsWithYearsArr.length > 0) payload.skillsWithYears = skillsWithYearsArr;
 
       const res = await fetch(`${API}/resources`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Failed to create employee"); }
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Failed to create resource"); }
       const created = await res.json();
-      toast({ title: `${created.name} added to the team` });
+      toast({ title: `${created.name} added as a Resource` });
       onCreated(); onClose();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -455,7 +739,6 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
     { value: "bench", label: "On Bench" },
     { value: "on_leave", label: "On Leave" },
   ];
-
   const EMP_TYPES = [
     { value: "employee", label: "Employee" },
     { value: "contractor", label: "Contractor" },
@@ -474,18 +757,25 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
         <div className="space-y-4 py-1">
           {/* Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="emp-name">Full Name <span className="text-red-500">*</span></Label>
-            <Input id="emp-name" placeholder="e.g. Jordan Lee" value={form.name}
+            <Label htmlFor="res-name">Full Name <span className="text-red-500">*</span></Label>
+            <Input id="res-name" placeholder="e.g. Jordan Lee" value={form.name}
               onChange={e => set("name", e.target.value)}
               className={errors.name ? "border-red-500" : ""} autoFocus />
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
 
-          {/* Title */}
-          <div className="space-y-1.5">
-            <Label htmlFor="emp-title">Job Title</Label>
-            <Input id="emp-title" placeholder="e.g. Senior OTM Consultant"
-              value={form.title} onChange={e => set("title", e.target.value)} />
+          {/* Title + Default Role */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="res-title">Job Title</Label>
+              <Input id="res-title" placeholder="e.g. Senior OTM Consultant"
+                value={form.title} onChange={e => set("title", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="res-role">Default Role</Label>
+              <Input id="res-role" placeholder="e.g. Functional Consultant"
+                value={form.defaultRole} onChange={e => set("defaultRole", e.target.value)} />
+            </div>
           </div>
 
           {/* Employment Type + Status */}
@@ -523,42 +813,89 @@ function AddEmployeeModal({ open, onClose, onCreated }: {
             </Select>
           </div>
 
-          {/* Location + Hourly Rate */}
+          {/* Location + Hire Date */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="emp-location">Location</Label>
-              <Input id="emp-location" placeholder="e.g. Toronto, ON"
+              <Label htmlFor="res-location">Location</Label>
+              <Input id="res-location" placeholder="e.g. Toronto, ON"
                 value={form.location} onChange={e => set("location", e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="emp-rate">Hourly Rate ($)</Label>
-              <Input id="emp-rate" placeholder="e.g. 125"
+              <Label htmlFor="res-hire">Hire Date</Label>
+              <Input id="res-hire" type="date" value={form.hireDate} onChange={e => set("hireDate", e.target.value)} />
+            </div>
+          </div>
+
+          {/* Hourly Rate + Cost Rate (gated) + Vacation Days */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="res-rate">Bill Rate ($/hr)</Label>
+              <Input id="res-rate" placeholder="e.g. 175"
                 value={form.hourlyRate} onChange={e => set("hourlyRate", e.target.value)}
                 className={errors.hourlyRate ? "border-red-500" : ""} />
               {errors.hourlyRate && <p className="text-xs text-red-500">{errors.hourlyRate}</p>}
+            </div>
+            {canSeeCost && (
+              <div className="space-y-1.5">
+                <Label htmlFor="res-cost">Cost Rate ($/hr)</Label>
+                <Input id="res-cost" placeholder="e.g. 95"
+                  value={form.costRate} onChange={e => set("costRate", e.target.value)}
+                  className={errors.costRate ? "border-red-500" : ""} />
+                {errors.costRate && <p className="text-xs text-red-500">{errors.costRate}</p>}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="res-vacation">Vacation Days/yr</Label>
+              <Input id="res-vacation" type="number" min="0" max="60" placeholder="15"
+                value={form.vacationAllocationDays} onChange={e => set("vacationAllocationDays", e.target.value)} />
             </div>
           </div>
 
           {/* Utilization Target */}
           <div className="space-y-1.5">
-            <Label htmlFor="emp-util">Utilization Target (%)</Label>
-            <Input id="emp-util" placeholder="80" value={form.utilizationTarget}
+            <Label htmlFor="res-util">Utilization Target (%)</Label>
+            <Input id="res-util" placeholder="80" value={form.utilizationTarget}
               onChange={e => set("utilizationTarget", e.target.value)}
               className={errors.utilizationTarget ? "border-red-500" : ""} />
             {errors.utilizationTarget && <p className="text-xs text-red-500">{errors.utilizationTarget}</p>}
           </div>
 
-          {/* Skills */}
+          {/* Skills (flat list) */}
           <div className="space-y-1.5">
-            <Label htmlFor="emp-skills">Skills <span className="text-muted-foreground text-xs">(comma-separated)</span></Label>
-            <Input id="emp-skills" placeholder="e.g. OTM, Oracle Cloud, SQL, Rate Management"
+            <Label htmlFor="res-skills">Skills <span className="text-muted-foreground text-xs">(comma-separated)</span></Label>
+            <Input id="res-skills" placeholder="e.g. OTM, Oracle Cloud, SQL, Rate Management"
               value={form.skills} onChange={e => set("skills", e.target.value)} />
+          </div>
+
+          {/* Skills with Years */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Skills & Experience</Label>
+              <button type="button" onClick={addSkillRow}
+                className="text-xs text-primary hover:underline flex items-center gap-1">
+                <Plus className="h-3 w-3" /> Add skill
+              </button>
+            </div>
+            {form.skillsWithYears.length === 0 && (
+              <p className="text-xs text-muted-foreground">No skills with experience added yet.</p>
+            )}
+            {form.skillsWithYears.map((row, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <Input placeholder="Skill name" value={row.skill} onChange={e => setSkillRow(i, "skill", e.target.value)}
+                  className="flex-1 h-7 text-xs" />
+                <Input type="number" min="0" max="40" placeholder="Yrs" value={row.years}
+                  onChange={e => setSkillRow(i, "years", e.target.value)} className="w-16 h-7 text-xs" />
+                <button type="button" onClick={() => removeSkillRow(i)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
 
           {/* Bio */}
           <div className="space-y-1.5">
-            <Label htmlFor="emp-bio">Bio / Notes</Label>
-            <Textarea id="emp-bio" placeholder="Brief background on this team member…"
+            <Label htmlFor="res-bio">Bio / Notes</Label>
+            <Textarea id="res-bio" placeholder="Brief background on this resource…"
               value={form.bio} onChange={e => set("bio", e.target.value)} rows={3} className="resize-none" />
           </div>
         </div>
@@ -588,13 +925,16 @@ export default function ResourcesList() {
   const [heatmapWeeks, setHeatmapWeeks] = useState(12);
   const [heatmapGranularity, setHeatmapGranularity] = useState<"week" | "month">("week");
   const [addOpen, setAddOpen] = useState(false);
+  const { role } = useAuthRole();
 
   const fetchResources = () => {
     setLoading(true);
-    fetch(`${API}/resources`).then(r => r.json()).then(setResources).catch(() => {}).finally(() => setLoading(false));
+    const headers: Record<string, string> = {};
+    if (role) headers["x-user-role"] = role;
+    fetch(`${API}/resources`, { headers }).then(r => r.json()).then(setResources).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchResources(); }, []);
+  useEffect(() => { fetchResources(); }, [role]);
 
   const totalUtil = resources.length > 0 ? Math.round(resources.reduce((s, r) => s + r.currentUtilization, 0) / resources.length) : 0;
   const bench = resources.filter(r => r.currentUtilization < 20).length;
@@ -608,8 +948,8 @@ export default function ResourcesList() {
       <div className="border-b bg-card px-6 py-4 flex-shrink-0">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">People</h1>
-            <p className="text-sm text-muted-foreground">{resources.length} team members · {employees} employees · {contractors} contractors/partners</p>
+            <h1 className="text-xl font-bold tracking-tight">Resources</h1>
+            <p className="text-sm text-muted-foreground">{resources.length} resources · {employees} employees · {contractors} contractors/partners</p>
           </div>
           <div className="flex items-center gap-3">
             {[
@@ -678,8 +1018,7 @@ export default function ResourcesList() {
         )}
       </div>
 
-      {/* Add Resource Modal */}
-      <AddEmployeeModal
+      <AddResourceModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onCreated={() => fetchResources()}
