@@ -481,7 +481,6 @@ export default function AccountsList() {
     count: filtered.length,
     getScrollElement: () => tableParentRef.current,
     estimateSize: () => 56,
-    enabled: useVirtual,
   });
 
   if (isLoading) {

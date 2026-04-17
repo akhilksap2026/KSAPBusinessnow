@@ -529,7 +529,6 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
     count: filtered.length,
     getScrollElement: () => rosterParentRef.current,
     estimateSize: () => 72,
-    enabled: useVirtual,
   });
 
   return (

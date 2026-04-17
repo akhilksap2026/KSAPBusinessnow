@@ -82,7 +82,6 @@ export default function TimesheetApprovalPage() {
     count: filtered.length,
     getScrollElement: () => tableParentRef.current,
     estimateSize: () => 56,
-    enabled: useVirtual,
   });
 
   const toggleSelect = (id: number) => {
