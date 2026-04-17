@@ -20,9 +20,47 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 | Finance (invoices, contracts, change orders, FX rates) | Built |
 | Templates (project blueprints) | Built |
 
-## Removed (Overbuilt vs PRD)
+## Executive Committee Sprint Status
 
-Opportunity Pipeline/CRM, Renewal Signals, Account Health Scoring, Client Portal, Automations Engine, Forms Builder, AI Summaries/Digest, Handover wizard, Staffing Requests workflow, Per-project Rate Cards, Sales Dashboard, Account Manager Dashboard.
+| Sprint | Focus | Status |
+|--------|-------|--------|
+| Sprint 1 | Schema migrations (53 new columns, 3 new tables, 12 indexes) | ✅ Complete |
+| Sprint 2 | Terminology rename (Account→Customer) + nav (Prospects, Rate Cards) | Pending |
+| Sprint 3 | Resource module enhancements (heatmap tree, soft/hard visual, skills matrix) | Pending |
+| Sprint 4 | Project/Task module (7-level hierarchy, ETC, comments, dependencies) | Pending |
+| Sprint 5 | CRM: Prospects module + milestone types + payment alerts | Pending |
+| Sprint 6 | Timesheets + Rate Cards + Billing (admin project, collaboration, PM approval) | Pending |
+| Sprint 7 | Security middleware + polish (dark mode, virtual lists, empty states) | Pending |
+
+## Sprint 1 Schema Changes (April 2026)
+
+Migration file: `artifacts/api-server/migrations/sprint1_schema.sql`
+
+**New columns added (53 total across 10 tables):**
+- `resources`: default_role, skills_with_years (jsonb), vacation_allocation_days, hire_date
+- `accounts`: type, payment_terms, contract_header, converted_from_prospect_id
+- `projects`: is_internal, is_external, is_administrative, health_status, health_budget, health_hours, health_timeline, health_risks, is_fixed_fee, billing_rate, delivery_lead_id, template_id
+- `tasks`: hierarchy_level, is_leaf, comment_count, is_milestone_gate
+- `milestones`: milestone_type ('payment'|'project'|'external'), invoice_alert_sent, signoff_required, signoff_status, deliverables, invoice_amount
+- `timesheets`: billed_role, sell_rate, cost_rate, daily_comment, is_collaboration, submitted_at
+- `opportunities`: prospect_id, staffing_request_triggered (account_id made nullable for prospect-linked opps)
+- `rate_cards`: is_template, sell_rate, currency
+- `invoices`: line_items (jsonb), subtotal, total, currency, invoice_type
+- `staffing_requests`: practice_area
+
+**New tables created:**
+- `prospects` — pre-customer CRM entity with confidential contact fields (sentiment, touchPoints, primaryContact)
+- `task_comments` — task-level comments with @mention support (mentionedUserIds int[])
+- `saved_filters` — shareable filter presets per context (tasks/projects/resources)
+
+**Seed data added:**
+- 3 Prospects (TransWest Global, NovaCargo Solutions, Clearpath Freight)
+- 2 Saved filters (Open Tasks shared, My High Priority personal)
+- 3 Task comments with @mention references
+- Backfilled: 32 resources with default_role, 16 milestones with milestone_type, 9 projects with 4-dimension RAG health
+
+**Existing tables pre-existing (no changes needed):**
+- rate_cards, staffing_requests, task_dependencies, task_resources — all already exist and are used
 
 ## Time Log Module — Fixed Bugs (Apr 2026)
 
