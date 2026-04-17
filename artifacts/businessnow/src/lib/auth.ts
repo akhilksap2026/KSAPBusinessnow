@@ -216,6 +216,30 @@ export const ROUTE_ROLES: Record<string, readonly Role[]> = {
 const ROLE_KEY = "otmnow_role";
 const USER_KEY  = "otmnow_user_id";
 
+// Auto-login from ?__demo=<user_id> — runs before _role/_user are initialized
+(function applyDemoUrlParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const demo = params.get("__demo");
+    if (!demo) return;
+    const _ROLE_MAP: Record<string, string> = {
+      "rachel.nguyen": "admin", "james.whitfield": "executive",
+      "jana.kovac": "delivery_director", "alex.okafor": "project_manager",
+      "priya.mehta": "project_manager", "tom.kirkland": "project_manager",
+      "derek.tran": "consultant", "aisha.johnson": "consultant",
+      "maria.santos": "resource_manager", "sandra.liu": "finance_lead",
+      "diana.flores": "sales", "yuki.tanaka": "account_manager",
+    };
+    const role = _ROLE_MAP[demo];
+    if (!role) return;
+    localStorage.setItem(USER_KEY, demo);
+    localStorage.setItem(ROLE_KEY, role);
+    params.delete("__demo");
+    const q = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (q ? "?" + q : ""));
+  } catch { /* ignore */ }
+})();
+
 function readRoleFromStorage(): Role | null {
   try {
     const saved = localStorage.getItem(ROLE_KEY);
