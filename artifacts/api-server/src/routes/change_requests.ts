@@ -35,7 +35,7 @@ router.post("/change-requests", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [cr] = await db.insert(changeRequestsTable).values(parsed.data).returning();
+  const [cr] = await db.insert(changeRequestsTable).values(parsed.data as any).returning();
   res.status(201).json(parseCR(cr));
 });
 
@@ -105,7 +105,7 @@ router.put("/change-requests/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [cr] = await db.update(changeRequestsTable).set(parsed.data).where(eq(changeRequestsTable.id, params.data.id)).returning();
+  const [cr] = await db.update(changeRequestsTable).set(parsed.data as any).where(eq(changeRequestsTable.id, params.data.id)).returning();
   if (!cr) {
     res.status(404).json({ error: "Change request not found" });
     return;

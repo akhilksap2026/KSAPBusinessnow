@@ -1,6 +1,17 @@
+import * as Sentry from "@sentry/react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+
+// ── Sentry (P5-T6) — only initialised when VITE_SENTRY_DSN is set ────────────
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN as string,
+    environment: import.meta.env.MODE,
+    tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0,
+    integrations: [Sentry.browserTracingIntegration()],
+  });
+}
 
 // ── Global fetch interceptor — injects X-User-Role on all /api requests ───────
 const _origFetch = window.fetch.bind(window);

@@ -1,0 +1,979 @@
+# BUSINESSNow v7 — End-to-End Testing Prompt
+## Coherence · Completeness · Quality
+
+**Platform:** KSAP RPM / BUSINESSNow v7  
+**Scope:** Full system test — all modules, all roles, all data flows  
+**Excludes:** QuickBooks Online integration (internal accounting module used instead)  
+**Accounting Model:** Internal GL ledger with manual payment tracking (see Section 8)  
+**Prerequisites:** Production database seeded, real auth enabled, all Phase 1–5 builds complete
+
+---
+
+## How to Use This Document
+
+Each section is a self-contained test block. Work through them **in order** — later sections depend on data created in earlier ones. Each test includes:
+
+- **Setup** — data or state required before running the test
+- **Steps** — exact actions to perform in the UI or via API
+- **Pass Criteria** — specific, observable outcomes that confirm the feature works
+- **Fail Signals** — what to watch for that indicates a problem
+
+Do not skip sections. A pass in Section 6 (Invoicing) is meaningless if Section 3 (Time Entry) data is not correctly approved.
+
+---
+
+## Section 0 — Pre-Test Seed Data
+
+Before running any test, confirm the following seed state exists in the database. If it does not, create it manually or via the admin panel.
+
+### Required Users (one per role)
+
+| Name | Role | Reports To | hoursPerDay |
+|---|---|---|---|
+| Alex Partner | Partner / Executive | — | 8 |
+| Dana Director | Delivery Director | Alex Partner | 8 |
+| Morgan PM | Project Manager | Dana Director | 8 |
+| Jordan PM | Project Manager | Dana Director | 8 |
+| Sam Consultant | Employee / Consultant | Morgan PM | 8 |
+| Casey Consultant | Employee / Consultant | Morgan PM | 6 |
+| Riley Finance | Finance | Alex Partner | 8 |
+| Taylor Admin | Super Admin | — | 8 |
+
+### Required Customers
+
+| Name | Contract Currency | Billing Address |
+|---|---|---|
+| Acme Corporation | USD | 123 Main St, New York, NY |
+| Beta Systems | USD | 456 Oak Ave, Chicago, IL |
+
+### Required Projects
+
+| Name | Customer | Type | Status | Contract Value | PM |
+|---|---|---|---|---|---|
+| ACME-001 Implementation | Acme Corporation | T&M | Active | $150,000 | Morgan PM |
+| BETA-002 Upgrade | Beta Systems | Fixed-Bid | Active | $80,000 | Jordan PM |
+| INTERNAL: Leave & Admin | (System) | Internal | Active | — | — |
+
+### Required Rate Card (Global)
+
+| Role | Sell Rate (USD/hr) | Buy Rate (USD/hr) |
+|---|---|---|
+| Project Manager | $200 | $85 |
+| Consultant | $175 | $60 |
+| Senior Consultant | $225 | $95 |
+
+### Required Phases & Tasks — ACME-001
+
+```
+Phase 1: Discovery (Sequence 1)
+  ├── Task 1.1: Kickoff & Requirements Gathering  [Estimated: 16h, Owner: Sam Consultant]
+  └── Task 1.2: Current State Assessment          [Estimated: 24h, Owner: Casey Consultant]
+
+Phase 2: Design (Sequence 2)
+  ├── Task 2.1: Solution Architecture             [Estimated: 40h, Owner: Sam Consultant]
+  └── Task 2.2: Data Mapping                      [Estimated: 20h, Owner: Casey Consultant]
+```
+
+### Required Milestones — BETA-002
+
+| Name | Due Date | Billing % | Status |
+|---|---|---|---|
+| Design Sign-Off | +2 weeks from today | 25% | Pending |
+| UAT Complete | +6 weeks from today | 50% | Pending |
+| Go-Live | +10 weeks from today | 25% | Pending |
+
+---
+
+## Section 1 — Authentication & Role-Switching
+
+### Test 1.1 — Login and Context Selector
+
+**Setup:** Use the Morgan PM credentials.
+
+**Steps:**
+1. Navigate to the application login page.
+2. Enter Morgan PM's credentials and submit.
+3. Observe what appears immediately after authentication.
+
+**Pass Criteria:**
+- A context selector screen or modal appears before the main dashboard loads.
+- The selector shows at minimum two options: `Morgan PM — Project Manager` and the ability to view as any of their direct reports (Sam Consultant, Casey Consultant).
+- Selecting `Morgan PM — Project Manager` proceeds to the PM dashboard, scoped to Morgan's projects only (ACME-001 should appear; BETA-002 should not).
+- A persistent context indicator is visible in the top navigation bar showing the active role context.
+
+**Fail Signals:**
+- Login goes directly to dashboard with no context selection.
+- Context selector appears but BETA-002 (Jordan PM's project) is visible on Morgan's dashboard.
+- No context indicator in the top nav after selection.
+
+---
+
+### Test 1.2 — Manager Drill-Down ("View As")
+
+**Setup:** Logged in as Morgan PM.
+
+**Steps:**
+1. Navigate to the Team or Resources section.
+2. Locate Sam Consultant in the resource list.
+3. Look for a "View As" or "Step Into View" action.
+4. Activate it and observe what loads.
+
+**Pass Criteria:**
+- The UI transitions to Sam Consultant's perspective.
+- Only Sam's own timesheet is visible — not Casey's.
+- Only tasks assigned to Sam are shown.
+- A clear banner indicates "Viewing as Sam Consultant — [Exit View As]" is displayed.
+- Clicking Exit View As returns to Morgan PM's context without requiring a full logout.
+
+**Fail Signals:**
+- No "View As" action exists on the resource detail page.
+- Entering Sam's view still shows all project resources.
+- Exit View As requires re-login.
+
+---
+
+### Test 1.3 — Hierarchical Data Fencing
+
+**Setup:** Log in as each role in turn and note what data is visible.
+
+**Steps:**
+1. Log in as Sam Consultant. Note which projects appear on the dashboard and in the project list.
+2. Log out. Log in as Morgan PM. Note which projects appear.
+3. Log out. Log in as Dana Director. Note which projects appear.
+4. Log out. Log in as Alex Partner. Note which projects appear.
+
+**Pass Criteria:**
+- Sam Consultant sees only ACME-001 (assigned project). BETA-002 is not visible anywhere.
+- Morgan PM sees only ACME-001. BETA-002 is not visible.
+- Dana Director sees both ACME-001 and BETA-002 (both PMs report to Dana).
+- Alex Partner sees all projects including ACME-001 and BETA-002.
+- At no level does a Consultant see another Consultant's time entries.
+
+**Fail Signals:**
+- Sam Consultant can navigate to BETA-002 via direct URL.
+- API call `GET /api/projects` returns BETA-002 when authenticated as Sam (test via browser dev tools → Network tab).
+- Dana Director cannot see both projects.
+
+---
+
+### Test 1.4 — RBAC: Sensitive Field Visibility
+
+**Setup:** Access the same project (ACME-001) while logged in as different roles.
+
+**Steps:**
+1. As Sam Consultant: open ACME-001 and look for the rate card, billing rates, and margin/P&L data.
+2. As Morgan PM: open ACME-001 and look for the same fields.
+3. As Riley Finance: open ACME-001 and look for the same fields.
+4. As Alex Partner: open ACME-001 and look for the same fields.
+
+**Pass Criteria:**
+- Sam Consultant: no billing rates, no sell rates, no margin %, no contract value visible anywhere on the project. Time entry billable flag is visible (can toggle).
+- Morgan PM: billing rates (sell rate) visible. Buy rates / resource cost not visible. Margin % visible.
+- Riley Finance: all financial fields visible including buy rates, sell rates, margin, and contract value.
+- Alex Partner: all fields visible.
+
+**Fail Signals:**
+- Sam Consultant can see `$175/hr` sell rate anywhere on the page.
+- Morgan PM can see the `$60/hr` buy rate for Sam Consultant.
+- Any role sees financial data they should not per the RBAC matrix.
+
+---
+
+## Section 2 — Project Execution & WBS
+
+### Test 2.1 — Phase Gate Entry Criteria
+
+**Setup:** ACME-001 Phase 1 (Discovery) is in "Not Started" status. Entry criteria have been configured: `["Kickoff meeting completed", "NDA signed", "Access to client systems confirmed"]`.
+
+**Steps:**
+1. Log in as Morgan PM.
+2. Navigate to ACME-001 → Phases.
+3. Attempt to move Phase 1 from "Not Started" to "In Progress".
+4. Observe what appears.
+5. Check only the first two criteria. Attempt to save.
+6. Check all three criteria. Attempt to save.
+
+**Pass Criteria:**
+- Step 4: A gate checklist modal appears listing all three entry criteria as unchecked checkboxes. The "Proceed" or "Confirm" button is disabled.
+- Step 5: With only two of three checked, the button remains disabled or a validation message appears preventing the transition.
+- Step 6: With all three checked, the button becomes active. Clicking it transitions Phase 1 to "In Progress". The criteria are stored with the checking user's name and timestamp.
+
+**Fail Signals:**
+- Phase status changes without any checklist appearing.
+- Checklist appears but allows saving with unchecked items.
+- Criteria are not persisted — refreshing the page clears which criteria were checked.
+
+---
+
+### Test 2.2 — Task Dependencies & Gantt Cascade
+
+**Setup:** ACME-001 Task 1.1 (Kickoff) has a Finish-to-Start dependency on Task 1.2 (Current State Assessment). Task 1.1 end date is set to Day 5. Task 1.2 start date is Day 6.
+
+**Steps:**
+1. Log in as Morgan PM.
+2. Open ACME-001 → Gantt view.
+3. Confirm a dependency arrow is drawn from Task 1.1's right edge to Task 1.2's left edge.
+4. Drag Task 1.1's end date to extend it by 3 days (now ends Day 8).
+5. Observe Task 1.2's position.
+
+**Pass Criteria:**
+- Step 3: A visible arrow connects Task 1.1 to Task 1.2 on the Gantt chart.
+- Step 5: Task 1.2 automatically shifts its start date to Day 9 (immediately after Task 1.1's new end). The cascade happens without manual intervention.
+- If Task 2.1 also has a dependency on Task 1.2, it cascades further in the same action.
+- The updated dates are persisted in the database (confirm by refreshing the page).
+
+**Fail Signals:**
+- No dependency arrows visible on the Gantt.
+- Dragging Task 1.1 does not move Task 1.2.
+- Task 1.2 moves visually but reverts to original date on page refresh.
+
+---
+
+### Test 2.3 — Project Baseline & Variance View
+
+**Setup:** ACME-001 with tasks and estimated hours as seeded. No baseline has been taken yet.
+
+**Steps:**
+1. Log in as Morgan PM.
+2. Navigate to ACME-001 header. Find the "Baseline This Project" action.
+3. Click it. Enter label "Kick-off Baseline". Confirm.
+4. Now manually increase Task 1.1's estimated hours from 16 to 24.
+5. Set Task 1.1's ETC (Estimate to Complete) to 20.
+6. Navigate to the "Variance" tab in Project Detail.
+7. Observe the table.
+
+**Pass Criteria:**
+- Step 3: A success notification confirms the baseline was saved with the label and timestamp.
+- Step 6: The Variance tab renders a table with columns: Task | Baseline Hours | Actual Hours | ETC Hours | Variance.
+- Task 1.1 shows: Baseline = 16h, Actual = 0h (no time logged yet), ETC = 20h, Variance = +4h over baseline.
+- A project-level summary row shows the rolled-up variance.
+- Rows where ETC + Actuals exceed baseline are visually highlighted (amber or red).
+
+**Fail Signals:**
+- No "Baseline This Project" action exists.
+- Variance tab is absent from Project Detail.
+- ETC field is not independently editable from estimated hours.
+- Variance calculation is wrong (e.g., confusing ETC with remaining hours).
+
+---
+
+### Test 2.4 — Project Closure Gate
+
+**Setup:** ACME-001 with approved time entries, actual completion date and performance rating not yet set.
+
+**Steps:**
+1. Log in as Morgan PM.
+2. On ACME-001, attempt to change project status to "Completed" directly.
+3. If a gate modal appears, do not fill in any fields. Attempt to submit.
+4. Fill in: Actual Completion Date = today's date. Performance Rating = 4 stars. Confirm all time is approved.
+5. Submit.
+
+**Pass Criteria:**
+- Step 2: The system does not immediately change the status. A closure gate wizard or modal appears.
+- Step 3: The wizard blocks submission. It shows a checklist: (1) All time approved — must show ✓ or ✗ based on actual state, (2) Actual Completion Date — required field, (3) Performance Rating — required 1–5 selector.
+- Step 5: With all gate conditions satisfied, the project status transitions to "Completed". A profitability snapshot is frozen at this moment (margin % is locked in project record).
+- If any approved time is missing, the gate clearly identifies which resource/period still has pending time before allowing closure.
+
+**Fail Signals:**
+- Status changes to "Completed" without any gate.
+- Gate appears but can be submitted without the performance rating.
+- Profitability snapshot is not captured on closure (margin continues to update after project is "Completed").
+
+---
+
+## Section 3 — Time Entry
+
+### Test 3.1 — Weekly Grid Entry, Billable Toggle, Daily Comment
+
+**Setup:** Logged in as Sam Consultant. ACME-001 is assigned.
+
+**Steps:**
+1. Navigate to the Timesheets module — this week's view.
+2. Confirm the Administrative / Leave project row is available in addition to ACME-001.
+3. Add a row for ACME-001 → Task 1.1 (Kickoff). Enter 4 hours on Monday and 4 hours on Tuesday.
+4. Click on Monday's cell (4h) to expand it. Enter daily comment: "Facilitated client kickoff workshop, confirmed scope."
+5. Click the billable toggle on Tuesday's cell to mark it as non-billable. Enter daily comment: "Internal project debrief — not billable."
+6. Add a row for the Administrative project → "Annual Leave". Enter 8 hours on Friday.
+7. Click "Submit Week."
+
+**Pass Criteria:**
+- Step 2: The ADMIN: Leave & Internal project row appears in the project dropdown and in the grid. It is visually distinct (e.g., greyed or labelled "Administrative").
+- Step 3: Hours are accepted in 0.25-hour increments. Cells accept the input without error.
+- Step 4: Expanding Monday's cell reveals a text area. The comment saves on blur. A speech-bubble icon or indicator appears on the cell to show a comment exists.
+- Step 5: Tuesday's cell renders visually differently (muted, strikethrough icon, or billing indicator removed) to show it is non-billable.
+- Step 6: Annual Leave hours are accepted. The Administrative project does not appear in any billing calculation.
+- Step 7: All rows submit successfully. Status changes to "Submitted."
+
+**Fail Signals:**
+- Administrative project is not available in the timesheet dropdown.
+- Daily comment field does not appear on cell expansion.
+- Non-billable toggle does not visually differentiate the cell.
+- Submitting 8 hours of Annual Leave causes it to appear in billing reports.
+
+---
+
+### Test 3.2 — Duplicate Entry Detection
+
+**Setup:** Sam Consultant has already submitted 4 hours on Monday for ACME-001 → Task 1.1.
+
+**Steps:**
+1. Still as Sam Consultant, attempt to add a second row for the same Project + Task combination for the same week.
+
+**Pass Criteria:**
+- The system either prevents adding the duplicate row with a validation message, or auto-merges into the existing row.
+- Sam cannot successfully submit two separate rows for the same Project + Task in the same week period.
+
+**Fail Signals:**
+- Two rows for ACME-001 → Task 1.1 exist simultaneously with independent hours, doubling the logged time.
+
+---
+
+### Test 3.3 — Time Entry Constraints
+
+**Setup:** Sam Consultant has a Hire Date of 6 months ago. ACME-001 status is Active.
+
+**Steps:**
+1. As Sam Consultant, attempt to log time on a date prior to the hire date.
+2. Attempt to log time on a project with "On Hold" status (change ACME-001 temporarily to On Hold for this test, then restore).
+3. Attempt to log 0.1 hours (below the 0.25 minimum increment).
+
+**Pass Criteria:**
+- Step 1: An error or validation message prevents time entry before the hire date.
+- Step 2: An error prevents logging against an On Hold or Closed project.
+- Step 3: The system either rejects the entry or rounds up to 0.25 hours.
+
+**Fail Signals:**
+- Any of the three constraint violations are silently accepted.
+
+---
+
+### Test 3.4 — "Who Helped You" Collaborative Entry
+
+**Setup:** Sam Consultant is on ACME-001. Casey Consultant is also on ACME-001.
+
+**Steps:**
+1. As Sam Consultant, expand the Monday cell for ACME-001 → Task 1.1.
+2. Find the "Who helped you?" or "Collaborators" field.
+3. Select Casey Consultant from the dropdown.
+4. Save and submit the week.
+5. Log in as Morgan PM and open the timesheet approval queue. Find Sam's Monday entry.
+
+**Pass Criteria:**
+- Step 2: A multi-select field appears in the cell expand area below the daily comment.
+- Step 3: Casey's name appears as a chip or tag in the field.
+- Step 5: Sam's Monday entry shows a "👥 +1 collaborator" badge in the PM approval view. Clicking it reveals Casey Consultant's name.
+- Casey's tagged hours do NOT appear as a separate time entry in the billing calculations. Sam's 4 hours are the only billable hours for that cell.
+
+**Fail Signals:**
+- No "Who helped?" field exists in the cell expand area.
+- Casey's collaboration generates a duplicate billable time entry.
+- The collaborator badge does not appear in the PM approval view.
+
+---
+
+### Test 3.5 — Pre-population of Previous Week's Rows
+
+**Setup:** Sam Consultant has completed Test 3.1 and submitted the current week with ACME-001 and Administrative rows.
+
+**Steps:**
+1. Navigate to the next week's timesheet view.
+2. Observe whether rows are pre-populated.
+
+**Pass Criteria:**
+- ACME-001 → Task 1.1 appears as a row with 0.00 hours pre-filled across the week.
+- Administrative: Annual Leave also appears with 0.00 hours.
+- The pre-population saves Sam from having to re-add the same projects each week.
+
+**Fail Signals:**
+- Next week's timesheet is completely empty with no pre-populated rows.
+
+---
+
+## Section 4 — Timesheet Approval
+
+### Test 4.1 — Standard Approval Flow
+
+**Setup:** Sam Consultant has submitted the week (Test 3.1 complete). Logged in as Morgan PM.
+
+**Steps:**
+1. Navigate to the Timesheet Approval queue.
+2. Find Sam Consultant's submission.
+3. Review the entries. Verify the non-billable entry on Tuesday is visible with its indicator.
+4. Verify the daily comment from Monday is visible on hover or in the detail view.
+5. Approve Monday's entry. Reject Tuesday's entry with reason: "Please re-categorize — should be billable rework, not non-billable."
+6. Verify Sam Consultant receives a notification about the rejection.
+7. As Sam Consultant, open the rejected entry. Verify the rejection reason is visible in red. Toggle the billable flag back to billable. Resubmit.
+8. As Morgan PM, approve the resubmitted entry.
+
+**Pass Criteria:**
+- Step 2: Sam's submission appears in Morgan's approval queue and no other PM's queue.
+- Step 3: The non-billable indicator is visible on Tuesday's entry in the approval view.
+- Step 4: Daily comment is accessible without leaving the approval queue.
+- Step 5: Partial approval works — Monday approved, Tuesday rejected independently.
+- Step 6: Sam sees a notification (in-app or email) that Tuesday was rejected with the stated reason.
+- Step 7: The rejection reason ("Please re-categorize...") is shown on the rejected entry in Sam's view. Sam can edit and resubmit.
+- Step 8: Full approval achieved. All time entries move to "Approved" status. They are now locked for editing.
+
+**Fail Signals:**
+- Rejection reason is not visible to Sam Consultant.
+- Partial approval is not possible — all or nothing only.
+- Approved entries can still be edited by Sam after approval.
+
+---
+
+### Test 4.2 — Approval Delegation (OOO Scenario)
+
+**Setup:** Morgan PM is about to go on leave. Jordan PM will cover approvals.
+
+**Steps:**
+1. Log in as Morgan PM. Navigate to Profile Settings or Delegation settings.
+2. Find "Delegate Approval" or "Set OOO Delegate."
+3. Set: Delegate = Jordan PM, Start Date = today, End Date = today + 5 days.
+4. Log out. Log in as Jordan PM.
+5. Navigate to the Timesheet Approval queue.
+6. Observe whether Sam Consultant's pending timesheet appears with a delegation indicator.
+
+**Pass Criteria:**
+- Step 3: The delegation is saved successfully. Morgan sees the active delegation on their profile.
+- Step 6: Sam's timesheet appears in Jordan PM's approval queue alongside Jordan's own team's timesheets. A label such as "Delegated from Morgan PM" is shown on the entry.
+- Jordan PM can approve or reject Sam's timesheet within the delegation period.
+- After the End Date passes, Sam's future timesheets no longer appear in Jordan's queue.
+
+**Fail Signals:**
+- No delegation feature exists in profile settings.
+- Sam's timesheets do not appear in Jordan's queue even with an active delegation.
+- No "Delegated from" indicator — Jordan cannot distinguish delegated from their own team's timesheets.
+
+---
+
+### Test 4.3 — Finance Final Lock
+
+**Setup:** Morgan PM has approved Sam's full week. Logged in as Riley Finance.
+
+**Steps:**
+1. Navigate to Finance Command or the timesheet approval section.
+2. Find the batch of Morgan PM–approved time for ACME-001.
+3. Perform a Finance-level lock / finalize action on the approved batch.
+4. Log in as Taylor Admin. Attempt to edit Sam's locked time entry without an override.
+5. Use Taylor Admin's override capability. Edit the entry. Verify an audit log entry is created.
+
+**Pass Criteria:**
+- Step 3: Finance can batch-lock approved entries. Locked entries display a lock icon.
+- Step 4: Admin attempting to edit a locked entry without override receives a warning: "This entry is locked. Use Admin Override to edit."
+- Step 5: Admin override succeeds. An audit log entry is created showing: who changed it, what changed, when, and the original value.
+
+**Fail Signals:**
+- Finance has no mechanism to lock entries that are already PM-approved.
+- Locked entries can be edited without any admin override process.
+- No audit log entry is created for the admin override.
+
+---
+
+## Section 5 — Resource Management & Capacity
+
+### Test 5.1 — Soft vs Hard Allocation
+
+**Setup:** A new pipeline project "GAMMA Prospect" exists (status: Opportunity, not yet Active).
+
+**Steps:**
+1. Log in as Dana Director (or Morgan PM with allocation access).
+2. Navigate to Allocations.
+3. Create a new allocation for Sam Consultant on GAMMA Prospect: 50%, marked as **Soft**.
+4. Also confirm Sam has a hard allocation on ACME-001 at 80%.
+5. Navigate to Capacity Forecast / Heatmap.
+6. Look at Sam Consultant's capacity row.
+7. Toggle the heatmap between "Confirmed Only" and "Include Pipeline (Soft)."
+
+**Pass Criteria:**
+- Step 3: An "isSoft" or "Soft Allocation" toggle exists on the allocation creation form.
+- Step 6: In "Confirmed Only" view, Sam shows 80% utilization (ACME-001 only). The heatmap cell is solid.
+- Step 7: In "Include Pipeline" view, Sam shows 130% combined (80% hard + 50% soft). The soft portion renders with a hatched/striped fill, visually distinct from the solid hard allocation. An over-allocation warning is shown but Sam is not blocked.
+- The soft allocation never appears in any billing report or invoice calculation.
+
+**Fail Signals:**
+- No soft allocation toggle exists.
+- Heatmap does not visually distinguish soft from hard allocations.
+- Soft allocation appears in the billable hours report.
+
+---
+
+### Test 5.2 — Capacity Heatmap Filtering
+
+**Setup:** Multiple resources across two roles: Consultant and Senior Consultant.
+
+**Steps:**
+1. Navigate to Capacity Forecast.
+2. Apply a role filter: select "Consultant" only.
+3. Observe which rows appear in the heatmap.
+4. Clear the filter. Apply a different filter: "Senior Consultant."
+
+**Pass Criteria:**
+- Step 3: Only resources with the Consultant role appear. Senior Consultants and PMs are hidden.
+- Step 4: Only Senior Consultant resources appear.
+- Both filters update the heatmap without a full page reload (ideally a query-param driven refetch).
+
+**Fail Signals:**
+- No role/practice-area filter exists above the heatmap.
+- Filtering shows all resources regardless of selected role.
+
+---
+
+### Test 5.3 — Conflict Detection
+
+**Setup:** Casey Consultant has 6 available hours per day (hoursPerDay = 6). Casey is already allocated 100% to ACME-001 for the next 4 weeks.
+
+**Steps:**
+1. Attempt to create a new allocation for Casey Consultant on BETA-002 at any percentage for the overlapping period.
+
+**Pass Criteria:**
+- The system detects the conflict and shows a warning: "Casey Consultant is already allocated [X]% during this period."
+- The allocation can still be saved (over-allocation is allowed with a warning badge, not a hard block) per the PSA requirements.
+- The over-allocation state is visually represented in the heatmap with a red or amber indicator.
+
+**Fail Signals:**
+- No conflict detection occurs — a second conflicting allocation is created silently.
+- The system hard-blocks the allocation instead of warning and allowing the user to proceed.
+
+---
+
+## Section 6 — Internal Accounting & Invoicing
+
+> **Note on QuickBooks:** QuickBooks Online integration is excluded from this test suite. The system is expected to manage accounting internally with a GL account structure, payment tracking, and reporting without external sync.
+
+### Internal Accounting Setup — GL Account Structure
+
+Before running Section 6 tests, confirm the following GL accounts are configured in PMO Settings → GL Account Mapping:
+
+| GL Code | GL Name | Maps To |
+|---|---|---|
+| 4000 | Professional Services Revenue | All T&M Projects |
+| 4100 | Fixed Fee Revenue | All Fixed-Bid Projects |
+| 2000 | Accounts Receivable | All open invoices |
+| 5000 | Labor Cost | Resource buy-rate cost entries |
+
+These GL codes are used to categorize invoice lines internally without needing an external accounting system.
+
+---
+
+### Test 6.1 — T&M Invoice Generation with Line Item Detail
+
+**Setup:** Sam Consultant's full week (Mon: 4h billable ACME-001, Tue: 4h billable ACME-001, Fri: 8h Annual Leave) is fully approved and locked. Rate card sell rate for Consultant role = $175/hr.
+
+**Steps:**
+1. Log in as Riley Finance.
+2. Navigate to Finance Command → Pending Billing Queue.
+3. Find ACME-001 with the un-invoiced period.
+4. Initiate invoice generation for ACME-001 covering this period.
+5. Review the generated invoice draft in the invoice preview panel.
+6. Verify each line item.
+
+**Pass Criteria:**
+- Step 2: The Pending Billing Queue shows ACME-001 with: Unbilled Hours = 8 (billable only), Estimated Invoice Amount = $1,400 (8h × $175).
+- Step 5: An invoice preview slide-over panel opens showing the full invoice before it is finalized.
+- Step 6: The invoice contains exactly 2 line items (Monday and Tuesday — non-billable Tuesday excluded, Annual Leave excluded):
+  - Line 1: Sam Consultant | Monday | Task 1.1 — Kickoff | 4h | $175/hr | $700 | Description: "Facilitated client kickoff workshop, confirmed scope."
+  - Line 2: Sam Consultant | Tuesday | Task 1.1 — Kickoff | 4h | $175/hr | $700 | Description: [daily comment text]
+- Invoice total = $1,400.
+- GL Code 4000 (Professional Services Revenue) is assigned to each line.
+- Annual Leave hours (8h Administrative project) do not appear anywhere on the invoice.
+- Casey's collaborator tag from Test 3.4 does NOT generate a billable line for Casey.
+
+**Fail Signals:**
+- Non-billable Tuesday entry appears as a billable line item.
+- Annual Leave hours appear on the invoice.
+- Line items show only "Project Total: $1,400" with no per-resource/per-day detail.
+- Daily comment does not appear as the invoice line description.
+- Casey Consultant's collaboration generates a separate billable line.
+
+---
+
+### Test 6.2 — Invoice Preview & Approval Flow
+
+**Setup:** The draft T&M invoice from Test 6.1 exists.
+
+**Steps:**
+1. As Riley Finance, open the draft invoice.
+2. Click "Preview" or the equivalent preview action.
+3. Review the preview panel.
+4. Click "Request Corrections" in the preview panel.
+5. Observe where corrections are requested.
+6. Re-enter the preview and click "Confirm & Send / Finalize."
+
+**Pass Criteria:**
+- Step 3: A slide-over or modal renders the invoice with all line items, subtotals by resource, grand total, customer billing address, invoice number, and invoice date.
+- Step 4: "Request Corrections" navigates to or highlights the timesheet approval queue with a note that corrections are needed for this invoice period.
+- Step 6: Finalizing the invoice changes its status from Draft to Sent/Finalized. The entries associated with this invoice are now permanently locked and cannot be edited (even by Admin without a special override).
+- The invoice is assigned an Invoice Number (auto-incremented, e.g., INV-001).
+
+**Fail Signals:**
+- No invoice preview step — finalize immediately sends without review.
+- "Request Corrections" button exists but does nothing.
+- Invoice status does not change to "Sent" or "Finalized" after confirmation.
+
+---
+
+### Test 6.3 — Fixed-Bid Milestone Invoice
+
+**Setup:** BETA-002, Milestone "Design Sign-Off" is in "Pending" status. Contract value = $80,000. Milestone percentage = 25%.
+
+**Steps:**
+1. Log in as Jordan PM.
+2. Navigate to BETA-002 → Milestones.
+3. Approve "Design Sign-Off" milestone (set to Approved).
+4. Observe whether a notification or alert is triggered.
+5. Log in as Riley Finance.
+6. Navigate to Invoices. Attempt to generate a milestone invoice for BETA-002.
+
+**Pass Criteria:**
+- Step 4: Jordan PM (and Riley Finance) receive a notification: "Milestone 'Design Sign-Off' has been approved. An invoice for $20,000 (25% of $80,000) is ready to generate."
+- Step 6: Finance can generate an invoice for $20,000. The invoice line reads "Design Sign-Off — Milestone 1 of 3" with the fixed amount. No hourly rate or timesheet lines appear — this is a flat milestone billing.
+- GL Code 4100 (Fixed Fee Revenue) is assigned to the milestone invoice line.
+
+**Fail Signals:**
+- Milestone approval does not trigger any billing notification.
+- Finance cannot find BETA-002 in the pending billing queue after milestone approval.
+- The generated invoice incorrectly pulls timesheet hours instead of the milestone flat amount.
+
+---
+
+### Test 6.4 — Payment Recording & Outstanding Balance
+
+**Setup:** INV-001 (T&M invoice for ACME-001, $1,400) has been finalized.
+
+**Steps:**
+1. Log in as Riley Finance.
+2. Open INV-001.
+3. Record a partial payment: Amount = $700, Payment Date = today, Reference = "Wire Transfer REF-001."
+4. Observe the invoice status and outstanding balance.
+5. Record a second payment: Amount = $700, Reference = "Wire Transfer REF-002."
+6. Observe the final status.
+
+**Pass Criteria:**
+- Step 4: Invoice status changes to "Partially Paid." Outstanding balance = $700. The payment record shows: Date, Amount, Reference Number.
+- Step 6: Invoice status changes to "Paid" after the second payment completes the balance. Outstanding balance = $0.
+- Both payment records are visible on the invoice with their individual reference numbers and dates.
+- The Receivables report in Finance Command updates to reflect INV-001 as paid.
+
+**Fail Signals:**
+- No payment recording feature exists on the invoice.
+- Partial payment is not supported — payment field only accepts full amounts.
+- Invoice status does not update to "Partially Paid" or "Paid" based on payment records.
+- Receivables report still shows INV-001 as outstanding after full payment.
+
+---
+
+### Test 6.5 — Project-Level Rate Card Override
+
+**Setup:** ACME-001 uses the global rate card ($175/hr for Consultant). The client has negotiated a custom rate of $185/hr.
+
+**Steps:**
+1. Log in as Riley Finance or Morgan PM.
+2. Navigate to Rate Cards.
+3. Find the global rate card. Use "Copy to Project" action. Select ACME-001.
+4. Open the new ACME-001 specific rate card. Change Consultant rate from $175 to $185.
+5. Generate a new invoice for ACME-001 for a new period with approved hours.
+6. Verify which rate is used.
+
+**Pass Criteria:**
+- Step 3: A "Copy to Project" button or action exists on the global rate card.
+- Step 4: The project-level rate card is clearly labelled "Rate Card — ACME Corporation Implementation (Override)" with a banner "Inherited from: Global Rate Card."
+- Changing the Consultant rate to $185 on the project card does not affect the global rate card.
+- Step 6: The new invoice uses $185/hr for Consultant role on ACME-001, not $175. The global card remains unchanged for all other projects.
+
+**Fail Signals:**
+- No "Copy to Project" action exists.
+- Editing the project-level rate card changes the global rate card.
+- New invoices for ACME-001 still use the global $175 rate after the override is set.
+
+---
+
+## Section 7 — Financial Reporting & Dashboards
+
+### Test 7.1 — Finance Command: WIP, Receivables, Margin, Leakage
+
+**Setup:** At least one finalized invoice and one partially paid invoice exist from Section 6.
+
+**Steps:**
+1. Log in as Riley Finance.
+2. Navigate to Finance Command.
+3. Review the WIP tab.
+4. Review the Receivables tab.
+5. Review the Margin tab for ACME-001.
+6. Review the Leakage tab.
+
+**Pass Criteria:**
+- WIP tab: Shows approved, un-invoiced time by project. ACME-001 should show any hours approved but not yet invoiced.
+- Receivables tab: INV-001 shows as "Partially Paid" with outstanding balance. Total receivables figure is correct.
+- Margin tab: ACME-001 shows Revenue (sell rate × billed hours) vs Cost (buy rate × actual hours). Margin % is calculated correctly. This field is not visible if logged in as Morgan PM (finance-only data).
+- Leakage tab: Any non-billable hours logged on billable projects appear here as revenue leakage.
+
+**Fail Signals:**
+- Annual Leave hours (Administrative project) appear in the Leakage report.
+- Margin % visible to Morgan PM (PM should not see buy rates or P&L margin).
+- WIP includes already-invoiced hours.
+
+---
+
+### Test 7.2 — Portfolio View (Executive)
+
+**Setup:** Both ACME-001 and BETA-002 are active.
+
+**Steps:**
+1. Log in as Alex Partner.
+2. Navigate to Portfolio view.
+3. Review the KPI summary.
+4. Identify any "At Risk" projects.
+
+**Pass Criteria:**
+- Both ACME-001 and BETA-002 appear.
+- KPIs shown include: total active projects, total billed this month, total unbilled, overall utilization rate, and projects at risk.
+- Health scores (composite of schedule, budget, milestones, blocked tasks) are visible per project.
+- Clicking into a project navigates to that project's detail without losing the executive context.
+
+**Fail Signals:**
+- Only one project appears in the portfolio (data scoping too aggressive for Executive role).
+- Health scores are absent or always show "Healthy" regardless of actual project state.
+
+---
+
+### Test 7.3 — Utilization Reporting
+
+**Setup:** Sam Consultant has logged: 8h billable, 0h non-billable, 8h Administrative (Annual Leave) in the test week.
+
+**Steps:**
+1. Log in as Riley Finance or Dana Director.
+2. Navigate to the Utilization report.
+3. Filter to Sam Consultant for the test week.
+
+**Pass Criteria:**
+- Total Utilization = (8h billable + 8h admin) / 40h capacity = 40% (if full week capacity is 40h).
+- Billable Utilization = 8h billable / (40h - 8h leave) = 8/32 = 25%.
+- The report distinguishes between Total Utilization and Billable Utilization — they are different figures.
+- Annual Leave hours reduce the denominator for Billable Utilization but are not counted as billable hours.
+
+**Fail Signals:**
+- Annual Leave hours are counted as billable utilization.
+- Total and Billable Utilization report the same number.
+- Casey Consultant's collaborator-tagged hours inflate Sam's utilization figures.
+
+---
+
+## Section 8 — Internal Accounting Module Validation
+
+> This section validates the internal GL accounting system that replaces the need for QuickBooks. The system must function as a self-contained record of revenue, receivables, and costs.
+
+### Test 8.1 — GL Account Mapping Coverage
+
+**Steps:**
+1. Log in as Taylor Admin or Riley Finance.
+2. Navigate to PMO Settings → GL Account Mapping.
+3. Verify every active project has a GL code mapped.
+4. Verify every task type (Configuration, Integration, Data, Testing, Training) has a GL code mapped.
+
+**Pass Criteria:**
+- ACME-001 maps to GL 4000 (Professional Services Revenue).
+- BETA-002 maps to GL 4100 (Fixed Fee Revenue).
+- Every task type has a GL mapping.
+- An admin warning or indicator appears for any active project missing a GL code.
+
+**Fail Signals:**
+- GL mapping page does not exist in PMO Settings.
+- Projects can be invoiced without a GL code assigned (no validation warning).
+
+---
+
+### Test 8.2 — Internal Revenue Ledger
+
+**Steps:**
+1. As Riley Finance, navigate to Finance Command or a dedicated Accounting / Ledger section.
+2. View the revenue entries for the current month.
+3. Confirm each finalized invoice has a corresponding revenue entry.
+
+**Pass Criteria:**
+- Each finalized invoice generates an internal ledger entry: Date | GL Code | Description | Debit | Credit.
+- INV-001 ($1,400) creates: Debit Accounts Receivable (GL 2000) $1,400 | Credit Professional Services Revenue (GL 4000) $1,400.
+- When payment is recorded, a second entry is created: Debit Cash $1,400 | Credit Accounts Receivable (GL 2000) $1,400.
+- Entries are immutable — they cannot be deleted, only reversed with a correcting entry.
+
+**Fail Signals:**
+- No internal ledger or accounting entries are created when invoices are finalized.
+- Payment recording does not generate a corresponding ledger entry.
+- Ledger entries can be deleted without creating a reverse entry.
+
+---
+
+### Test 8.3 — Aging Report
+
+**Steps:**
+1. As Riley Finance, navigate to Finance Command → Receivables.
+2. Look for an Aging Report view (or filter).
+3. Review the aging buckets.
+
+**Pass Criteria:**
+- Receivables are bucketed by age: Current (0–30 days), 31–60 days, 61–90 days, 90+ days.
+- Each bucket shows the total outstanding amount.
+- Individual invoices are listed within their bucket with customer name, invoice number, amount, and due date.
+- The "Overdue" status is automatically applied to any invoice past its payment terms (e.g., Net 30).
+
+**Fail Signals:**
+- No aging buckets — receivables shown as a flat list without age categorization.
+- Overdue status is not automatically applied based on payment terms.
+
+---
+
+## Section 9 — Notifications & System Health
+
+### Test 9.1 — Event-Driven Notification Coverage
+
+Verify that the following events trigger in-app (or email) notifications to the correct role.
+
+| Event | Who Should Be Notified | Test Action |
+|---|---|---|
+| Timesheet submitted | Morgan PM | Sam submits week in Section 3 |
+| Timesheet rejected | Sam Consultant | Morgan rejects entry in Section 4 |
+| Milestone approved | Jordan PM + Riley Finance | Milestone approved in Section 6.3 |
+| Invoice overdue | Riley Finance | Manually set an invoice's due date to yesterday |
+| Project health turns red | Morgan PM | Block a Critical task on ACME-001 |
+| Approval delegation activated | Jordan PM | Morgan sets delegation in Section 4.2 |
+
+**Pass Criteria:** For each event, the named recipient receives a notification within a reasonable time (< 2 minutes for in-app). The notification links directly to the relevant record.
+
+**Fail Signals:** Any event in the table above does not generate a notification for the stated recipient.
+
+---
+
+### Test 9.2 — Audit Log Integrity
+
+**Steps:**
+1. Log in as Taylor Admin.
+2. Navigate to System Admin → Audit Log.
+3. Review the log for the following events from today's testing session:
+   - Admin override of a locked time entry (Section 4.3 Step 5)
+   - Project baseline creation (Section 2.3 Step 3)
+   - Invoice finalization (Section 6.2 Step 6)
+   - Any GL ledger entry creation (Section 8.2)
+
+**Pass Criteria:**
+- Each event appears in the audit log with: Timestamp, User who performed the action, Action type, Record affected, Before value, After value.
+- The audit log is read-only. No entry can be deleted or modified even by Super Admin.
+- Filtering by date, user, or action type works correctly.
+
+**Fail Signals:**
+- Any of the four event types is absent from the audit log.
+- Audit log entries can be deleted.
+- Audit log is not accessible (no route or menu item).
+
+---
+
+## Section 10 — Multi-Currency
+
+### Test 10.1 — INR Resource Cost vs USD Billing
+
+**Setup:** Add a new resource "Priya Offshore" with cost rate in INR (₹5,000/day). A monthly exchange rate of 1 USD = 83 INR is configured. ACME-001 bills in USD.
+
+**Steps:**
+1. Assign Priya to ACME-001. Log 8 hours against a task.
+2. Navigate to ACME-001 margin report.
+3. Observe how Priya's cost is reported.
+
+**Pass Criteria:**
+- Priya's cost rate of ₹5,000/day is converted to USD at the configured exchange rate: $60.24/day (₹5,000 ÷ 83).
+- The margin report shows Priya's cost in USD alongside the USD billing rate, enabling like-for-like margin calculation.
+- The INR cost is not mixed with USD billing without conversion — no raw INR figures appear in USD margin reports.
+
+**Fail Signals:**
+- Priya's cost rate appears as INR in a USD margin report without conversion (e.g., cost shows as ₹5,000 against revenue of $175).
+- No exchange rate table exists in PMO Settings.
+- Margin calculation is wrong due to currency mismatch.
+
+---
+
+## Section 11 — Performance & Edge Cases
+
+### Test 11.1 — Gantt Performance with 200 Tasks
+
+**Steps:**
+1. Seed ACME-001 with 200 tasks across its phases (use a test data utility or API batch insert).
+2. Add 50 Finish-to-Start dependency pairs.
+3. Navigate to the Gantt view.
+4. Measure time from navigation to full chart render.
+5. Drag one predecessor task bar. Measure time for cascade update.
+
+**Pass Criteria:**
+- Initial Gantt render completes in under 3 seconds.
+- Cascade update after drag completes in under 2 seconds.
+- All 50 dependency arrows are rendered without overlapping or disappearing.
+- No browser console errors appear during render or drag.
+
+**Fail Signals:**
+- Gantt render takes more than 5 seconds with 200 tasks.
+- Browser tab freezes during cascade update.
+- Some dependency arrows are missing or incorrectly drawn.
+
+---
+
+### Test 11.2 — Concurrent Timesheet Submission
+
+**Steps:**
+1. Using two browser sessions simultaneously, log in as Sam Consultant in one and Casey Consultant in the other.
+2. Both submit their timesheets for the same week at the same second.
+
+**Pass Criteria:**
+- Both submissions are accepted independently. No data corruption.
+- Morgan PM's approval queue shows two separate submissions — one per consultant.
+- No database constraint violation or 500 error occurs.
+
+**Fail Signals:**
+- One submission overwrites the other.
+- A 500 error appears in either session.
+- Only one submission appears in the approval queue.
+
+---
+
+### Test 11.3 — API Security: Direct URL Access Without Auth
+
+**Steps:**
+1. Log out completely (clear all cookies and session storage).
+2. Attempt to directly navigate to these URLs in the browser:
+   - `/api/projects`
+   - `/api/invoices`
+   - `/api/rate-cards`
+   - `/dashboard`
+   - `/finance`
+
+**Pass Criteria:**
+- All five URLs return a 401 Unauthorized response or redirect to the login page.
+- No project data, invoice data, or rate card data is returned in any unauthenticated API response.
+- The `/finance` and `/dashboard` pages redirect to login rather than rendering an empty shell.
+
+**Fail Signals:**
+- Any API endpoint returns data without an authenticated session.
+- UI pages render (even empty) without authentication, exposing route structure.
+
+---
+
+## Sign-Off Checklist
+
+Upon completing all sections, record the result of each section below. A section passes only if every test within it passes all Pass Criteria.
+
+| Section | Name | Pass | Fail | Notes |
+|---|---|---|---|---|
+| 0 | Seed Data | | | |
+| 1 | Authentication & RBAC | | | |
+| 2 | Project Execution & WBS | | | |
+| 3 | Time Entry | | | |
+| 4 | Timesheet Approval | | | |
+| 5 | Resource Management | | | |
+| 6 | Invoicing & Internal Accounting Setup | | | |
+| 7 | Financial Reporting | | | |
+| 8 | Internal Accounting Module | | | |
+| 9 | Notifications & Audit | | | |
+| 10 | Multi-Currency | | | |
+| 11 | Performance & Edge Cases | | | |
+
+**Production Release Gate:** All 12 sections must show Pass before the system is cleared for production deployment. Any Fail result must be assigned to a developer with a fix deadline before the gate is re-evaluated.
+
+---
+
+*BUSINESSNow v7 · KSAP Technologies · End-to-End Test Prompt · April 2026*  
+*Generated against KSAP PSA Requirements, Time Entry PRD, Product Architecture, and Feature Spec*

@@ -114,7 +114,7 @@ router.get("/accounts/:id/health", async (req, res): Promise<void> => {
     })),
     avgProjectHealth,
     overdueMilestones: overdueMilestones.map(m => ({ id: m.id, name: m.name, dueDate: m.dueDate, projectId: m.projectId })),
-    clientActions: clientActions.map(t => ({ id: t.id, title: t.title, projectId: t.projectId, priority: t.priority })),
+    clientActions: clientActions.map(t => ({ id: t.id, title: t.name, projectId: t.projectId, priority: t.priority })),
     upcomingGoLives: upcomingGoLives.map(p => ({ id: p.id, name: p.name, goLiveDate: p.goLiveDate })),
     invoiceSummary: {
       total: invoices.reduce((s, i) => s + parseFloat(i.amount), 0),
@@ -213,7 +213,7 @@ router.get("/portfolio/director", async (req, res): Promise<void> => {
   const blockedProjects = projects.filter(p => blockedProjectIds.has(p.id)).map(p => ({
     id: p.id, name: p.name, accountName: p.accountName, healthScore: p.healthScore,
     pmName: p.pmName,
-    blockers: blockedTasks.filter(t => t.projectId === p.id).map(t => ({ id: t.id, title: t.title, blockerNote: t.blockerNote })),
+    blockers: blockedTasks.filter(t => t.projectId === p.id).map(t => ({ id: t.id, title: t.name, blockerNote: t.blockerNote })),
   }));
 
   const overdueMilestones = milestones.filter(m => m.status !== "completed" && m.dueDate && m.dueDate < today);

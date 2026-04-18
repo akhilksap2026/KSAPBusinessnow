@@ -47,7 +47,6 @@ router.post("/allocations/fill-range", async (req, res): Promise<void> => {
     endDate,
     allocationPct: pct,
     allocationType: allocationType ?? "hard",
-    roleOnProject: roleOnProject ?? null,
     notes: notes ?? null,
     status: "confirmed",
   }).returning();

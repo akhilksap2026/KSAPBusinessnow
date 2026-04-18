@@ -1,0 +1,35 @@
+// PHASE 5 — QA, HARDENING & SIGN-OFF (ALL TASKS)
+// ── P5-T1: PSA SCORECARD RE-RUN ──────────────────────────────────
+
+1. Open KSAP_PSA_Requirements.xlsx. For each MUST requirement row, manually test in the running app and record: 0 (not implemented), 1 (partial), or 2 (fully working). Create docs/scorecard-phase5.md with a markdown table: | Req ID | Description | Score | Notes |. Target: zero 0s, at most 2 ones with justification. Any requirement scoring 0 is a production release blocker — fix it before proceeding to step 2.
+
+// ── P5-T2: RBAC VALIDATION ───────────────────────────────────────
+
+2. Create tests/rbac.test.ts. For each role in [partner, director, pm, consultant, finance, client_stakeholder], mock a session with that role's userId and test: (a) GET /api/projects returns only scoped projects for that role, (b) GET /api/resources returns only scoped resources, (c) GET /api/invoices returns 403 for consultant role, (d) PATCH /api/invoices/:id returns 403 for PM role (finance-only action), (e) GET /api/rate-cards billing rates field is absent from consultant responses. Run: npx vitest tests/rbac.test.ts. All tests must pass before proceeding.
+
+// ── P5-T3: E2E BILLING AUDIT ─────────────────────────────────────
+
+3. Create tests/billing-e2e.test.ts. Test sequence: (a) Seed one project, one resource (roleId with a known sell rate), 5 time entries — 3 with isBillable=true, 2 with isBillable=false, all with approvalStatus='approved'. (b) Call POST /api/invoices/generate. (c) Assert: invoice.lineItems.length === 3, invoice.total === sum(3 billable entries × sellRate), no collaborator shadow entries appear. (d) Call POST /api/invoices/:id/finalize. Assert qboInvoiceId is set. (e) Mock the QBO API call and assert GL account code appears in the payload for at least one line item.
+
+4. Run: npx tsc --noEmit — fix all TypeScript compilation errors. Zero errors required before any deployment.
+
+// ── P5-T4: LOAD TEST CRITICAL PATHS ─────────────────────────────
+
+5. Install k6 (or use the k6 Docker image on Replit). Create tests/load/gantt.js: seed a project with 200 tasks and 50 dependency pairs. Hit GET /api/projects/:id/tasks with 50 virtual users × 10 iterations. Assert p95 response time < 800ms. Create tests/load/heatmap.js: seed 100 resources with 12 weeks of allocations. Hit GET /api/capacity with 30 VUs × 10 iterations. Assert p95 < 1200ms. Run both: k6 run tests/load/gantt.js && k6 run tests/load/heatmap.js. For any failing assertion, run EXPLAIN ANALYZE on the slow query, identify the missing index, and add it in a new Drizzle migration.
+
+// ── P5-T5: PRODUCTION AUTH HARDENING ────────────────────────────
+
+6. In server/middleware/auth.ts, ensure requireAuth middleware: (a) reads and cryptographically verifies the session token or JWT — not just checks existence, (b) rejects with 401 if token is expired or signature is invalid. Then run: grep -rn "router\.\(get\|post\|patch\|delete\)" server/routes/ --include="*.ts" | grep -v requireAuth. Every unguarded route found must have requireAuth added. Install and configure rate limiting: npm install express-rate-limit, apply rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }) to POST /api/auth/login only. Test: 21st login request within 15 minutes must return 429.
+
+// ── P5-T6: DEPLOYMENT CHECKLIST ─────────────────────────────────
+
+7. Create client/src/components/common/ErrorBoundary.tsx as a React class component with componentDidCatch and a generic fallback UI. Wrap every top-level page component's return value: <ErrorBoundary>...</ErrorBoundary>.
+
+8. Install Sentry: npm install @sentry/react @sentry/node. Init in client/src/main.tsx: Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV }). Init in server/index.ts: Sentry.init({ dsn: process.env.SENTRY_DSN }). Add Sentry's Express error handler as the last middleware in the chain.
+
+9. Create DEPLOYMENT.md with a table of all required environment variables: DATABASE_URL, SESSION_SECRET, QBO_CLIENT_ID, QBO_CLIENT_SECRET, SENTRY_DSN, ENABLE_CRM_MODULES, ENABLE_AUTOMATIONS, ENABLE_FORMS, NODE_ENV — for each: purpose, example value, required/optional. Document first-deploy migration command: npx drizzle-kit push:pg.
+
+10. Final security scan: grep -rn "console\.log" client/src/ server/ --include="*.ts" --include="*.tsx" | grep -v "\.test\." | grep -v "node_modules" — replace every hit with the production-safe logger pattern. Then: grep -rn "sk_live\|pk_live\|api_key\|password\s*=\s*[\"']" client/src/ server/ --include="*.ts" — any hardcoded credential found is a blocker.
+
+
+Output expected: PSA scorecard at zero 0s. All RBAC and billing tests pass. Load tests pass p95 thresholds. All API routes guarded. Login rate-limited to 20/15min. Error boundaries on every page. Sentry initialised on both client and server. DEPLOYMENT.md complete. Zero console.log or hardcoded secrets in production code.

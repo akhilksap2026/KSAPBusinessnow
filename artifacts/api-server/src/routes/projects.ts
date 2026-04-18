@@ -1165,7 +1165,7 @@ router.post("/projects/:id/copy", async (req, res): Promise<void> => {
   // Copy milestones
   if (milestones.length > 0) {
     await Promise.all(milestones.map(m => {
-      const { id: _mid, createdAt: _mca, updatedAt: _mua, ...mData } = m;
+      const { id: _mid, createdAt: _mca, ...mData } = m as any;
       return db.insert(milestonesTable).values({ ...mData, projectId: newProject.id, status: "not_started" as any });
     }));
   }

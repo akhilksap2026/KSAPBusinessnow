@@ -32,7 +32,7 @@ router.post("/accounts", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [account] = await db.insert(accountsTable).values(parsed.data).returning();
+  const [account] = await db.insert(accountsTable).values(parsed.data as any).returning();
   res.status(201).json(account);
 });
 
@@ -61,7 +61,7 @@ router.put("/accounts/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [account] = await db.update(accountsTable).set(parsed.data).where(eq(accountsTable.id, params.data.id)).returning();
+  const [account] = await db.update(accountsTable).set(parsed.data as any).where(eq(accountsTable.id, params.data.id)).returning();
   if (!account) {
     res.status(404).json({ error: "Account not found" });
     return;

@@ -2,7 +2,7 @@ import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export type TemplateTask = {
+export type TemplateTaskShape = {
   name: string;
   description?: string;
   estimatedHours?: number;
@@ -17,7 +17,7 @@ export type TemplateMilestone = {
   durationWeeks: number;
   isBillable?: boolean;
   clientAction?: string;
-  tasks?: TemplateTask[];
+  tasks?: TemplateTaskShape[];
 };
 
 export type TemplatePhase = {

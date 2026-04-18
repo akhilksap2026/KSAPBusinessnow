@@ -43,7 +43,7 @@ router.post("/task-comments", async (req, res): Promise<void> => {
   if (mentionNames.length > 0) {
     const allResources = await db.select({ id: resourcesTable.id, name: resourcesTable.name }).from(resourcesTable);
     mentionedUserIds = allResources
-      .filter(r => mentionNames.some(mn => r.name.toLowerCase().includes(mn)))
+      .filter(r => mentionNames.some((mn: string) => r.name.toLowerCase().includes(mn)))
       .map(r => r.id);
   }
 

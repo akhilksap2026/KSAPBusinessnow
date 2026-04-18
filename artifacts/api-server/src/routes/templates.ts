@@ -119,7 +119,7 @@ router.post("/templates/:id/create-project", async (req, res): Promise<void> => 
       for (const t of (ms.tasks || [])) {
         await db.insert(tasksTable).values({
           projectId: project.id, phaseId: phase.id, milestoneId: milestone.id,
-          title: t.name, name: t.name, status: "todo" as any,
+          name: t.name, status: "todo" as any,
           estimatedHours: t.estimatedHours ? String(t.estimatedHours) : null,
           isClientAction: t.isClientAction || false, priority: "medium" as any,
           phase: ph.name,
@@ -154,7 +154,6 @@ router.post("/templates/:id/create-project", async (req, res): Promise<void> => 
         phaseId: null,
         parentId: resolvedParentId,
         name: tt.name,
-        title: tt.name,
         taskType: tt.taskType as any,
         sortOrder: tt.sortOrder ?? 0,
         estimatedHours: tt.estimatedHours ? String(tt.estimatedHours) : null,

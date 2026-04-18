@@ -151,8 +151,8 @@ router.get("/finance/margin", async (req, res): Promise<void> => {
     const approvedHours = approvedBillableTs.reduce((s, t) => s + parseFloat(t.hoursLogged), 0);
     const billableHours = approvedBillableTs.reduce((s, t) => s + parseFloat(t.billableHours || "0"), 0);
     const budgetValue = parseFloat(p.budgetValue || "0");
-    const budgetHours = p.budgetHours || 0;
-    const consumedHours = p.consumedHours || 0;
+    const budgetHours = Number(p.budgetHours) || 0;
+    const consumedHours = Number(p.consumedHours) || 0;
 
     const plannedMargin = budgetValue > 0 ? Math.round(((budgetValue - (budgetHours * 110)) / budgetValue) * 100) : null;
     const currentRevenue = parseFloat(p.billedValue || "0") || invoicedRevenue;
@@ -163,7 +163,7 @@ router.get("/finance/margin", async (req, res): Promise<void> => {
     if (currentMargin !== null && plannedMargin !== null && currentMargin < plannedMargin - 10) marginRisks.push("Current margin tracking below plan");
 
     return {
-      project: { id: p.id, name: p.name, status: p.status, billingModel: p.projectType },
+      project: { id: p.id, name: p.name, status: p.status, billingModel: p.type },
       plannedMargin, currentMargin,
       budgetValue, invoicedRevenue, paidRevenue,
       approvedHours, billableHours, consumedHours, budgetHours,
@@ -389,7 +389,7 @@ router.get("/clients/:id/portal", async (req, res): Promise<void> => {
         signedAt: signoff?.signedAt ?? null,
       };
     }),
-    actionNeeded: actionNeeded.map(t => ({ id: t.id, title: t.title, projectId: t.projectId, priority: t.priority, dueDate: t.dueDate })),
+    actionNeeded: actionNeeded.map(t => ({ id: t.id, title: t.name, projectId: t.projectId, priority: t.priority, dueDate: t.dueDate })),
     pendingApprovals: pendingApprovals.map(cr => ({ id: cr.id, title: cr.title, projectName: cr.projectName, impactCost: parseFloat(cr.impactCost || "0"), impactHours: parseFloat(cr.impactHours || "0") })),
     overdueMilestones: overdueMilestones.map(m => ({ id: m.id, name: m.name, dueDate: m.dueDate, projectId: m.projectId })),
     invoices: invoices.map(i => ({ id: i.id, invoiceNumber: i.invoiceNumber, amount: parseFloat(i.amount), status: i.status, dueDate: i.dueDate })),

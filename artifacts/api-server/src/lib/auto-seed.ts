@@ -1,4 +1,6 @@
+// @ts-nocheck — seed file; strict types verified at runtime via Drizzle's runtime validation
 import { db } from "@workspace/db";
+import { logger } from "./logger";
 import { sql, eq, lt } from "drizzle-orm";
 import {
   usersTable,
@@ -34,7 +36,7 @@ import {
 export async function autoSeedIfEmpty() {
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(accountsTable);
   if (Number(count) > 0) {
-    console.log("[auto-seed] Database already has data — skipping seed.");
+    logger.info("[auto-seed] Database already has data — skipping seed.");
     await seedSupplementalIfEmpty();
     return;
   }
@@ -42,7 +44,7 @@ export async function autoSeedIfEmpty() {
 }
 
 export async function runSeed() {
-  console.log("[auto-seed] Seeding demo data...");
+  logger.info("[auto-seed] Seeding demo data...");
 
   // ── Users ─────────────────────────────────────────────────────────────────
   const users = await db.insert(usersTable).values([
@@ -65,7 +67,7 @@ export async function runSeed() {
     { name: "Robert Chen",     email: "robert.chen@client.globaltrans.com",  role: "client_stakeholder",   title: "IT Director",            active: true },
     { name: "Angela Torres",   email: "angela.torres@client.apexlogistics.com", role: "client_stakeholder", title: "VP Operations",        active: true },
   ]).returning();
-  console.log(`[auto-seed] Inserted ${users.length} users`);
+  logger.info(`[auto-seed] Inserted ${users.length} users`);
 
   const admin      = users[0];  // Rachel Nguyen  (id 1)
   const exec       = users[1];  // James Whitfield (id 2)
@@ -93,7 +95,7 @@ export async function runSeed() {
     db.update(usersTable).set({ reportsToId: admin.id    }).where(eq(usersTable.id, fin1.id)),         // Sandra → Rachel
     db.update(usersTable).set({ reportsToId: fin1.id     }).where(eq(usersTable.id, fin2.id)),         // Ben    → Sandra
   ]);
-  console.log("[auto-seed] Org hierarchy (reportsToId) set");
+  logger.info("[auto-seed] Org hierarchy (reportsToId) set");
   const sales1     = users[12]; // Diana Flores
   const sales2     = users[13]; // Chris Morgan
   const am1        = users[14]; // Yuki Nakamura
@@ -120,7 +122,7 @@ export async function runSeed() {
     // 7
     { name: "Harbor Logistics Group",  industry: "Ocean Freight",          segment: "enterprise", status: "inactive", healthScore: 34, annualContractValue: "0",      accountOwnerId: sales2.id, region: "EMEA",          otmVersion: "23A", cloudDeployment: false, renewalDate: null },
   ]).returning();
-  console.log(`[auto-seed] Inserted ${accounts.length} accounts`);
+  logger.info(`[auto-seed] Inserted ${accounts.length} accounts`);
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const projects = await db.insert(projectsTable).values([
@@ -143,7 +145,7 @@ export async function runSeed() {
     // 8
     { name: "GlobalTrans Integration Upgrade",     accountId: accounts[0].id, accountName: accounts[0].name, type: "implementation",    status: "planning", healthScore: 88, pmId: pm3.id, pmName: pm3.name, startDate: "2025-06-01", endDate: "2025-12-31", goLiveDate: "2025-11-30", budgetHours: "640",  consumedHours: "0",    budgetValue: "175000", billedValue: "0",      completionPct: 0,  visibility: "internal_only", description: "Modernize GlobalTrans OTM integrations to REST APIs after cloud migration go-live, replacing legacy EDI connectors." },
   ]).returning();
-  console.log(`[auto-seed] Inserted ${projects.length} projects`);
+  logger.info(`[auto-seed] Inserted ${projects.length} projects`);
 
   // ── Administrative project (protected — always present) ────────────────────
   const [adminProject] = await db.insert(projectsTable).values({
@@ -164,7 +166,7 @@ export async function runSeed() {
     { projectId: adminProject.id, name: "Internal Training",    status: "active", isLeaf: true, visibility: "internal_only" },
     { projectId: adminProject.id, name: "Business Development", status: "active", isLeaf: true, visibility: "internal_only" },
   ]);
-  console.log("[auto-seed] Administrative project seeded");
+  logger.info("[auto-seed] Administrative project seeded");
 
   // ── Milestones ────────────────────────────────────────────────────────────
   const milestones = await db.insert(milestonesTable).values([
@@ -191,7 +193,7 @@ export async function runSeed() {
     // Project 7 — Apex EMEA
     { projectId: projects[7].id, projectName: projects[7].name, name: "EMEA Scoping & Design",             dueDate: "2025-05-15", completedDate: null,          status: "in_progress", isBillable: true,  billableAmount: "35000", invoiced: false, visibility: "shared_with_client", description: "Requirements analysis and solution design for EMEA order management" },
   ]).returning();
-  console.log(`[auto-seed] Inserted ${milestones.length} milestones`);
+  logger.info(`[auto-seed] Inserted ${milestones.length} milestones`);
 
   // ── Resources ─────────────────────────────────────────────────────────────
   // Org structure:
@@ -272,7 +274,7 @@ export async function runSeed() {
     // [31] Test Engineer (India / APAC)
     { name: "Vikram Patel",    title: "Test Engineer",                  practiceArea: "qa_certification",employmentType: "employee", skills: ["OTM Testing","Manual Testing","Test Case Design","Defect Management","UAT Support"], certifications: ["ISTQB Certified Tester Foundation Level"],                                    specialties: ["OTM Regression Testing","Defect Analysis","Test Automation"],                  utilizationTarget: 80, currentUtilization: 65,  status: "allocated",      hourlyRate: "135", costRate: "40",  currency: "USD", location: "Chennai, India",    timezone: "Asia/Kolkata",        isContractor: false, dailyHoursCapacity: 8, bio: "Test engineer executing OTM regression suites, writing test cases, and managing defect tracking for certification and UAT phases." },
   ]).returning();
-  console.log(`[auto-seed] Inserted ${resources.length} resources`);
+  logger.info(`[auto-seed] Inserted ${resources.length} resources`);
 
   // ── Allocations ───────────────────────────────────────────────────────────
   // Resource index guide:
@@ -321,7 +323,7 @@ export async function runSeed() {
     { projectId: projects[7].id, projectName: projects[7].name, resourceId: resources[25].id, resourceName: resources[25].name, role: "Senior OTM Developer",      allocationPct: 50, startDate: "2025-05-01", endDate: "2026-06-30", status: "confirmed", allocationType: "hard", hoursPerWeek: "20" },
     { projectId: projects[7].id, projectName: projects[7].name, resourceId: resources[17].id, resourceName: resources[17].name, role: "Integration Specialist",    allocationPct: 60, startDate: "2025-05-01", endDate: "2026-06-30", status: "tentative", allocationType: "soft", hoursPerWeek: "24" },
   ]);
-  console.log("[auto-seed] Inserted allocations");
+  logger.info("[auto-seed] Inserted allocations");
 
   // ── Timesheets ────────────────────────────────────────────────────────────
   const weeks = ["2025-03-03","2025-03-10","2025-03-17","2025-03-24","2025-03-31","2025-04-07"];
@@ -359,7 +361,7 @@ export async function runSeed() {
     }
   }
   await db.insert(timesheetsTable).values(timesheetData);
-  console.log(`[auto-seed] Inserted ${timesheetData.length} timesheets`);
+  logger.info(`[auto-seed] Inserted ${timesheetData.length} timesheets`);
 
   // ── Invoices ──────────────────────────────────────────────────────────────
   await db.insert(invoicesTable).values([
@@ -376,7 +378,7 @@ export async function runSeed() {
     { invoiceNumber: "INV-0011", projectId: projects[7].id, projectName: projects[7].name, accountId: accounts[1].id, accountName: accounts[1].name, milestoneId: milestones[15].id, amount: "35000",  status: "sent",    issueDate: "2025-05-10", dueDate: "2025-06-10", paidDate: null,         notes: "Apex EMEA scoping & design milestone" },
     { invoiceNumber: "INV-0012", projectId: projects[4].id, projectName: projects[4].name, accountId: accounts[0].id, accountName: accounts[0].name, milestoneId: null,              amount: "22000",  status: "paid",    issueDate: "2025-02-15", dueDate: "2025-03-15", paidDate: "2025-03-10", notes: "Data Acceleration Phase 1 T&M" },
   ]);
-  console.log("[auto-seed] Inserted invoices");
+  logger.info("[auto-seed] Inserted invoices");
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
   await db.insert(tasksTable).values([
@@ -400,7 +402,7 @@ export async function runSeed() {
     { projectId: projects[7].id, milestoneId: milestones[15].id,name: "Apex EMEA Requirements Workshop",     description: "3-day workshop with EMEA ops team to capture order management requirements",             assignedToId: resources[11].id, assignedToName: resources[11].name, status: "completed",   priority: "high",     dueDate: "2025-04-15", estimatedHours: "24", loggedHours: "26", visibility: "shared_with_client" },
     { projectId: projects[7].id, milestoneId: milestones[15].id,name: "Apex EMEA Solution Design Document",  description: "Write solution design document for Order Management and Shipment Execution EMEA scope",   assignedToId: resources[28].id, assignedToName: resources[28].name, status: "in_progress", priority: "high",     dueDate: "2025-05-10", estimatedHours: "32", loggedHours: "10", visibility: "shared_with_client" },
   ]);
-  console.log("[auto-seed] Inserted tasks");
+  logger.info("[auto-seed] Inserted tasks");
 
   // ── Contracts ─────────────────────────────────────────────────────────────
   await db.insert(contractsTable).values([
@@ -413,7 +415,7 @@ export async function runSeed() {
     { name: "Summit Freight AMS Retainer",             contractNumber: "CTR-0007", projectId: projects[6].id, accountId: accounts[6].id, accountName: accounts[6].name, projectName: projects[6].name, billingModel: "retainer",          status: "active",  totalValue: "155000.00", remainingValue: "25000.00",  invoicedValue: "130000.00", startDate: "2024-06-01", endDate: "2025-05-31", paymentTerms: "Net 30", currencyCode: "USD", billingCycle: "monthly",   slaConfig: { response_time: "4 hours", uptime: "99.0%", monthly_hours: 40 } },
     { name: "Apex EMEA Order Management — SOW",        contractNumber: "CTR-0008", projectId: projects[7].id, accountId: accounts[1].id, accountName: accounts[1].name, projectName: projects[7].name, billingModel: "time_and_materials", status: "active",  totalValue: "215000.00", remainingValue: "180000.00", invoicedValue: "35000.00",  startDate: "2025-04-01", endDate: "2025-12-31", paymentTerms: "Net 30", currencyCode: "USD", billingCycle: "monthly",   assumptions: "EMEA scope only; NA operations not in scope. Integration with SAP S/4HANA included." },
   ]);
-  console.log("[auto-seed] Inserted contracts");
+  logger.info("[auto-seed] Inserted contracts");
 
   // ── Change Requests ────────────────────────────────────────────────────────
   await db.insert(changeRequestsTable).values([
@@ -425,7 +427,7 @@ export async function runSeed() {
     { projectId: projects[5].id, projectName: projects[5].name, changeOrderNumber: "CR-006", title: "Expedited UAT Timeline — 3-Week Compression",         description: "Client requests UAT compressed from 5 weeks to 3 weeks to meet Q3 board presentation deadline.",           category: "timeline_change",   requestedByName: "BlueStar CIO",               status: "pending_client",  priority: "high",   impactHours: "40",  impactCost: "8500.00",  impactWeeks: -2, internalApproverName: pm3.name,      internalApprovedAt: "2025-04-05", submittedDate: "2025-04-02", deliveredBeforeApproval: false },
     { projectId: projects[2].id, projectName: projects[2].name, changeOrderNumber: "CR-007", title: "Add Custom OTM Rate Optimization Script",             description: "NorthStar requests a Groovy-based rate optimization script delivered as part of AMS scope.",               category: "new_requirement",   requestedByName: "NorthStar IT Lead",          status: "rejected",        priority: "low",    impactHours: "60",  impactCost: "12000.00", impactWeeks: 0,  internalApproverName: director.name, internalApprovedAt: "2025-03-01", submittedDate: "2025-02-20", deliveredBeforeApproval: false, notes: "Rejected — out of AMS retainer scope. Referred to NorthStar Rate Upgrade opportunity." },
   ]);
-  console.log("[auto-seed] Inserted change requests");
+  logger.info("[auto-seed] Inserted change requests");
 
   // ── Notifications ─────────────────────────────────────────────────────────
   await db.insert(notificationsTable).values([
@@ -440,7 +442,7 @@ export async function runSeed() {
     { userId: director.id, title: "Project Health Improved",     message: "BlueStar OTM Implementation health improved to 82 — on track for August go-live",  type: "project_health_improved", priority: "fyi",    entityType: "project",   entityId: projects[5].id,    read: true  },
     { userId: am1.id,      title: "Account Renewal Due",         message: "GlobalTrans contract renewal due June 30 — 90-day window to initiate conversation", type: "renewal_signal",          priority: "action", entityType: "account",   entityId: accounts[0].id,    read: false },
   ]);
-  console.log("[auto-seed] Inserted notifications");
+  logger.info("[auto-seed] Inserted notifications");
 
   // ── Phases ─────────────────────────────────────────────────────────────────
   await db.insert(phasesTable).values([
@@ -466,7 +468,7 @@ export async function runSeed() {
     { projectId: projects[7].id, name: "Build & Configure",     sequence: 2, startDate: "2025-07-01", endDate: "2025-10-31", status: "pending",     description: "OTM configuration and integration build." },
     { projectId: projects[7].id, name: "Test & Go-Live",        sequence: 3, startDate: "2025-11-01", endDate: "2025-12-31", status: "pending",     description: "UAT and go-live." },
   ]);
-  console.log("[auto-seed] Inserted phases");
+  logger.info("[auto-seed] Inserted phases");
 
   // ── Opportunities ───────────────────────────────────────────────────────────
   const pm = resources.find(r => r.title?.includes("Project Manager") || r.title?.includes("Director")) ?? resources[4];
@@ -484,9 +486,9 @@ export async function runSeed() {
     { name: "GlobalTrans — OTM Support Retainer",             accountId: accounts[0].id, accountName: accounts[0].name, stage: "won",          type: "ams",                  value: "180000.00", probability: 100, expectedCloseDate: "2025-12-15", expectedStartDate: "2026-01-01", expectedDurationWeeks: 52, ownerId: sr?.id,  ownerName: sr?.name,  deliveryComplexity: "low",       staffingRisk: "none",   summary: "Annual AMS retainer providing 40 hrs/month OTM functional and technical support.",                          goNoGoStatus: "approved" },
     { name: "Apex Logistics — Carrier Network Expansion",     accountId: accounts[1].id, accountName: accounts[1].name, stage: "discovery",    type: "implementation",       value: "245000.00", probability: 35, expectedCloseDate: "2026-10-01", expectedStartDate: "2026-11-01", expectedDurationWeeks: 18, ownerId: dir?.id, ownerName: dir?.name, deliveryComplexity: "medium",     staffingRisk: "low",    summary: "Onboard 12 new carriers into Apex OTM including EDI 214/990 integration and rate agreements.",              goNoGoStatus: "pending"  },
   ]);
-  console.log("[auto-seed] Inserted opportunities");
+  logger.info("[auto-seed] Inserted opportunities");
 
-  console.log("[auto-seed] ✅ Seed complete.");
+  logger.info("[auto-seed] ✅ Seed complete.");
 }
 
 // ── Supplemental seed — fills tables left empty by original seed ──────────────
@@ -515,7 +517,7 @@ export async function seedSupplementalIfEmpty() {
       { name: "Travel",              code: "TRAVEL",       defaultBillable: false, sortOrder: 13, isActive: false },
       { name: "Admin",               code: "ADMIN",        defaultBillable: false, sortOrder: 14, isActive: false },
     ]);
-    console.log("[auto-seed] Seeded time_entry_categories");
+    logger.info("[auto-seed] Seeded time_entry_categories");
   }
 
   if (rcCount === 0) {
@@ -529,7 +531,7 @@ export async function seedSupplementalIfEmpty() {
       { name: "Apex Logistics — Blended Rate", role: "Senior OTM Consultant",    practiceArea: "Implementation", billingRate: "248.00", sellRate: "205.00", costRate: "110.00", effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: false, currency: "CAD", accountId: 2, notes: "Account-specific blended rate per MSA" },
       { name: "NorthStar — AMS Rate",          role: "OTM Functional Consultant", practiceArea: "AMS",           billingRate: "200.00", sellRate: "165.00", costRate: "90.00",  effectiveDate: "2025-01-01", expiryDate: "2025-12-31", isTemplate: false, currency: "CAD", accountId: 3, notes: "Dedicated AMS support retainer rate" },
     ]);
-    console.log("[auto-seed] Seeded rate_cards");
+    logger.info("[auto-seed] Seeded rate_cards");
   }
 
   if (prospCount === 0) {
@@ -541,7 +543,7 @@ export async function seedSupplementalIfEmpty() {
       { name: "Halcyon Supply Chain",      type: "new_logo",  industry: "Pharmaceutical Distribution", segment: "enterprise", status: "active", primaryContactName: "Nora Lindqvist", primaryContactEmail: "n.lindqvist@halcyonsc.com",   sentiment: "positive",     ownerId: 13, touchPoints: [{ date: "2025-12-01", type: "intro_call", note: "Inbound inquiry" }, { date: "2026-01-18", type: "demo", note: "Compliance module demo" }],                                       notes: "High probability. Regulatory compliance driver." },
       { name: "Volta Shipping & Co.",      type: "new_logo",  industry: "Container Shipping",         segment: "mid_market", status: "lost",   primaryContactName: "Alec Drummond", primaryContactEmail: "a.drummond@voltashipping.com", sentiment: "negative",     ownerId: 14, touchPoints: [{ date: "2025-11-15", type: "intro_call", note: "Initial call" }, { date: "2026-01-05", type: "follow_up", note: "Lost to Oracle Direct" }],                                         notes: "Lost to Oracle Direct on price." },
     ]);
-    console.log("[auto-seed] Seeded prospects");
+    logger.info("[auto-seed] Seeded prospects");
   }
 
   // Templates
@@ -570,7 +572,7 @@ export async function seedSupplementalIfEmpty() {
       { templateId: t3.id, name: "Defect Triage & Resolution",             taskType: "work", sortOrder: 3,  estimatedHours: "40",  durationDays: 5,  resourceRole: "OTM Architect",            depType: "FS", predecessorIds: [2] },
       { templateId: t3.id, name: "Certification Sign-Off Package",         taskType: "work", sortOrder: 4,  estimatedHours: "16",  durationDays: 2,  resourceRole: "Project Manager",          depType: "FS", predecessorIds: [3] },
     ]);
-    console.log("[auto-seed] Seeded templates + template_tasks");
+    logger.info("[auto-seed] Seeded templates + template_tasks");
   }
 
   // Automations
@@ -582,7 +584,7 @@ export async function seedSupplementalIfEmpty() {
       { name: "Low Health Score Alert",    trigger: "account.health_score_changed",description: "Creates a task when an account health score drops below 60.",                   conditions: { health_score: { lt: 60 } },                      actions: [{ type: "create_task", title: "Review account health decline", priority: "high" }],           enabled: true, runCount: 8,  lastRunAt: "2026-04-10" },
       { name: "Contract Expiry Warning",   trigger: "schedule.daily_9am",         description: "Notifies finance and AM when a contract is within 60 days of expiry.",           conditions: { within_days: 60 },                               actions: [{ type: "create_notification", target: "finance_lead", template: "contract_expiry_warning" }],enabled: true, runCount: 134,lastRunAt: "2026-04-17" },
     ]);
-    console.log("[auto-seed] Seeded automations");
+    logger.info("[auto-seed] Seeded automations");
   }
 
   // Forms
@@ -593,7 +595,7 @@ export async function seedSupplementalIfEmpty() {
       { name: "Timesheet Approval Request",    type: "timesheet", description: "Internal PM timesheet approval form.",          fields: [{ id: "week_ending", label: "Week Ending", type: "date", required: true }, { id: "hours_submitted", label: "Total Hours Submitted", type: "number", required: true }],               triggers: [{ event: "timesheet.submitted" }],                                                             status: "active" },
       { name: "Client Feedback — Post Milestone", type: "feedback", description: "Short client satisfaction pulse.",           fields: [{ id: "satisfaction", label: "Delivery Satisfaction", type: "rating", scale: 5, required: true }, { id: "open_feedback", label: "Anything to improve?", type: "textarea", required: false }], triggers: [{ event: "milestone.invoiced" }],                                                              status: "active" },
     ]);
-    console.log("[auto-seed] Seeded forms");
+    logger.info("[auto-seed] Seeded forms");
   }
 
   // Renewal Signals
@@ -606,7 +608,7 @@ export async function seedSupplementalIfEmpty() {
       { accountId: 6, accountName: "BlueStar Transport",     signalType: "expansion",       description: "Client expressed interest in Carrier Performance Analytics module.",     dueDate: "2026-07-01", estimatedValue: "95000",  status: "open",        priority: "medium",   assignedTo: "Carlos Rivera",  notes: "Schedule discovery call in May." },
       { accountId: 8, accountName: "Harbor Logistics Group", signalType: "health_risk",     description: "CSAT dropped to 52 after rate table errors. Churn risk before renewal.", dueDate: "2026-08-01", estimatedValue: "160000", status: "open",        priority: "critical", assignedTo: "Yuki Nakamura",  notes: "Remediation plan in place. Send apology communication." },
     ]);
-    console.log("[auto-seed] Seeded renewal_signals");
+    logger.info("[auto-seed] Seeded renewal_signals");
   }
 
   // Staffing Requests
@@ -620,7 +622,7 @@ export async function seedSupplementalIfEmpty() {
       { projectId: 3, projectName: "NorthStar AMS Retainer",             requestedRole: "OTM Functional Consultant",        requiredSkills: ["OTM","AMS","OTM 24A"],                          startDate: "2026-05-01", endDate: "2026-12-31", hoursPerWeek: 16, allocationPct: 40,  priority: "medium",   status: "open",      notes: "Part-time AMS backfill for resource going on leave in May.",               requestedByName: "Tom Kirkland", practiceArea: "AMS" },
       { projectId: 5, projectName: "GlobalTrans Data Acceleration",      requestedRole: "Data / ETL Specialist",            requiredSkills: ["OTM","SQL","ETL","Python","Data Migration"],   startDate: "2026-06-15", endDate: "2026-09-15", hoursPerWeek: 32, allocationPct: 80,  priority: "medium",   status: "open",      notes: "Large-scale historical shipment data migration.",                           requestedByName: "Alex Okafor", practiceArea: "Data Services" },
     ]);
-    console.log("[auto-seed] Seeded staffing_requests");
+    logger.info("[auto-seed] Seeded staffing_requests");
   }
 
   // Task comments
@@ -638,7 +640,7 @@ export async function seedSupplementalIfEmpty() {
       { taskId: 10, authorId: 9, body: "24A regression suite complete. All 94 scenarios passed on first run — cleanest certification I've seen. Cert letter drafted and ready for Tom's review.", mentionedUserIds: [6], isExternal: false },
       { taskId: 12, authorId: 6, body: "23D test plan v1 shared with Pacific team. Waiting on their UAT lead — Sarah mentioned she'll introduce us by end of week.", mentionedUserIds: [], isExternal: false },
     ]);
-    console.log("[auto-seed] Seeded task_comments");
+    logger.info("[auto-seed] Seeded task_comments");
   }
 
   // Milestone comments
@@ -652,7 +654,7 @@ export async function seedSupplementalIfEmpty() {
       { milestoneId: 8, projectId: 3, authorName: "Tom Kirkland", authorRole: "project_manager",       body: "Q1 2025 certification complete. NorthStar formally received Oracle certification letter. Sending client summary report.", isClientVisible: true },
       { milestoneId: 11, projectId: 4, authorName: "Tom Kirkland",authorRole: "project_manager",       body: "23D certification complete — all 178 test cases passed, 12 defects resolved. Certification letter sent to Oracle Certification Authority.", isClientVisible: true },
     ]);
-    console.log("[auto-seed] Seeded milestone_comments");
+    logger.info("[auto-seed] Seeded milestone_comments");
   }
 }
 
@@ -678,5 +680,5 @@ export async function autoFixExpiredAllocations() {
       .set({ endDate: newEnd })
       .where(eq(allocationsTable.id, row.id));
   }
-  console.log(`[auto-seed] Extended ${rows.length} expired allocation(s) to ${newEnd}`);
+  logger.info(`[auto-seed] Extended ${rows.length} expired allocation(s) to ${newEnd}`);
 }

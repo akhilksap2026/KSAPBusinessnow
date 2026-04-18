@@ -164,7 +164,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
   }
   const count = await db.select().from(invoicesTable);
   const invoiceNumber = `INV-${String(count.length + 1).padStart(4, "0")}`;
-  const [invoice] = await db.insert(invoicesTable).values({ ...parsed.data, invoiceNumber }).returning();
+  const insertData = { ...parsed.data, invoiceNumber, ...(parsed.data.amount !== undefined ? { amount: String(parsed.data.amount) } : {}) };
+  const [invoice] = await db.insert(invoicesTable).values(insertData as any).returning();
   res.status(201).json(parseInvoice(invoice));
 });
 
@@ -193,7 +194,8 @@ router.put("/invoices/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [invoice] = await db.update(invoicesTable).set(parsed.data).where(eq(invoicesTable.id, params.data.id)).returning();
+  const updateData = { ...parsed.data, ...(parsed.data.amount !== undefined ? { amount: String(parsed.data.amount) } : {}) };
+  const [invoice] = await db.update(invoicesTable).set(updateData as any).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!invoice) {
     res.status(404).json({ error: "Invoice not found" });
     return;

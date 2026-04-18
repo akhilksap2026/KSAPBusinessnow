@@ -48,7 +48,7 @@ router.put("/rate-cards/:id", async (req, res) => {
       billingRate: rawBody.billingRate ?? rawBody.sellRate ?? "0",
     };
     const [row] = await db.update(rateCardsTable).set(body).where(eq(rateCardsTable.id, id)).returning();
-    if (!row) return res.status(404).json({ error: "Not found" });
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json(row);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
@@ -69,10 +69,10 @@ router.post("/rate-cards/:id/copy-to-project", async (req, res) => {
   try {
     const sourceId = parseInt(req.params.id);
     const { projectId, projectName } = req.body as { projectId: number; projectName?: string };
-    if (!projectId) return res.status(400).json({ error: "projectId is required" });
+    if (!projectId) { res.status(400).json({ error: "projectId is required" }); return; }
 
     const [source] = await db.select().from(rateCardsTable).where(eq(rateCardsTable.id, sourceId));
-    if (!source) return res.status(404).json({ error: "Source rate card not found" });
+    if (!source) { res.status(404).json({ error: "Source rate card not found" }); return; }
 
     const { id: _id, createdAt: _ca, ...rest } = source;
     const [created] = await db.insert(rateCardsTable).values({
