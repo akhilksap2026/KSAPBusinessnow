@@ -21,7 +21,8 @@ export const timesheetsTable = pgTable("timesheets", {
   entryDate: text("entry_date"),
   taskId: integer("task_id"),
   categoryId: integer("category_id"),
-  isBillable: boolean("is_billable").default(true),
+  isBillable: boolean("is_billable").notNull().default(true),
+  dailyComment: text("daily_comment"),
   activityType: text("activity_type").default("consulting"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   CheckCircle, CheckCircle2, XCircle, Clock, RotateCcw, Plus, Eye,
   Rocket, AlarmClock, ChevronLeft, ChevronRight, LayoutGrid, List, Receipt,
-  Users, ShieldCheck,
+  Users, ShieldCheck, DollarSign,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -643,6 +643,20 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
     setAddRow(null);
   };
 
+  // Toggle billable flag on a single entry
+  const toggleBillable = useCallback(async (entryId: number, current: boolean) => {
+    try {
+      await fetch(`${API_BASE}/timesheets/${entryId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isBillable: !current }),
+      });
+      load();
+    } catch {
+      toast({ title: "Failed to update billable flag", variant: "destructive" });
+    }
+  }, [load, toast]);
+
   // Submit all draft entries for a single day across all project rows
   const submitDay = async (dayKey: string) => {
     const draftCells = allRows
@@ -799,6 +813,10 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                       cellStatus === "rejected"  ? "text-red-300 bg-red-950/40 border border-red-400/40 line-through" :
                       "text-foreground bg-muted/50 border border-border";
 
+                    const isCellBillable = cell?.isBillable !== false;
+                    const nonBillableDraft = hasHours && !locked && !isCellBillable;
+                    const nonBillableBadgeCls = "text-muted-foreground/70 bg-muted/30 border border-border/50 line-through";
+
                     return (
                       <td
                         key={d}
@@ -806,26 +824,49 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                         title={
                           isWeekend ? "Weekend" :
                           locked ? `${cellStatus} — click not available` :
-                          hasHours ? `${cell!.hours}h · "${cell!.notes || "no description"}" — click to edit` :
+                          hasHours ? `${cell!.hours}h · "${cell!.notes || "no description"}"${isCellBillable ? "" : " · non-billable"} — click to edit` :
                           "Click to log hours"
                         }
                         className={[
-                          "px-1.5 py-2 text-center transition-all",
+                          "px-1.5 py-2 text-center transition-all relative",
                           isLast ? "" : "border-b border-border/50",
                           isWeekend ? "bg-muted/5" : "",
+                          nonBillableDraft ? "bg-muted/20" : "",
                           !locked && !isWeekend ? "cursor-pointer" : "",
                         ].join(" ")}
                       >
                         {isWeekend ? (
                           <span className="text-muted-foreground/15 text-[10px]">—</span>
                         ) : hasHours ? (
-                          <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-md px-2 py-0.5 ${badgeCls}`}>
+                          <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-md px-1.5 py-0.5 ${isCellBillable ? badgeCls : nonBillableBadgeCls}`}>
+                            {!isCellBillable && (
+                              <span className="relative inline-flex" title="Non-billable">
+                                <DollarSign className="h-2.5 w-2.5 opacity-50" />
+                                <span className="absolute inset-x-0 top-1/2 h-px bg-current opacity-70 -rotate-12" />
+                              </span>
+                            )}
                             {parseFloat(cell!.hours)}h
                           </span>
                         ) : (
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border/40 text-muted-foreground/20 hover:border-primary/50 hover:text-primary/40 transition-colors">
                             <Plus className="h-3 w-3" />
                           </span>
+                        )}
+                        {/* Billable toggle button — draft cells only, visible on row hover */}
+                        {hasHours && !locked && cell?.id && (
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleBillable(cell!.id!, isCellBillable); }}
+                            title={isCellBillable ? "Mark as non-billable" : "Mark as billable"}
+                            className={[
+                              "absolute top-0.5 right-0.5 flex items-center justify-center w-4 h-4 rounded-sm transition-all",
+                              "opacity-0 group-hover:opacity-100",
+                              isCellBillable
+                                ? "text-muted-foreground/50 hover:text-amber-400"
+                                : "text-amber-400 hover:text-primary opacity-100",
+                            ].join(" ")}
+                          >
+                            <DollarSign className="h-2.5 w-2.5" />
+                          </button>
                         )}
                       </td>
                     );

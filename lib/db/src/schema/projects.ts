@@ -33,6 +33,7 @@ export const projectsTable = pgTable("projects", {
   handoverReadiness: boolean("handover_readiness").default(false),
   currency: text("currency").default("CAD"),
   isInternal: boolean("is_internal").default(false),
+  isAdministrative: boolean("is_administrative").notNull().default(false),
   healthStatus: text("health_status").default("green"),
   healthBudget: text("health_budget").default("green"),
   healthHours: text("health_hours").default("green"),

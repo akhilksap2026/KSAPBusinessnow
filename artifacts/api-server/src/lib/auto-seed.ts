@@ -145,6 +145,27 @@ export async function runSeed() {
   ]).returning();
   console.log(`[auto-seed] Inserted ${projects.length} projects`);
 
+  // ── Administrative project (protected — always present) ────────────────────
+  const [adminProject] = await db.insert(projectsTable).values({
+    name: "Administrative: Leave & Internal",
+    accountId: accounts[0].id, accountName: "KSAP Technologies",
+    type: "internal", status: "active",
+    healthScore: 100,
+    pmId: admin.id, pmName: admin.name,
+    isInternal: true, isAdministrative: true,
+    visibility: "internal_only",
+    description: "Protected internal project for logging non-billable time: leave, public holidays, training, and business development.",
+  }).returning().then(r => r[0]);
+
+  await db.insert(tasksTable).values([
+    { projectId: adminProject.id, name: "Annual Leave",         status: "active", isLeaf: true, visibility: "internal_only" },
+    { projectId: adminProject.id, name: "Sick Leave",           status: "active", isLeaf: true, visibility: "internal_only" },
+    { projectId: adminProject.id, name: "Public Holiday",       status: "active", isLeaf: true, visibility: "internal_only" },
+    { projectId: adminProject.id, name: "Internal Training",    status: "active", isLeaf: true, visibility: "internal_only" },
+    { projectId: adminProject.id, name: "Business Development", status: "active", isLeaf: true, visibility: "internal_only" },
+  ]);
+  console.log("[auto-seed] Administrative project seeded");
+
   // ── Milestones ────────────────────────────────────────────────────────────
   const milestones = await db.insert(milestonesTable).values([
     // Project 0 — GlobalTrans Cloud Migration

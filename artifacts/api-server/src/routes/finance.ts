@@ -14,7 +14,8 @@ router.get("/finance/summary", async (req, res): Promise<void> => {
   ]);
 
   const today = new Date().toISOString().split("T")[0];
-  const approvedTs = timesheets.filter(t => t.status === "approved");
+  const adminProjectIds = new Set(projects.filter(p => p.isAdministrative).map(p => p.id));
+  const approvedTs = timesheets.filter(t => t.status === "approved" && t.isBillable === true && !adminProjectIds.has(t.projectId));
   const pendingTs = timesheets.filter(t => t.status === "submitted");
 
   const wipHours = approvedTs.reduce((s, t) => s + parseFloat(t.billableHours || t.hoursLogged), 0);
@@ -51,8 +52,12 @@ router.get("/finance/summary", async (req, res): Promise<void> => {
 
 // WIP — approved timesheets not yet fully invoiced
 router.get("/finance/wip", async (req, res): Promise<void> => {
-  const timesheets = await db.select().from(timesheetsTable);
-  const approved = timesheets.filter(t => t.status === "approved");
+  const [timesheets, projects] = await Promise.all([
+    db.select().from(timesheetsTable),
+    db.select({ id: projectsTable.id, isAdministrative: projectsTable.isAdministrative }).from(projectsTable),
+  ]);
+  const adminProjectIds = new Set(projects.filter(p => p.isAdministrative).map(p => p.id));
+  const approved = timesheets.filter(t => t.status === "approved" && t.isBillable === true && !adminProjectIds.has(t.projectId));
 
   const byProject: Record<number, { projectId: number; projectName: string; entries: any[]; totalHours: number; billableHours: number; estimatedValue: number }> = {};
   approved.forEach(t => {
@@ -79,8 +84,9 @@ router.get("/finance/leakage", async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
   const leakageItems: any[] = [];
 
-  // 1. Approved billable timesheets not invoiced
-  const approvedTs = timesheets.filter(t => t.status === "approved" && parseFloat(t.billableHours || "0") > 0);
+  // 1. Approved billable timesheets not invoiced (exclude admin projects and non-billable entries)
+  const adminPids = new Set((await db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.isAdministrative, true))).map(p => p.id));
+  const approvedTs = timesheets.filter(t => t.status === "approved" && t.isBillable === true && parseFloat(t.billableHours || "0") > 0 && !adminPids.has(t.projectId));
   const invoicedProjects = new Set(invoices.filter(i => i.status !== "draft").map(i => i.projectId));
   const notInvoiced = approvedTs.filter(t => !invoicedProjects.has(t.projectId));
   if (notInvoiced.length > 0) {
@@ -141,8 +147,9 @@ router.get("/finance/margin", async (req, res): Promise<void> => {
 
     const invoicedRevenue = pInvoices.filter(i => i.status !== "draft").reduce((s, i) => s + parseFloat(i.amount), 0);
     const paidRevenue = pInvoices.filter(i => i.status === "paid").reduce((s, i) => s + parseFloat(i.amount), 0);
-    const approvedHours = pTimesheets.filter(t => t.status === "approved").reduce((s, t) => s + parseFloat(t.hoursLogged), 0);
-    const billableHours = pTimesheets.filter(t => t.status === "approved").reduce((s, t) => s + parseFloat(t.billableHours || "0"), 0);
+    const approvedBillableTs = pTimesheets.filter(t => t.status === "approved" && t.isBillable === true);
+    const approvedHours = approvedBillableTs.reduce((s, t) => s + parseFloat(t.hoursLogged), 0);
+    const billableHours = approvedBillableTs.reduce((s, t) => s + parseFloat(t.billableHours || "0"), 0);
     const budgetValue = parseFloat(p.budgetValue || "0");
     const budgetHours = p.budgetHours || 0;
     const consumedHours = p.consumedHours || 0;
@@ -248,8 +255,8 @@ router.get("/finance/profitability", async (req, res): Promise<void> => {
   const defaultRate = 185;
   const defaultCostRate = 95;
 
-  const result = projects.filter(p => p.status !== "cancelled").map(p => {
-    const pTs = timesheets.filter(t => t.projectId === p.id && t.status === "approved");
+  const result = projects.filter(p => p.status !== "cancelled" && !p.isAdministrative).map(p => {
+    const pTs = timesheets.filter(t => t.projectId === p.id && t.status === "approved" && t.isBillable === true);
     const pInvoices = invoices.filter(i => i.projectId === p.id);
     const pRC = rateCards.find(r => r.projectId === p.id);
 
