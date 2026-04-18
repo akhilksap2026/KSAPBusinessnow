@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, inArray, and, lte, desc, sql } from "drizzle-orm";
-import { db, projectsTable, milestonesTable, tasksTable, phasesTable, allocationsTable, changeRequestsTable, activityLogsTable, resourcesTable, taskDependenciesTable, timesheetsTable, fxRatesTable } from "@workspace/db";
+import { db, projectsTable, milestonesTable, tasksTable, phasesTable, allocationsTable, changeRequestsTable, activityLogsTable, resourcesTable, taskDependenciesTable, timesheetsTable, fxRatesTable, usersTable } from "@workspace/db";
 import { scheduleProject } from "../lib/scheduler";
 
 const BASE_CURRENCY = "CAD";
@@ -163,15 +163,28 @@ function computeHealth(project: any, milestones: any[], tasks: any[]) {
   return { score: finalScore, color, reasons, spi, plannedProgressPct, actualProgressPct, timelineScore };
 }
 
+async function resolveResourceId(dbUserId: number): Promise<number | null> {
+  const [resource] = await db
+    .select({ id: resourcesTable.id })
+    .from(resourcesTable)
+    .where(eq(resourcesTable.userId, dbUserId))
+    .limit(1);
+  return resource?.id ?? null;
+}
+
 const router: IRouter = Router();
 
 router.get("/projects", async (req, res): Promise<void> => {
-  const { status, type, accountId, pmId, isAdministrative } = req.query as Record<string, string>;
+  const { status, type, accountId, pmId, isAdministrative, contextUserId } = req.query as Record<string, string>;
   let projects = await db.select().from(projectsTable).orderBy(projectsTable.createdAt);
   if (status) projects = projects.filter((p) => p.status === status);
   if (type) projects = projects.filter((p) => p.type === type);
   if (accountId) projects = projects.filter((p) => p.accountId === parseInt(accountId));
-  if (pmId) projects = projects.filter((p) => p.pmId === parseInt(pmId));
+
+  // contextUserId: DB user ID — resolve to resource ID then filter by pmId
+  const effectivePmFilter = pmId || (contextUserId ? await resolveResourceId(parseInt(contextUserId, 10)) : null);
+  if (effectivePmFilter) projects = projects.filter((p) => p.pmId === parseInt(String(effectivePmFilter)));
+
   if (isAdministrative !== undefined) {
     const flag = isAdministrative === "true";
     projects = projects.filter((p) => !!(p as any).isAdministrative === flag);

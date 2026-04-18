@@ -67,18 +67,33 @@ export async function runSeed() {
   ]).returning();
   console.log(`[auto-seed] Inserted ${users.length} users`);
 
-  const admin      = users[0];
-  const exec       = users[1];
-  const director   = users[2];
-  const pm1        = users[3];  // Alex Okafor
-  const pm2        = users[4];  // Priya Mehta
-  const pm3        = users[5];  // Tom Kirkland
-  const consultant1= users[6];  // Derek Tran
-  const consultant2= users[7];  // Aisha Johnson
-  const consultant3= users[8];  // Marcus Webb
-  const rm1        = users[9];  // Maria Santos
-  const fin1       = users[10]; // Sandra Liu
-  const fin2       = users[11]; // Ben Patterson
+  const admin      = users[0];  // Rachel Nguyen  (id 1)
+  const exec       = users[1];  // James Whitfield (id 2)
+  const director   = users[2];  // Jana Kovac     (id 3)
+  const pm1        = users[3];  // Alex Okafor    (id 4)
+  const pm2        = users[4];  // Priya Mehta    (id 5)
+  const pm3        = users[5];  // Tom Kirkland   (id 6)
+  const consultant1= users[6];  // Derek Tran     (id 7)
+  const consultant2= users[7];  // Aisha Johnson  (id 8)
+  const consultant3= users[8];  // Marcus Webb    (id 9)
+  const rm1        = users[9];  // Maria Santos   (id 10)
+  const fin1       = users[10]; // Sandra Liu     (id 11)
+  const fin2       = users[11]; // Ben Patterson  (id 12)
+
+  // ── Reporting hierarchy (reportsToId) ─────────────────────────────────────
+  await Promise.all([
+    db.update(usersTable).set({ reportsToId: exec.id     }).where(eq(usersTable.id, director.id)),     // Jana  → James
+    db.update(usersTable).set({ reportsToId: director.id }).where(eq(usersTable.id, pm1.id)),          // Alex  → Jana
+    db.update(usersTable).set({ reportsToId: director.id }).where(eq(usersTable.id, pm2.id)),          // Priya → Jana
+    db.update(usersTable).set({ reportsToId: director.id }).where(eq(usersTable.id, pm3.id)),          // Tom   → Jana
+    db.update(usersTable).set({ reportsToId: pm1.id      }).where(eq(usersTable.id, consultant1.id)),  // Derek  → Alex
+    db.update(usersTable).set({ reportsToId: pm2.id      }).where(eq(usersTable.id, consultant2.id)),  // Aisha  → Priya
+    db.update(usersTable).set({ reportsToId: pm3.id      }).where(eq(usersTable.id, consultant3.id)),  // Marcus → Tom
+    db.update(usersTable).set({ reportsToId: director.id }).where(eq(usersTable.id, rm1.id)),          // Maria → Jana
+    db.update(usersTable).set({ reportsToId: admin.id    }).where(eq(usersTable.id, fin1.id)),         // Sandra → Rachel
+    db.update(usersTable).set({ reportsToId: fin1.id     }).where(eq(usersTable.id, fin2.id)),         // Ben    → Sandra
+  ]);
+  console.log("[auto-seed] Org hierarchy (reportsToId) set");
   const sales1     = users[12]; // Diana Flores
   const sales2     = users[13]; // Chris Morgan
   const am1        = users[14]; // Yuki Nakamura

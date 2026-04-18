@@ -28,6 +28,7 @@ import taskCommentsRouter from "./task-comments";
 import savedFiltersRouter from "./saved-filters";
 import rateCardsRouter from "./rate-cards";
 import prospectsRouter from "./prospects";
+import contextRouter from "./context";
 
 // Feature flag — CRM pipeline routes (prospects, opportunities)
 // Set ENABLE_CRM_MODULES=true in .env to enable during development.
@@ -68,5 +69,7 @@ if (CRM_ENABLED) {
   router.use(opportunitiesRouter);
   router.use(prospectsRouter);
 }
+
+router.use(contextRouter);
 
 export default router;

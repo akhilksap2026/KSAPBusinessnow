@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, inArray } from "drizzle-orm";
-import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable } from "@workspace/db";
+import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable } from "@workspace/db";
 import { z } from "zod";
 import {
   ListTimesheetsQueryParams,
@@ -85,12 +85,27 @@ router.get("/timesheets/missing", async (req, res): Promise<void> => {
   });
 });
 
+async function resolveResourceIdForUser(dbUserId: number): Promise<number | null> {
+  const [r] = await db.select({ id: resourcesTable.id }).from(resourcesTable)
+    .where(eq(resourcesTable.userId, dbUserId)).limit(1);
+  return r?.id ?? null;
+}
+
 router.get("/timesheets", async (req, res): Promise<void> => {
   const query = ListTimesheetsQueryParams.safeParse(req.query);
+  const { contextUserId } = req.query as Record<string, string>;
   let timesheets = await db.select().from(timesheetsTable).orderBy(timesheetsTable.weekStart);
+
+  let effectiveResourceId: number | null = null;
+  if (query.success && query.data.resourceId) {
+    effectiveResourceId = query.data.resourceId;
+  } else if (contextUserId) {
+    effectiveResourceId = await resolveResourceIdForUser(parseInt(contextUserId, 10));
+  }
+
   if (query.success) {
     if (query.data.projectId) timesheets = timesheets.filter((t) => t.projectId === query.data.projectId);
-    if (query.data.resourceId) timesheets = timesheets.filter((t) => t.resourceId === query.data.resourceId);
+    if (effectiveResourceId) timesheets = timesheets.filter((t) => t.resourceId === effectiveResourceId);
     if (query.data.status) timesheets = timesheets.filter((t) => t.status === query.data.status);
     if (query.data.weekStart) timesheets = timesheets.filter((t) => t.weekStart === query.data.weekStart);
   }

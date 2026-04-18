@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose, Sun, Moon, Monitor } from "lucide-react";
+import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose, Sun, Moon, Monitor, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthRole, DEMO_USERS, ROLE_LABELS } from "@/lib/auth";
+import { useActiveContext } from "@/lib/context";
 import { useSidebarCollapsed } from "@/lib/sidebar-state";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -72,10 +73,6 @@ const PRIORITY_STYLES: Record<string, string> = {
   reminder: "border-l-amber-400",
 };
 
-interface TopBarProps {
-  onSearchOpen?: () => void;
-}
-
 type ThemeValue = "light" | "dark" | "system";
 
 function applyTheme(t: ThemeValue) {
@@ -92,8 +89,14 @@ function applyTheme(t: ThemeValue) {
   localStorage.setItem("theme", t);
 }
 
-export function TopBar({ onSearchOpen }: TopBarProps) {
+interface TopBarProps {
+  onSearchOpen?: () => void;
+  onContextOpen?: () => void;
+}
+
+export function TopBar({ onSearchOpen, onContextOpen }: TopBarProps) {
   const { role, user, setUser } = useAuthRole();
+  const { context } = useActiveContext();
   const [location, setLocation] = useLocation();
   const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
   const pageName = resolvePageName(location);
@@ -213,6 +216,19 @@ export function TopBar({ onSearchOpen }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 relative flex-none">
+        {/* Context Switcher */}
+        {onContextOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 transition-colors ${context ? "text-primary hover:text-primary bg-primary/8 hover:bg-primary/12" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={onContextOpen}
+            title={context ? `Viewing as ${context.name} — click to switch` : "Switch viewing context"}
+          >
+            <GitBranch className="h-4 w-4" />
+          </Button>
+        )}
+
         {/* Theme Toggle */}
         <Button
           variant="ghost"
