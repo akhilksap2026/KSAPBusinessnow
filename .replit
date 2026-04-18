@@ -19,23 +19,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "API Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "Start application"
-
-[[workflows.workflow]]
-name = "API Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd artifacts/api-server && PORT=8080 pnpm run dev"
-waitForPort = 8080
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -62,6 +46,10 @@ localPort = 5173
 externalPort = 5173
 
 [[ports]]
+localPort = 5174
+externalPort = 3003
+
+[[ports]]
 localPort = 8080
 externalPort = 80
 
@@ -70,8 +58,16 @@ localPort = 8081
 externalPort = 8081
 
 [[ports]]
+localPort = 8082
+externalPort = 4200
+
+[[ports]]
 localPort = 23582
 externalPort = 3000
+
+[[ports]]
+localPort = 23583
+externalPort = 5000
 
 [nix]
 channel = "stable-25_05"
