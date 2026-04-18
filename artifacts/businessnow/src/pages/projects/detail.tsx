@@ -3403,7 +3403,7 @@ export default function ProjectDetail() {
 
   const TABS: { key: TabKey; label: string; badge?: number }[] = [
     { key: "overview",   label: "Overview" },
-    { key: "team",       label: "Team",       badge: allocations.length },
+    { key: "team",       label: "Staffing",   badge: allocations.length },
     { key: "milestones", label: "Milestones", badge: milestones.length },
     { key: "tasks",      label: "Tasks",      badge: tasks.filter((t:Task)=>t.status==="blocked").length || undefined },
     { key: "worklogs",   label: "Time Logs",  badge: timesheets.filter(t=>t.status==="submitted").length || undefined },

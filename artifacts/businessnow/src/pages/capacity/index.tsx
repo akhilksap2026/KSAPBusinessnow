@@ -24,6 +24,7 @@ export default function CapacityPage() {
   const [windowWeeks, setWindowWeeks] = useState(12);
   const [view, setView] = useState<"table" | "bars">("bars");
   const [includeSoft, setIncludeSoft] = useState(false);
+  const [practiceFilter, setPracticeFilter] = useState<string>("all");
 
   useEffect(() => {
     setLoading(true);
@@ -39,7 +40,8 @@ export default function CapacityPage() {
   );
   if (!data) return <div className="p-8 text-center text-muted-foreground">Could not load capacity data.</div>;
 
-  const { weeks, forecast } = data;
+  const { weeks, forecast: rawForecast } = data;
+  const forecast = practiceFilter === "all" ? rawForecast : rawForecast.filter((f: any) => f.practiceArea === practiceFilter);
 
   // Summary stats
   const totalResources = forecast.reduce((s: number, f: any) => s + f.resourceCount, 0);
@@ -88,10 +90,22 @@ export default function CapacityPage() {
               </button>
             ))}
           </div>
+          <select
+            className="ml-4 text-xs bg-background border border-border rounded px-2 py-1 text-foreground"
+            value={practiceFilter}
+            onChange={e => setPracticeFilter(e.target.value)}
+            title="Filter by practice area / role"
+          >
+            <option value="all">All Practice Areas</option>
+            {Object.entries(PRACTICE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+
           <button onClick={() => setIncludeSoft(s => !s)}
             className={`ml-2 flex items-center gap-1.5 px-3 py-1 text-xs rounded font-medium transition-colors border ${includeSoft ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700" : "bg-muted text-muted-foreground border-transparent"}`}
             title="Toggle soft/pipeline allocations in utilization">
-            {includeSoft ? "● Soft included" : "○ Soft excluded"}
+            {includeSoft ? "● Include Pipeline" : "○ Confirmed Only"}
           </button>
         </div>
       </div>

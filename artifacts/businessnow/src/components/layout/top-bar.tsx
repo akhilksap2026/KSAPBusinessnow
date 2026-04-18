@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose, Sun, Moon, Monitor, GitBranch } from "lucide-react";
+import { Bell, Search, CheckCheck, ExternalLink, X, PanelLeftOpen, PanelLeftClose, Sun, Moon, Monitor, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthRole, DEMO_USERS, ROLE_LABELS } from "@/lib/auth";
 import { useActiveContext } from "@/lib/context";
@@ -216,17 +216,25 @@ export function TopBar({ onSearchOpen, onContextOpen }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 relative flex-none">
-        {/* Context Switcher */}
-        {onContextOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-8 w-8 transition-colors ${context ? "text-primary hover:text-primary bg-primary/8 hover:bg-primary/12" : "text-muted-foreground hover:text-foreground"}`}
+        {/* Context Switcher Pill */}
+        {onContextOpen && role && (
+          <button
             onClick={onContextOpen}
-            title={context ? `Viewing as ${context.name} — click to switch` : "Switch viewing context"}
+            title={context ? `Viewing as ${context.name} — click to switch` : "Switch active user context"}
+            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium transition-colors ${
+              context
+                ? "border-primary/40 bg-primary/8 text-primary hover:bg-primary/12"
+                : "border-border bg-muted/50 text-foreground/80 hover:bg-muted"
+            }`}
           >
-            <GitBranch className="h-4 w-4" />
-          </Button>
+            <span className="hidden sm:inline">🎭</span>
+            <span className="hidden md:inline truncate max-w-[120px]">
+              {user ? `${user.name.split(" ")[0]} ${user.name.split(" ").slice(-1)[0]}` : (ROLE_LABELS[role] ?? role)}
+            </span>
+            <span className="hidden lg:inline text-muted-foreground">·</span>
+            <span className="hidden lg:inline text-muted-foreground">{ROLE_LABELS[role]}</span>
+            <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+          </button>
         )}
 
         {/* Theme Toggle */}

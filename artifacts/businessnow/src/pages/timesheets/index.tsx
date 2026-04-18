@@ -770,7 +770,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                   </th>
                 );
               })}
-              <th className="px-3 py-3 text-center font-medium text-muted-foreground border-b border-border w-16">
+              <th className="px-3 py-3 text-center font-medium text-muted-foreground border-b border-border w-16 sticky right-0 bg-muted/30 z-10 border-l border-border shadow-[-4px_0_8px_rgba(0,0,0,0.08)]">
                 Total
               </th>
             </tr>
@@ -884,7 +884,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                   })}
 
                   {/* Row total */}
-                  <td className={`px-3 py-2 text-center font-semibold text-[11px] ${isLast ? "" : "border-b border-border/50"} ${rowTotal > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+                  <td className={`px-3 py-2 text-center font-semibold text-[11px] sticky right-0 bg-card z-10 border-l border-border/50 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] ${isLast ? "" : "border-b border-border/50"} ${rowTotal > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
                     {rowTotal > 0 ? `${rowTotal}h` : "—"}
                   </td>
                 </tr>
@@ -934,7 +934,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                       </td>
                     );
                   })}
-                  <td className={`px-3 py-2 text-center font-semibold text-[11px] ${rowTotal > 0 ? "text-foreground/60" : "text-muted-foreground/30"}`}>
+                  <td className={`px-3 py-2 text-center font-semibold text-[11px] sticky right-0 bg-card z-10 border-l border-border/50 shadow-[-4px_0_8px_rgba(0,0,0,0.06)] ${rowTotal > 0 ? "text-foreground/60" : "text-muted-foreground/30"}`}>
                     {rowTotal > 0 ? `${rowTotal}h` : "—"}
                   </td>
                 </tr>
@@ -961,7 +961,7 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                   </td>
                 );
               })}
-              <td className="px-3 py-2 text-center text-[11px] font-bold text-foreground">
+              <td className="px-3 py-2 text-center text-[11px] font-bold text-foreground sticky right-0 bg-muted/20 z-10 border-l-2 border-border shadow-[-4px_0_8px_rgba(0,0,0,0.08)]">
                 {weekTotal > 0 ? `${weekTotal}h` : "—"}
               </td>
             </tr>

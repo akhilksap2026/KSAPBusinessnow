@@ -77,6 +77,14 @@ export default function PMDashboard() {
   const [missingTimesheets, setMissingTimesheets] = useState<{ missingCount: number; totalResources: number; weekStart: string; missingResources: { id: number; name: string }[] } | null>(null);
   const [digest, setDigest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [projectScope, setProjectScope] = useState<"mine" | "all">(
+    () => (localStorage.getItem("pm_dashboard_scope") as "mine" | "all") ?? "mine"
+  );
+
+  const setScope = (s: "mine" | "all") => {
+    setProjectScope(s);
+    localStorage.setItem("pm_dashboard_scope", s);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -116,7 +124,8 @@ export default function PMDashboard() {
     );
   }
 
-  const activeProjects = projects.filter(p => p.status === "active" || p.status === "in_progress").slice(0, 8);
+  const allActiveProjects = projects.filter(p => p.status === "active" || p.status === "in_progress");
+  const activeProjects = (projectScope === "mine" ? allActiveProjects.slice(0, 5) : allActiveProjects).slice(0, 8);
   const todayActions = buildTodayActions(activeProjects, milestones, tasks);
   const highCount = todayActions.filter(a => a.priority === "high").length;
 
@@ -135,7 +144,7 @@ export default function PMDashboard() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Delivery Workspace</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
@@ -143,9 +152,23 @@ export default function PMDashboard() {
             {highCount > 0 && <span className="ml-2 text-red-500 font-semibold">· {highCount} urgent item{highCount !== 1 ? "s" : ""} need attention</span>}
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={load} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* My Projects / All Projects toggle */}
+          <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium">
+            {(["mine", "all"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                className={`px-3 py-1.5 transition-colors ${projectScope === s ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+              >
+                {s === "mine" ? "My Projects" : "All Projects"}
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={load} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Missing timesheet reminder banner */}
