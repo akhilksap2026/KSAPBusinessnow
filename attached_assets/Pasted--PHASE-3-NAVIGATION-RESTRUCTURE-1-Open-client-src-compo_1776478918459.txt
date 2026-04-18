@@ -1,0 +1,32 @@
+// PHASE 3 — NAVIGATION RESTRUCTURE
+1. Open client/src/components/layout/Sidebar.tsx. Replace the flat nav list with a grouped structure using section labels. Group 1: "My Work" = [Dashboard, Timesheets, My Tasks]. Group 2: "Projects" = [Projects, Portfolio, Blueprints]. Group 3: "Resources" = [Team, Allocations, Staffing, Capacity]. Group 4: "Finance" = [Finance, Invoices, Rate Cards, Contracts, Change Orders]. Group 5: "Settings" = [PMO Settings, Admin (admin-only)].
+
+2. Add a section label style: font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); padding: 20px 16px 6px; font-weight: 600; above each group.
+
+3. In client/src/components/layout/TopNav.tsx, add a context indicator between the logo and search: a pill showing "🎭 [Active User Name] · [Role]" with a chevron. On click, open the ContextSelector modal.
+
+4. In client/src/pages/projects/[id].tsx, find the tab list. Merge the "Team" and "Assignments" tabs into a single "Staffing" tab. Move the "Files" section into the "Overview" tab as a collapsible accordion. Update all tab references in the component.
+
+5. In all list-to-detail pages (Customers, Team), refactor to a two-column layout: left = scrollable list (max-width: 320px), right = detail panel. Use React state (selectedItemId) to control which detail renders. Remove separate detail page routes.
+
+// ── UX-04: HIERARCHICAL DATA FENCING ─────────────────────────────
+
+6. Create server/utils/scopeFilter.ts. Export function buildUserScope(userId: number, db): Promise<{ userIds: number[], projectIds: number[] }>. It queries the reporting chain: find all users where reportsToId = userId (direct reports), then their direct reports recursively (up to 3 levels). Return the full set of userIds and their associated projectIds. Every API GET for /api/projects, /api/resources, /api/timesheets, /api/allocations must import and call this function to scope results. For Partner/Admin roles, bypass scoping and return all records.
+
+7. In each of these route files, replace bare db.select().from(projects) calls with: const scope = await buildUserScope(req.session.userId, db); db.select().from(projects).where(inArray(projects.id, scope.projectIds)). Test: log in as a PM with 3 assigned projects — confirm only those 3 projects appear. Log in as Director — confirm all PMs' projects appear.
+
+// ── UX-card 7: TIMESHEET STICKY ROW HEADERS ──────────────────────
+
+8. In client/src/components/timesheets/WeeklyGrid.tsx, find the table/grid container. Set the outer div to overflow-x: auto; position: relative. On the first column (project name + task name cells), add: position: sticky; left: 0; z-index: 2; background: var(--card). On the last column (weekly total), add: position: sticky; right: 0; z-index: 2; background: var(--card); border-left: 2px solid var(--border). Add a box-shadow to the sticky left column: box-shadow: 4px 0 8px rgba(0,0,0,0.08) so it visually separates from the scrolling day columns.
+
+// ── UX-card 8: INVOICE PREVIEW BEFORE SENDING ────────────────────
+
+9. In client/src/pages/invoices/[id].tsx, intercept the "Send Invoice" / "Finalize" button click. Instead of immediately calling the finalize API, open a slide-over panel (fixed right side, width: 560px) showing a styled invoice preview: header (customer name, invoice number, dates), line items table (resource | date | task | hours | rate | amount), subtotals by resource, grand total. Add two action buttons at the bottom of the panel: "Confirm & Send" (calls POST /api/invoices/:id/finalize) and "Request Corrections" (closes panel and highlights the timesheet approval link). Do NOT finalize without this preview step.
+
+// ── ENHANCE: CAPACITY HEATMAP ROLE FILTER ────────────────────────
+
+10. In client/src/pages/capacity/index.tsx, add a filter bar above the heatmap with two dropdowns: (a) "Practice Area / Role" — populated from the roles/practiceAreas table, filters heatmap rows to only show resources of that role; (b) "View" — toggle between "Confirmed Only" and "Include Pipeline (Soft)". These filters should update a query param and re-fetch GET /api/capacity?roleId=X&includeSoft=true. The server-side capacity endpoint must accept and apply these params to the resource and allocation queries.
+
+// ── ENHANCE: PM DASHBOARD MY PROJECTS TOGGLE ─────────────────────
+
+11. In client/src/pages/dashboard/pm.tsx (or equivalent), add a segmented control at the top of the project health grid: "My Projects" | "All Projects". Default to "My Projects". "My Projects" calls GET /api/projects?scope=mine (uses buildUserScope). "All Projects" calls GET /api/projects?scope=all (only available to Director/Partner roles — for PM role, disable "All Projects" option). Persist the selected tab in localStorage so it survives page refresh.

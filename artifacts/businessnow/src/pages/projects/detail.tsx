@@ -22,7 +22,7 @@ import { useAuthRole } from "@/lib/auth";
 
 const API = import.meta.env.BASE_URL + "api";
 
-type TabKey = "overview" | "team" | "milestones" | "tasks" | "worklogs" | "finance" | "gantt" | "updates" | "close" | "details";
+type TabKey = "overview" | "team" | "milestones" | "tasks" | "worklogs" | "finance" | "gantt" | "baseline" | "updates" | "close" | "details";
 
 interface Task {
   id: number; name: string; status: string; priority: string;
@@ -2932,6 +2932,11 @@ export default function ProjectDetail() {
   const [pctFromHours, setPctFromHours] = useState(false);
   const [baselineSaving, setBaselineSaving] = useState(false);
   const [baselineMsg, setBaselineMsg] = useState<string | null>(null);
+  const [baselineData, setBaselineData] = useState<any>(null);
+  const [baselineLoading, setBaselineLoading] = useState(false);
+  const [baselineLabelInput, setBaselineLabelInput] = useState("");
+  const [showBaselineInput, setShowBaselineInput] = useState(false);
+  const [etcEditing, setEtcEditing] = useState<Record<number, string>>({});
   const [projection, setProjection] = useState<any>(null);
   const [scheduleRecalculating, setScheduleRecalculating] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -3038,17 +3043,48 @@ export default function ProjectDetail() {
     load();
   };
 
-  const handleSetBaseline = async () => {
-    if (!window.confirm("Snapshot current planned dates as the baseline? This will overwrite any existing baseline.")) return;
-    setBaselineSaving(true);
+  const loadBaselineData = async () => {
+    setBaselineLoading(true);
     try {
-      const r = await fetch(`${API}/projects/${projectId}/set-baseline`, { method: "POST" });
+      const r = await fetch(`${API}/projects/${projectId}/baselines`);
       const d = await r.json();
-      setBaselineMsg(`Baseline set. ${d.tasksUpdated ?? 0} task(s) updated.`);
-      setTimeout(() => setBaselineMsg(null), 4000);
-      load();
+      setBaselineData(Array.isArray(d) && d.length === 0 ? null : d);
+    } catch { setBaselineData(null); }
+    finally { setBaselineLoading(false); }
+  };
+
+  const handleSetBaseline = async () => {
+    const lbl = (baselineLabelInput.trim() || `Baseline ${new Date().toLocaleDateString("en-CA")}`);
+    setBaselineSaving(true);
+    setShowBaselineInput(false);
+    try {
+      const r = await fetch(`${API}/projects/${projectId}/baseline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: lbl }),
+      });
+      const d = await r.json();
+      setBaselineMsg(`"${d.label}" saved — ${d.tasksSnapshotted ?? 0} task(s) snapshotted.`);
+      setTimeout(() => setBaselineMsg(null), 5000);
+      setBaselineLabelInput("");
+      if (activeTab === "baseline") await loadBaselineData();
     } finally { setBaselineSaving(false); }
   };
+
+  const handleSaveEtc = async (taskId: number, value: string) => {
+    const etcVal = value === "" ? null : parseFloat(value);
+    await fetch(`${API}/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ etcHours: etcVal }),
+    });
+    setEtcEditing(prev => { const n = { ...prev }; delete n[taskId]; return n; });
+    if (activeTab === "baseline") await loadBaselineData();
+  };
+
+  useEffect(() => {
+    if (activeTab === "baseline" && projectId) loadBaselineData();
+  }, [activeTab, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!projectId) return;
@@ -3090,6 +3126,7 @@ export default function ProjectDetail() {
     { key: "worklogs",   label: "Time Logs",  badge: timesheets.filter(t=>t.status==="submitted").length || undefined },
     { key: "finance",    label: "Finance" },
     { key: "gantt",      label: "Gantt" },
+    { key: "baseline",   label: "Baseline" },
     { key: "updates",    label: "Updates" },
     { key: "close",      label: "Close" },
     { key: "details",    label: "Details" },
@@ -3163,11 +3200,28 @@ export default function ProjectDetail() {
                 className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-muted transition-colors font-medium text-primary border-primary/30 bg-primary/5">
                 <BarChart3 size={11}/>Command
               </button>
-              <button onClick={handleSetBaseline} disabled={baselineSaving}
-                className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-muted transition-colors disabled:opacity-50"
-                title="Snapshot current planned dates as baseline">
-                <Flag size={11}/>{baselineSaving ? "Saving…" : "Baseline"}
-              </button>
+              {showBaselineInput ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    value={baselineLabelInput}
+                    onChange={e => setBaselineLabelInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleSetBaseline(); if (e.key === "Escape") setShowBaselineInput(false); }}
+                    placeholder={`Baseline ${new Date().toLocaleDateString("en-CA")}`}
+                    className="text-xs border rounded px-2 py-1 w-36 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <button onClick={handleSetBaseline} disabled={baselineSaving} className="text-xs border rounded px-2 py-1 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                    {baselineSaving ? "…" : "Save"}
+                  </button>
+                  <button onClick={() => setShowBaselineInput(false)} className="text-xs border rounded px-2 py-1 hover:bg-muted">✕</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowBaselineInput(true)} disabled={baselineSaving}
+                  className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-muted transition-colors disabled:opacity-50"
+                  title="Snapshot current planned hours as a named baseline">
+                  <Flag size={11}/>{baselineSaving ? "Saving…" : "📌 Baseline"}
+                </button>
+              )}
               <button onClick={load} className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-muted transition-colors">
                 <RefreshCw size={11}/>Refresh
               </button>
@@ -3333,6 +3387,156 @@ export default function ProjectDetail() {
 
         {activeTab === "gantt" && (
           <GanttTab projectId={projectId} />
+        )}
+
+        {activeTab === "baseline" && (
+          <div className="flex-1 overflow-auto p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Baseline Variance</h3>
+                {baselineData?.latest && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Comparing against <strong>{baselineData.latest.label}</strong>
+                    {" "}({new Date(baselineData.latest.baselinedAt).toLocaleDateString("en-CA")})
+                    {baselineData.baselines?.length > 1 && ` · ${baselineData.baselines.length} snapshots`}
+                  </p>
+                )}
+              </div>
+              <button onClick={loadBaselineData} disabled={baselineLoading}
+                className="flex items-center gap-1 text-xs border rounded px-2 py-1 hover:bg-muted disabled:opacity-50">
+                <RefreshCw size={11}/>{baselineLoading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+
+            {baselineMsg && (
+              <div className="px-3 py-2 text-xs rounded-md bg-primary/10 text-primary border border-primary/20">{baselineMsg}</div>
+            )}
+
+            {baselineLoading ? (
+              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">Loading baseline data…</div>
+            ) : !baselineData ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-sm text-muted-foreground">
+                <Flag size={28} className="opacity-30"/>
+                <p>No baseline snapshot yet.</p>
+                <p className="text-xs">Use the <strong>📌 Baseline</strong> button in the header to snapshot current planned hours.</p>
+              </div>
+            ) : (
+              <div className="border rounded-md overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/60 border-b">
+                      <th className="text-left px-3 py-2 font-medium">Task</th>
+                      <th className="text-right px-3 py-2 font-medium">Baseline h</th>
+                      <th className="text-right px-3 py-2 font-medium">Actual h</th>
+                      <th className="text-right px-3 py-2 font-medium">ETC h</th>
+                      <th className="text-right px-3 py-2 font-medium">Forecast h</th>
+                      <th className="text-right px-3 py-2 font-medium">Variance</th>
+                      <th className="text-center px-3 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(baselineData.tasks ?? []).map((row: any) => {
+                      const variance = row.variance ?? 0;
+                      const forecast = (row.actualHours ?? 0) + (row.etcHours ?? 0);
+                      const isEditing = etcEditing[row.taskId] !== undefined;
+                      return (
+                        <tr key={row.taskId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-2 font-medium max-w-[220px] truncate" title={row.taskName}>{row.taskName}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{row.baselineHours?.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{row.actualHours?.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right">
+                            {isEditing ? (
+                              <span className="flex items-center justify-end gap-1">
+                                <input
+                                  autoFocus
+                                  type="number" min="0" step="0.5"
+                                  value={etcEditing[row.taskId]}
+                                  onChange={e => setEtcEditing(prev => ({ ...prev, [row.taskId]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === "Enter") handleSaveEtc(row.taskId, etcEditing[row.taskId]); if (e.key === "Escape") setEtcEditing(prev => { const n = { ...prev }; delete n[row.taskId]; return n; }); }}
+                                  className="w-16 border rounded px-1 py-0.5 text-right bg-background focus:outline-none focus:ring-1 focus:ring-primary tabular-nums"
+                                />
+                                <button onClick={() => handleSaveEtc(row.taskId, etcEditing[row.taskId])} className="text-primary hover:underline">✓</button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setEtcEditing(prev => ({ ...prev, [row.taskId]: String(row.etcHours ?? "") }))}
+                                className="tabular-nums hover:text-primary hover:underline cursor-pointer w-full text-right"
+                                title="Click to edit ETC">
+                                {(row.etcHours ?? 0).toFixed(1)}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{forecast.toFixed(1)}</td>
+                          <td className={`px-3 py-2 text-right tabular-nums font-semibold ${variance > 0 ? "text-destructive" : variance < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                            {variance === 0 ? "±0.0" : variance > 0 ? `+${variance.toFixed(1)}` : variance.toFixed(1)}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              row.status === "completed" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                              : row.status === "in_progress" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                              : row.status === "blocked" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                              : "bg-muted text-muted-foreground"
+                            }`}>
+                              {row.status?.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {(baselineData.tasks ?? []).length > 0 && (() => {
+                    const tasks: any[] = baselineData.tasks;
+                    const totalBase    = tasks.reduce((s: number, r: any) => s + (r.baselineHours ?? 0), 0);
+                    const totalActual  = tasks.reduce((s: number, r: any) => s + (r.actualHours ?? 0), 0);
+                    const totalEtc     = tasks.reduce((s: number, r: any) => s + (r.etcHours ?? 0), 0);
+                    const totalFcast   = totalActual + totalEtc;
+                    const totalVar     = totalFcast - totalBase;
+                    return (
+                      <tfoot>
+                        <tr className="bg-muted/60 border-t font-semibold">
+                          <td className="px-3 py-2">Total</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{totalBase.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{totalActual.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{totalEtc.toFixed(1)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{totalFcast.toFixed(1)}</td>
+                          <td className={`px-3 py-2 text-right tabular-nums ${totalVar > 0 ? "text-destructive" : totalVar < 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                            {totalVar === 0 ? "±0.0" : totalVar > 0 ? `+${totalVar.toFixed(1)}` : totalVar.toFixed(1)}
+                          </td>
+                          <td/>
+                        </tr>
+                      </tfoot>
+                    );
+                  })()}
+                </table>
+              </div>
+            )}
+
+            {baselineData?.baselines?.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground py-1 select-none">
+                  All snapshots ({baselineData.baselines.length})
+                </summary>
+                <div className="mt-2 border rounded-md overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/60 border-b">
+                        <th className="text-left px-3 py-2 font-medium">Label</th>
+                        <th className="text-left px-3 py-2 font-medium">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {baselineData.baselines.map((b: any, i: number) => (
+                        <tr key={b.id} className={`border-b last:border-0 ${i === 0 ? "font-medium" : ""}`}>
+                          <td className="px-3 py-1.5">{b.label}{i === 0 ? " (latest)" : ""}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{new Date(b.baselinedAt).toLocaleString("en-CA")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </div>
         )}
 
         {activeTab === "updates" && (

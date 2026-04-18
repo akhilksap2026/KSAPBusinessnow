@@ -1,0 +1,15 @@
+// PHASE 4 — "WHO HELPED YOU" COLLABORATIVE TIME ENTRY (TIME-06)
+Context: Consultants should be able to tag colleagues who contributed to a task, giving PMs visibility into collaboration patterns without double-billing.
+
+1. In shared/schema.ts, add a new table: export const timeEntryCollaborators = pgTable('time_entry_collaborators', { id: serial('id').primaryKey(), timeEntryId: integer('time_entry_id').notNull().references(() => timeEntries.id, { onDelete: 'cascade' }), collaboratorId: integer('collaborator_id').notNull().references(() => users.id), isInformationalOnly: boolean('is_informational_only').notNull().default(true) }). Run migration. The isInformationalOnly flag ensures collaborator entries never appear in billing calculations.
+
+2. Add server endpoints: POST /api/time-entries/:id/collaborators (add collaborator), DELETE /api/time-entries/:id/collaborators/:collaboratorId (remove). GET /api/time-entries/:id/collaborators (list).
+
+3. In client/src/components/timesheets/WeeklyGrid.tsx, in the cell expand area (already built in G-08 for daily comments), add a second row below the comment textarea: a "👥 Who helped?" label and a multi-select dropdown populated with all team members assigned to the same project. Selected collaborators appear as small avatar chips. On blur, POST the selected IDs to /api/time-entries/:id/collaborators.
+
+4. In the PM's timesheet approval view, for each approved entry that has collaborators, show a small "👥 +2 collaborators" badge. Clicking it expands a tooltip listing the collaborator names. This appears for informational purposes only and does not affect the approvable hours.
+
+5. Ensure the invoice generation query in server/services/invoiceGenerator.ts explicitly filters out any rows from timeEntryCollaborators: the WHERE clause must never include informational-only collaborator shadow entries in billable hours calculations. Add a comment in the code noting this constraint.
+
+
+Output expected: Timesheet cells have a "Who helped?" multi-select. Collaborators are tagged and visible to PMs in the approval queue. Collaborator entries never appear in billing or invoice generation.

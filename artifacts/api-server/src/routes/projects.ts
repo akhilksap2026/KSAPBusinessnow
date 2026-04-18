@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, inArray, and, lte, desc, sql } from "drizzle-orm";
-import { db, projectsTable, milestonesTable, tasksTable, phasesTable, allocationsTable, changeRequestsTable, activityLogsTable, resourcesTable, taskDependenciesTable, timesheetsTable, fxRatesTable, usersTable } from "@workspace/db";
+import { db, projectsTable, milestonesTable, tasksTable, phasesTable, allocationsTable, changeRequestsTable, activityLogsTable, resourcesTable, taskDependenciesTable, timesheetsTable, fxRatesTable, usersTable, projectBaselinesTable, baselineTasksTable } from "@workspace/db";
 import { scheduleProject } from "../lib/scheduler";
 
 const BASE_CURRENCY = "CAD";
@@ -541,6 +541,76 @@ router.post("/projects/:id/set-baseline", async (req, res): Promise<void> => {
     }
   }
   res.json({ ok: true, project: parseProject(updated), tasksUpdated: tasks.filter(t => t.plannedStartDate || t.plannedEndDate).length, baselineAt });
+});
+
+// ─── Named Baseline — multi-snapshot baseline per project ────────────────────
+router.post("/projects/:id/baseline", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { label = "Baseline", baselinedBy } = req.body ?? {};
+  const tasks = await db.select().from(tasksTable).where(eq(tasksTable.projectId, id));
+  if (tasks.length === 0) { res.status(400).json({ error: "No tasks to baseline" }); return; }
+  const [baseline] = await db.insert(projectBaselinesTable).values({
+    projectId: id,
+    label: String(label).slice(0, 120),
+    baselinedBy: baselinedBy ?? null,
+  }).returning();
+  const rows = tasks.map(t => ({
+    baselineId:   baseline.id,
+    taskId:       t.id,
+    plannedStart: t.plannedStartDate ?? null,
+    plannedEnd:   t.plannedEndDate   ?? null,
+    plannedHours: t.estimatedHours   ?? null,
+  }));
+  if (rows.length > 0) await db.insert(baselineTasksTable).values(rows);
+  res.json({ ok: true, baselineId: baseline.id, label: baseline.label, tasksSnapshotted: rows.length });
+});
+
+router.get("/projects/:id/baselines", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const baselines = await db.select().from(projectBaselinesTable)
+    .where(eq(projectBaselinesTable.projectId, id))
+    .orderBy(desc(projectBaselinesTable.baselinedAt));
+  if (baselines.length === 0) { res.json([]); return; }
+  const latestId = baselines[0].id;
+  const [bTasks, allTasks, timesheetRows] = await Promise.all([
+    db.select().from(baselineTasksTable).where(eq(baselineTasksTable.baselineId, latestId)),
+    db.select().from(tasksTable).where(eq(tasksTable.projectId, id)),
+    db.select().from(timesheetsTable).where(
+      and(eq(timesheetsTable.projectId, id), eq(timesheetsTable.status, "approved"))
+    ),
+  ]);
+  const actualByTask: Record<number, number> = {};
+  for (const ts of timesheetRows) {
+    if (!ts.taskId) continue;
+    actualByTask[ts.taskId] = (actualByTask[ts.taskId] ?? 0) + parseFloat(String(ts.hoursLogged ?? 0));
+  }
+  const taskMap: Record<number, typeof allTasks[0]> = {};
+  allTasks.forEach(t => { taskMap[t.id] = t; });
+  const taskRows = bTasks.map(bt => {
+    const task = taskMap[bt.taskId];
+    const baselineHours = parseFloat(String(bt.plannedHours ?? 0));
+    const actualHours   = actualByTask[bt.taskId] ?? 0;
+    const etcHours      = task ? parseFloat(String(task.etcHours ?? 0)) : 0;
+    const variance      = actualHours + etcHours - baselineHours;
+    return {
+      taskId:        bt.taskId,
+      taskName:      task?.name ?? "(deleted)",
+      plannedStart:  bt.plannedStart,
+      plannedEnd:    bt.plannedEnd,
+      baselineHours,
+      actualHours,
+      etcHours,
+      variance,
+      status:        task?.status ?? "unknown",
+    };
+  });
+  res.json({
+    baselines,
+    latest: { id: latestId, label: baselines[0].label, baselinedAt: baselines[0].baselinedAt },
+    tasks: taskRows,
+  });
 });
 
 // Projection — ETC-based projected end date

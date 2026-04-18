@@ -35,3 +35,4 @@ export * from "./fx_rates";
 export * from "./task_comments";
 export * from "./task_assignments";
 export * from "./saved_filters";
+export * from "./project_baselines";
