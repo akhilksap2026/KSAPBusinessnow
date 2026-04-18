@@ -284,9 +284,7 @@ export default function ProjectCommand() {
 
         {/* Health bar under the header */}
         <div
-          className="max-w-screen-2xl mx-auto mt-3 cursor-pointer"
-          onClick={() => setExplainerOpen(true)}
-          title="Click to see health score breakdown"
+          className="max-w-screen-2xl mx-auto mt-3"
         >
           <HealthBar score={health.score} />
         </div>

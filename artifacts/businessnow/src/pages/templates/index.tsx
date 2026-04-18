@@ -472,7 +472,7 @@ export default function TemplatesPage() {
         {filtered.length === 0 && (
           <div className="col-span-3 text-center py-16 text-muted-foreground">
             <Package size={32} className="mx-auto mb-3 opacity-30" />
-            <p>No templates found. Seed the database to load the pre-built template library.</p>
+            <p>No templates match the selected filter.</p>
           </div>
         )}
       </div>

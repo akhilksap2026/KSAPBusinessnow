@@ -699,7 +699,7 @@ export default function AllocationsPage() {
                     <tr key={a.id} className={`border-t hover:bg-muted/10 transition-colors ${i % 2 === 0 ? "" : "bg-muted/5"}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          {isConflict && <AlertTriangle size={12} className="text-red-500 flex-shrink-0" title={`${totalLoad}% total load`} />}
+                          {isConflict && <AlertTriangle size={12} className="text-red-500 flex-shrink-0" aria-label={`${totalLoad}% total load`} />}
                           <div>
                             {a.resourceId ? (
                               <Link href={`/resources/${a.resourceId}`}

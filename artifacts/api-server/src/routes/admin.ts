@@ -8,7 +8,6 @@ import {
   templatesTable, staffingRequestsTable, notificationsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { runSeed } from "../lib/auto-seed";
 
 const router: IRouter = Router();
 
@@ -137,29 +136,6 @@ router.post("/admin/repair-logged-hours", async (req, res): Promise<void> => {
   }
 
   res.json({ tasksRepaired: corrections.length, corrections });
-});
-
-// Force-reseed — wipes all demo data and re-inserts fresh seed
-router.post("/admin/reseed", async (req, res): Promise<void> => {
-  try {
-    console.log("[reseed] Truncating all tables...");
-    await db.execute(sql`
-      TRUNCATE TABLE
-        staffing_requests, templates, phases, renewal_signals, notifications,
-        automation_runs, automations, forms, form_responses,
-        rate_cards, contracts, change_requests, invoices,
-        timesheets, allocations, tasks, milestones,
-        opportunities, projects, resources, accounts,
-        activity_logs, users
-      RESTART IDENTITY CASCADE
-    `);
-    console.log("[reseed] Tables cleared. Running seed...");
-    await runSeed();
-    res.json({ ok: true, message: "Database reseeded successfully." });
-  } catch (err: any) {
-    console.error("[reseed] Error:", err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
 });
 
 export default router;

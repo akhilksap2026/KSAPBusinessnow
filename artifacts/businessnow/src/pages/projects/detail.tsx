@@ -1082,7 +1082,7 @@ function KanbanView({ tasks, onStatusChange, depMap, onAddDep, onRemoveDep }: {
                 <div key={task.id} className="bg-white rounded-lg border p-3 space-y-2 shadow-sm hover:shadow transition-shadow">
                   <div className="flex items-start justify-between gap-1">
                     <p className="text-sm font-medium leading-tight">{task.name}</p>
-                    {task.isClientAction && <Users size={12} className="text-orange-500 flex-shrink-0 mt-0.5" title="Client action" />}
+                    {task.isClientAction && <Users size={12} className="text-orange-500 flex-shrink-0 mt-0.5" aria-label="Client action" />}
                   </div>
                   {task.phase && <p className="text-xs text-muted-foreground">{task.phase}</p>}
                   {task.assignedToName && <div className="flex items-center gap-1 text-xs text-muted-foreground"><User size={10}/>{task.assignedToName}</div>}
@@ -1195,7 +1195,7 @@ function ListView({ tasks, milestones, onStatusChange, depMap }: { tasks:Task[];
                         <div className="flex items-center gap-1.5">
                           <span className={task.status==="done"?"line-through text-muted-foreground":"font-medium"}>{task.name}</span>
                           {task.isClientAction && <Users size={11} className="text-orange-500"/>}
-                          {task.blockerNote && <AlertCircle size={11} className="text-red-500" title={task.blockerNote}/>}
+                          {task.blockerNote && <AlertCircle size={11} className="text-red-500" aria-label={task.blockerNote}/>}
                         </div>
                         {incompleteDeps.length > 0 && (
                           <p className="text-[10px] text-amber-700 mt-0.5">⏳ Blocked by: {incompleteDeps.map((d:any) => d.dependsOnName).join(", ")}</p>
