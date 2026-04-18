@@ -158,17 +158,6 @@ export const DEMO_USERS: DemoUser[] = [
     initials: "CR", resourceId: 7,
   },
 
-  // ── Client Stakeholder (2) ──────────────────────────────────────────────
-  {
-    id: "robert.chen", name: "Robert Chen", title: "IT Director",
-    role: "client_stakeholder", availableRoles: ["client_stakeholder"],
-    initials: "RC",
-  },
-  {
-    id: "angela.torres", name: "Angela Torres", title: "Supply Chain VP",
-    role: "client_stakeholder", availableRoles: ["client_stakeholder"],
-    initials: "AT",
-  },
 ];
 
 // Demo resource mapping — IDs match the auto-seed insertion order (1-indexed).

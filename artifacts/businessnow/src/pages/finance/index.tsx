@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useAuthRole } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
+
 import {
   DollarSign, TrendingUp, AlertTriangle, Clock, CheckCircle, FileText,
   RefreshCw, ChevronDown, ChevronRight, XCircle, BarChart3, Percent, Search, ExternalLink
@@ -225,89 +226,6 @@ function ReceivablesTab() {
   );
 }
 
-// ── Contracts Tab ──────────────────────────────────────────────────────────────
-function ContractsTab() {
-  const [contracts, setContracts] = useState<any[]>([]);
-  useEffect(() => { fetch(`${API}/contracts`).then(r => r.json()).then(setContracts); }, []);
-
-  const billingModelLabel: Record<string, string> = {
-    time_and_materials: "T&M", milestone: "Milestone", fixed_fee: "Fixed Fee",
-    retainer: "Retainer", ams: "AMS",
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <p className="text-xs text-muted-foreground">Total Contract Value</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{fmt(contracts.reduce((s, c) => s + (c.totalValue || 0), 0))}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <p className="text-xs text-muted-foreground">Active Contracts</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{contracts.filter(c => c.status === "active").length}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4">
-            <p className="text-xs text-muted-foreground">Remaining Value</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{fmt(contracts.reduce((s, c) => s + (c.remainingValue || c.totalValue || 0), 0))}</p>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {contracts.map(c => (
-          <Card key={c.id} className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{c.name}</p>
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">{c.contractNumber} · {c.accountName}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Badge variant="outline" className="text-xs border-border text-muted-foreground">{billingModelLabel[c.billingModel] || c.billingModel}</Badge>
-                  <StatusBadge s={c.status} />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground/70">Total Value</p>
-                  <p className="text-lg font-bold text-foreground">{fmt(c.totalValue || 0)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground/70">Invoiced</p>
-                  <p className="text-sm font-semibold text-emerald-400">{fmt(c.invoicedValue || 0)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground/70">Remaining</p>
-                  <p className="text-sm font-semibold text-amber-400">{fmt(c.remainingValue || c.totalValue || 0)}</p>
-                </div>
-              </div>
-              {c.totalValue > 0 && (
-                <div>
-                  <div className="flex justify-between text-xs text-muted-foreground/70 mb-1">
-                    <span>Invoiced</span>
-                    <span>{Math.round(((c.invoicedValue || 0) / c.totalValue) * 100)}%</span>
-                  </div>
-                  <Progress value={((c.invoicedValue || 0) / c.totalValue) * 100} className="h-1.5 bg-muted" />
-                </div>
-              )}
-              <div className="flex justify-between text-xs text-muted-foreground/70">
-                <span>{c.startDate} → {c.endDate}</span>
-                <span>{c.paymentTerms} · {c.currencyCode}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ── Margin Tab ──────────────────────────────────────────────────────────────
 function MarginTab() {
   const [margin, setMargin] = useState<any[]>([]);
@@ -394,6 +312,7 @@ function MarginTab() {
 
 // ── Timesheets Approval Tab ───────────────────────────────────────────────────
 function TimesheetQueueTab() {
+  const { user } = useAuthRole();
   const [queue, setQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState<Set<number>>(new Set());
   const [, navigate] = useLocation();
@@ -406,11 +325,14 @@ function TimesheetQueueTab() {
       });
   }, []);
 
+  const approverName = user?.name ?? "Finance";
+  const approvableQueue = queue.filter(t => t.resourceName !== user?.name);
+
   const bulkApproveAll = async () => {
-    if (queue.length === 0) return;
-    const ids = queue.map(t => t.id);
-    await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, approvedByName: "Finance Lead" }) });
-    setQueue([]);
+    if (approvableQueue.length === 0) return;
+    const ids = approvableQueue.map(t => t.id);
+    await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, approvedByName: approverName }) });
+    setQueue(prev => prev.filter(t => !ids.includes(t.id)));
   };
 
   return (
@@ -421,9 +343,9 @@ function TimesheetQueueTab() {
           <p className="text-xs text-muted-foreground/70">{queue.length} entries awaiting review</p>
         </div>
         <div className="flex items-center gap-2">
-          {queue.length > 0 && (
+          {approvableQueue.length > 0 && (
             <Button size="sm" variant="outline" onClick={bulkApproveAll} className="h-7 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50">
-              <CheckCircle className="h-3 w-3 mr-1" /> Approve All ({queue.length})
+              <CheckCircle className="h-3 w-3 mr-1" /> Approve All ({approvableQueue.length})
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={() => navigate("/timesheets/approval")} className="h-7 text-xs">
@@ -451,41 +373,51 @@ function TimesheetQueueTab() {
                 <th className="text-right p-4">Actions</th>
               </tr></thead>
               <tbody className="divide-y divide-border">
-                {queue.map(t => (
-                  <tr key={t.id} className="hover:bg-muted/30">
-                    <td className="p-4 text-foreground">{t.resourceName}</td>
-                    <td className="p-4 text-foreground">{t.projectName}</td>
-                    <td className="p-4 text-muted-foreground">{t.weekStart}</td>
-                    <td className="p-4 text-right text-foreground font-medium">{t.hoursLogged}h</td>
-                    <td className="p-4 text-right text-emerald-400">{t.billableHours ? `${t.billableHours}h` : "—"}</td>
-                    <td className="p-4 text-right">
-                      <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="ghost"
-                          onClick={async () => {
-                            setLoading(prev => new Set([...prev, t.id]));
-                            await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], approvedByName: "Finance Lead" }) });
-                            setQueue(prev => prev.filter(x => x.id !== t.id));
-                            setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
-                          }}
-                          disabled={loading.has(t.id)}
-                          className="h-7 px-3 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                          <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve
-                        </Button>
-                        <Button size="sm" variant="ghost"
-                          onClick={async () => {
-                            setLoading(prev => new Set([...prev, t.id]));
-                            await fetch(`${API}/timesheets/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], reason: "Rejected by finance" }) });
-                            setQueue(prev => prev.filter(x => x.id !== t.id));
-                            setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
-                          }}
-                          disabled={loading.has(t.id)}
-                          className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
-                          <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {queue.map(t => {
+                  const isOwnEntry = t.resourceName === user?.name;
+                  return (
+                    <tr key={t.id} className="hover:bg-muted/30">
+                      <td className="p-4 text-foreground">
+                        {t.resourceName}
+                        {isOwnEntry && <span className="ml-1.5 text-[10px] text-muted-foreground/60 border border-border rounded px-1 py-0.5">Own entry</span>}
+                      </td>
+                      <td className="p-4 text-foreground">{t.projectName}</td>
+                      <td className="p-4 text-muted-foreground">{t.weekStart}</td>
+                      <td className="p-4 text-right text-foreground font-medium">{t.hoursLogged}h</td>
+                      <td className="p-4 text-right text-emerald-400">{t.billableHours ? `${t.billableHours}h` : "—"}</td>
+                      <td className="p-4 text-right">
+                        {isOwnEntry ? (
+                          <span className="text-xs text-muted-foreground/40 italic">Self-approval blocked</span>
+                        ) : (
+                          <div className="flex gap-2 justify-end">
+                            <Button size="sm" variant="ghost"
+                              onClick={async () => {
+                                setLoading(prev => new Set([...prev, t.id]));
+                                await fetch(`${API}/timesheets/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], approvedByName: approverName }) });
+                                setQueue(prev => prev.filter(x => x.id !== t.id));
+                                setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
+                              }}
+                              disabled={loading.has(t.id)}
+                              className="h-7 px-3 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                              <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve
+                            </Button>
+                            <Button size="sm" variant="ghost"
+                              onClick={async () => {
+                                setLoading(prev => new Set([...prev, t.id]));
+                                await fetch(`${API}/timesheets/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [t.id], reason: "Rejected by finance" }) });
+                                setQueue(prev => prev.filter(x => x.id !== t.id));
+                                setLoading(prev => { const n = new Set(prev); n.delete(t.id); return n; });
+                              }}
+                              disabled={loading.has(t.id)}
+                              className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
+                              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </CardContent>
@@ -509,7 +441,7 @@ export default function FinancePage() {
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-emerald-400" /> Finance
             </h1>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">WIP · Receivables · Contracts · Margin</p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">WIP · Receivables · Approvals · Margin</p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => fetch(`${API}/finance/summary`).then(r => r.json()).then(setSummary)} className="text-muted-foreground hover:text-foreground">
             <RefreshCw className="h-4 w-4 mr-2" /> Refresh
@@ -551,7 +483,6 @@ export default function FinancePage() {
               </TabsList>
               <div className="w-px h-6 bg-border" />
               <TabsList className="bg-card border border-border h-auto p-1">
-                <TabsTrigger value="contracts" className="data-[state=active]:bg-muted text-xs">Contracts</TabsTrigger>
                 <TabsTrigger value="margin" className="data-[state=active]:bg-muted text-xs">Margin</TabsTrigger>
               </TabsList>
             </div>
@@ -563,7 +494,6 @@ export default function FinancePage() {
           </div>
           <TabsContent value="wip"><WIPTab /></TabsContent>
           <TabsContent value="receivables"><ReceivablesTab /></TabsContent>
-          <TabsContent value="contracts"><ContractsTab /></TabsContent>
           <TabsContent value="margin"><MarginTab /></TabsContent>
           <TabsContent value="queue"><TimesheetQueueTab /></TabsContent>
         </Tabs>

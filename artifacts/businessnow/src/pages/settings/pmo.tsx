@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Settings2, Tag, CreditCard, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X, Sun, Moon, Monitor, UserPlus, ArrowRightLeft } from "lucide-react";
+import { Plus, Trash2, Pencil, Settings2, Tag, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X, Sun, Moon, Monitor, UserPlus, ArrowRightLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthRole, ROLE_DEMO_RESOURCE } from "@/lib/auth";
@@ -163,180 +163,6 @@ function TimeEntryCategoriesTab() {
       {modal !== false && (
         <CategoryModal
           cat={modal}
-          onClose={() => setModal(false)}
-          onSave={load}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Rate Cards Tab ────────────────────────────────────────────────────────────
-
-interface RateCard {
-  id: number;
-  name: string;
-  role: string;
-  practiceArea: string | null;
-  billingRate: number;
-  costRate: number | null;
-  effectiveDate: string | null;
-  expiryDate: string | null;
-  notes: string | null;
-}
-
-function RateCardModal({ card, onClose, onSave }: { card: Partial<RateCard> | null; onClose: () => void; onSave: () => void }) {
-  const { toast } = useToast();
-  const isEdit = !!card?.id;
-  const [form, setForm] = useState({ name: card?.name ?? "", role: card?.role ?? "", practiceArea: card?.practiceArea ?? "", billingRate: card?.billingRate?.toString() ?? "", costRate: card?.costRate?.toString() ?? "", effectiveDate: card?.effectiveDate ?? "", expiryDate: card?.expiryDate ?? "", notes: card?.notes ?? "" });
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    if (!form.name.trim() || !form.role.trim() || !form.billingRate) {
-      toast({ title: "Name, role, and billing rate are required", variant: "destructive" });
-      return;
-    }
-    setSaving(true);
-    try {
-      const url = isEdit ? `${API}/rate-cards/${card!.id}` : `${API}/rate-cards`;
-      const method = isEdit ? "PUT" : "POST";
-      await fetch(url, {
-        method, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, billingRate: parseFloat(form.billingRate), costRate: form.costRate ? parseFloat(form.costRate) : null }),
-      });
-      onSave();
-      onClose();
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-card border-border max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-foreground">{isEdit ? "Edit" : "New"} Rate Card</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Name *</label>
-            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="bg-background border-border" placeholder="e.g. Senior Consultant Rate" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Role *</label>
-            <Input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="bg-background border-border" placeholder="e.g. Senior Consultant" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Practice Area</label>
-            <Input value={form.practiceArea} onChange={e => setForm(f => ({ ...f, practiceArea: e.target.value }))} className="bg-background border-border" placeholder="e.g. ERP" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Billing Rate ($/hr) *</label>
-            <Input type="number" value={form.billingRate} onChange={e => setForm(f => ({ ...f, billingRate: e.target.value }))} className="bg-background border-border" placeholder="200" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Cost Rate ($/hr)</label>
-            <Input type="number" value={form.costRate} onChange={e => setForm(f => ({ ...f, costRate: e.target.value }))} className="bg-background border-border" placeholder="120" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Effective Date</label>
-            <Input type="date" value={form.effectiveDate} onChange={e => setForm(f => ({ ...f, effectiveDate: e.target.value }))} className="bg-background border-border" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Expiry Date</label>
-            <Input type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} className="bg-background border-border" />
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
-            <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="bg-background border-border" placeholder="Optional notes" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-border">Cancel</Button>
-          <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function RateCardsTab() {
-  const { toast } = useToast();
-  const [cards, setCards] = useState<RateCard[]>([]);
-  const [modal, setModal] = useState<Partial<RateCard> | null | false>(false);
-
-  const load = () => fetch(`${API}/rate-cards`).then(r => r.json()).then(setCards).catch(() => {});
-
-  useEffect(() => { load(); }, []);
-
-  const remove = async (id: number) => {
-    if (!confirm("Delete this rate card?")) return;
-    await fetch(`${API}/rate-cards/${id}`, { method: "DELETE" });
-    toast({ title: "Rate card deleted" });
-    load();
-  };
-
-  const fmt = (v: number) => `$${v.toFixed(0)}/hr`;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Rate Cards</h3>
-          <p className="text-xs text-muted-foreground/70 mt-0.5">Standard billing and cost rates by role and practice area. These are global defaults — projects can have their own overrides.</p>
-        </div>
-        <Button size="sm" onClick={() => setModal({})} className="gap-1.5">
-          <Plus className="h-4 w-4" /> Add Rate Card
-        </Button>
-      </div>
-
-      <Card className="bg-card border-border">
-        <CardContent className="p-0">
-          {cards.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground/60 text-sm">
-              No rate cards yet.
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="text-left p-4">Name</th>
-                  <th className="text-left p-4">Role</th>
-                  <th className="text-left p-4">Practice Area</th>
-                  <th className="text-right p-4">Billing Rate</th>
-                  <th className="text-right p-4">Cost Rate</th>
-                  <th className="text-center p-4">Effective</th>
-                  <th className="text-right p-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {cards.map(card => (
-                  <tr key={card.id} className="hover:bg-muted/30">
-                    <td className="p-4 font-medium text-foreground">{card.name}</td>
-                    <td className="p-4 text-muted-foreground">{card.role}</td>
-                    <td className="p-4 text-muted-foreground">{card.practiceArea || "—"}</td>
-                    <td className="p-4 text-right font-medium text-emerald-400">{fmt(card.billingRate)}</td>
-                    <td className="p-4 text-right text-muted-foreground">{card.costRate ? fmt(card.costRate) : "—"}</td>
-                    <td className="p-4 text-center text-muted-foreground text-xs">{card.effectiveDate || "—"}</td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setModal(card)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400 hover:text-red-500" onClick={() => remove(card.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-
-      {modal !== false && (
-        <RateCardModal
-          card={modal}
           onClose={() => setModal(false)}
           onSave={load}
         />
@@ -1169,9 +995,6 @@ export default function PMOSettingsPage() {
             <TabsTrigger value="categories" className="data-[state=active]:bg-muted text-xs gap-1.5">
               <Tag className="h-3.5 w-3.5" /> Time Entry Categories
             </TabsTrigger>
-            <TabsTrigger value="rate-cards" className="data-[state=active]:bg-muted text-xs gap-1.5">
-              <CreditCard className="h-3.5 w-3.5" /> Rate Cards
-            </TabsTrigger>
             <TabsTrigger value="templates" className="data-[state=active]:bg-muted text-xs gap-1.5">
               <Layout className="h-3.5 w-3.5" /> Templates (WBS)
             </TabsTrigger>
@@ -1186,7 +1009,7 @@ export default function PMOSettingsPage() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="categories"><TimeEntryCategoriesTab /></TabsContent>
-          <TabsContent value="rate-cards"><RateCardsTab /></TabsContent>
+
           <TabsContent value="templates"><TemplatesTab /></TabsContent>
           <TabsContent value="fx-rates"><FxRatesTab /></TabsContent>
           <TabsContent value="appearance"><AppearanceTab /></TabsContent>

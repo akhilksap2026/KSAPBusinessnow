@@ -52,7 +52,7 @@ const RAIL_SECTIONS: RailSection[] = [
     label: "Customers",
     href: "/accounts",
     roles: ["admin","delivery_director","project_manager","finance_lead","executive","sales","account_manager"],
-    matchPrefixes: ["/accounts"],
+    matchPrefixes: ["/accounts", "/customers", "/prospects", "/opportunities"],
   },
   {
     id: "people",

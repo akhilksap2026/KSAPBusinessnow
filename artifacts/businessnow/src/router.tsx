@@ -58,10 +58,6 @@ import PMOSettingsPage from "@/pages/settings/pmo";
 import UserManagementPage from "@/pages/settings/user-management";
 import ProfilePage from "@/pages/profile/index";
 
-// Portal
-import PortalPage from "@/pages/portal/index";
-
-const STANDALONE_PORTAL_ENABLED = import.meta.env.VITE_ENABLE_STANDALONE_PORTAL === "true";
 
 // ─── DashboardRedirect — role-appropriate home landing ───────────────────────
 
@@ -69,7 +65,6 @@ function DashboardRedirect() {
   const { role } = useAuthRole();
   if (!role) return <Redirect to="/login" />;
   switch (role) {
-    case "external":           return <Redirect to="/portal" />;
     case "executive":          return <Redirect to="/portfolio" />;
     case "delivery_director":  return <Redirect to="/portfolio" />;
     case "project_manager":    return <Redirect to="/dashboard/pm" />;
@@ -77,7 +72,6 @@ function DashboardRedirect() {
     case "finance_lead":       return <Redirect to="/finance" />;
     case "sales":              return <Redirect to="/customers" />;
     case "account_manager":    return <Redirect to="/customers" />;
-    case "client_stakeholder": return <Redirect to="/projects" />;
     case "admin":              return <Redirect to="/dashboard/admin" />;
     case "consultant":         return <Redirect to="/timesheets" />;
     default:                   return <Redirect to="/dashboard/pm" />;
@@ -107,15 +101,6 @@ export function AppRouter() {
     <Switch>
       <Route path="/login" component={Login} />
 
-      {/* ── External Portal (disabled by default; client_stakeholder uses main app RBAC) */}
-      <Route path="/portal">
-        {STANDALONE_PORTAL_ENABLED && role === "external"
-          ? <ErrorBoundary><PortalPage /></ErrorBoundary>
-          : role
-            ? <Redirect to="/" />
-            : <Redirect to="/login" />
-        }
-      </Route>
 
       <Route path="/">
         {role ? <AppLayout><DashboardRedirect /></AppLayout> : <Redirect to="/login" />}
