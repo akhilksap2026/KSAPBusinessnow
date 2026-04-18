@@ -220,7 +220,7 @@ router.patch("/timesheets/:id", async (req, res): Promise<void> => {
 
   // Fetch current entry so we know the prior status and hours before updating.
   const [existing] = await db
-    .select({ status: timesheetsTable.status, hoursLogged: timesheetsTable.hoursLogged, taskId: timesheetsTable.taskId })
+    .select({ status: timesheetsTable.status, hoursLogged: timesheetsTable.hoursLogged, taskId: timesheetsTable.taskId, resourceId: timesheetsTable.resourceId })
     .from(timesheetsTable)
     .where(eq(timesheetsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -232,6 +232,12 @@ router.patch("/timesheets/:id", async (req, res): Promise<void> => {
   let updates: Record<string, any> = {};
 
   if (action === "approve") {
+    // Self-approval prevention: block if approverResourceId matches the entry's resourceId
+    const approverResourceId = req.body.approverResourceId;
+    if (approverResourceId && existing.resourceId === approverResourceId) {
+      res.status(403).json({ error: "SELF_APPROVAL_BLOCKED", message: "You cannot approve your own timesheet submissions." });
+      return;
+    }
     updates = { status: "approved", approvedAt: now, approvedByName: approvedByName || "Manager", rejectedAt: null, rejectedReason: null };
   } else if (action === "reject") {
     updates = { status: "rejected", rejectedAt: now, rejectedReason: rejectedReason || null, approvedAt: null };
@@ -349,20 +355,43 @@ router.get("/timesheets/pending-approval", async (req, res): Promise<void> => {
 // ── Bulk Approve ──────────────────────────────────────────────────────────────
 router.post("/timesheets/approve", async (req, res): Promise<void> => {
   try {
-    const { ids, approvedByName } = req.body as { ids: number[]; approvedByName?: string };
+    const { ids, approvedByName, approverResourceId } = req.body as {
+      ids: number[];
+      approvedByName?: string;
+      approverResourceId?: number;
+    };
     if (!Array.isArray(ids) || ids.length === 0) {
       res.status(400).json({ error: "ids array required" }); return;
     }
+
+    // Self-approval prevention: if approverResourceId is provided, filter out entries
+    // where the resource_id matches the approver's resource_id
+    let approvableIds = ids;
+    let selfBlockedCount = 0;
+    if (approverResourceId) {
+      const allEntries = await db.select({ id: timesheetsTable.id, resourceId: timesheetsTable.resourceId })
+        .from(timesheetsTable)
+        .where(inArray(timesheetsTable.id, ids));
+      const selfIds = new Set(allEntries.filter(e => e.resourceId === approverResourceId).map(e => e.id));
+      selfBlockedCount = selfIds.size;
+      approvableIds = ids.filter(id => !selfIds.has(id));
+    }
+
+    if (approvableIds.length === 0) {
+      res.status(403).json({ error: "SELF_APPROVAL_BLOCKED", message: "All selected entries belong to you. Self-approval is not permitted.", selfBlockedCount });
+      return;
+    }
+
     const now = new Date().toISOString();
     const updated = await db.update(timesheetsTable)
       .set({ status: "approved", approvedAt: now, approvedByName: approvedByName ?? "Manager", rejectedAt: null, rejectedReason: null })
-      .where(inArray(timesheetsTable.id, ids))
+      .where(inArray(timesheetsTable.id, approvableIds))
       .returning();
     // Adjust loggedHours for each newly-approved entry
     for (const t of updated) {
       await adjustTaskLoggedHours(t.taskId, parseFloat(t.hoursLogged));
     }
-    res.json({ approved: updated.length });
+    res.json({ approved: updated.length, selfBlocked: selfBlockedCount });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

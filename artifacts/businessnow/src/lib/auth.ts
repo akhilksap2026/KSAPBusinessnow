@@ -48,50 +48,127 @@ export interface DemoUser {
   id: string;
   name: string;
   title: string;
-  role: Role;
+  role: Role;                   // Primary / current active role
+  availableRoles: Role[];       // All roles the user can switch between
   initials: string;
   resourceId?: number;
 }
 
 export const DEMO_USERS: DemoUser[] = [
   // ── Admin (1) ───────────────────────────────────────────────────────────
-  { id: "rachel.nguyen",   name: "Rachel Nguyen",    title: "System Administrator",        role: "admin",              initials: "RN" },
+  {
+    id: "rachel.nguyen", name: "Rachel Nguyen", title: "System Administrator",
+    role: "admin", availableRoles: ["admin", "consultant"],
+    initials: "RN",
+  },
 
   // ── Executive (1) ───────────────────────────────────────────────────────
-  { id: "james.whitfield", name: "James Whitfield",  title: "Managing Partner",             role: "executive",          initials: "JW" },
+  {
+    id: "james.whitfield", name: "James Whitfield", title: "Managing Partner",
+    role: "executive", availableRoles: ["executive", "consultant"],
+    initials: "JW",
+  },
 
   // ── Delivery Director (1) ───────────────────────────────────────────────
-  { id: "jana.kovac",      name: "Jana Kovac",        title: "VP of Delivery",               role: "delivery_director",  initials: "JK", resourceId: 2 },
+  {
+    id: "jana.kovac", name: "Jana Kovac", title: "VP of Delivery",
+    role: "delivery_director", availableRoles: ["delivery_director", "project_manager", "consultant"],
+    initials: "JK", resourceId: 2,
+  },
 
   // ── Project Manager (3) ─────────────────────────────────────────────────
-  { id: "alex.okafor",     name: "Alex Okafor",       title: "Principal Project Manager",    role: "project_manager",    initials: "AO", resourceId: 1 },
-  { id: "priya.mehta",     name: "Priya Mehta",        title: "Senior Project Manager",       role: "project_manager",    initials: "PM" },
-  { id: "tom.kirkland",    name: "Tom Kirkland",       title: "Project Manager",              role: "project_manager",    initials: "TK" },
+  {
+    id: "alex.okafor", name: "Alex Okafor", title: "Principal Project Manager",
+    role: "project_manager", availableRoles: ["project_manager", "consultant"],
+    initials: "AO", resourceId: 1,
+  },
+  {
+    id: "priya.mehta", name: "Priya Mehta", title: "Senior Project Manager",
+    role: "project_manager", availableRoles: ["project_manager", "consultant"],
+    initials: "PM",
+  },
+  {
+    id: "tom.kirkland", name: "Tom Kirkland", title: "Project Manager",
+    role: "project_manager", availableRoles: ["project_manager", "consultant"],
+    initials: "TK",
+  },
 
   // ── Consultant (3) ──────────────────────────────────────────────────────
-  { id: "derek.tran",      name: "Derek Tran",         title: "QA Lead",                      role: "consultant",         initials: "DT", resourceId: 3 },
-  { id: "aisha.johnson",   name: "Aisha Johnson",      title: "Senior OTM Developer",         role: "consultant",         initials: "AJ", resourceId: 8 },
-  { id: "kevin.hart",      name: "Kevin Hart",         title: "Data Migration Specialist",    role: "consultant",         initials: "KH", resourceId: 5 },
+  {
+    id: "derek.tran", name: "Derek Tran", title: "QA Lead",
+    role: "consultant", availableRoles: ["consultant"],
+    initials: "DT", resourceId: 3,
+  },
+  {
+    id: "aisha.johnson", name: "Aisha Johnson", title: "Senior OTM Developer",
+    role: "consultant", availableRoles: ["consultant"],
+    initials: "AJ", resourceId: 8,
+  },
+  {
+    id: "kevin.hart", name: "Kevin Hart", title: "Data Migration Specialist",
+    role: "consultant", availableRoles: ["consultant"],
+    initials: "KH", resourceId: 5,
+  },
 
   // ── Resource Manager (2) ────────────────────────────────────────────────
-  { id: "maria.santos",    name: "Maria Santos",       title: "Resource Manager",             role: "resource_manager",   initials: "MS", resourceId: 4 },
-  { id: "ben.patterson",   name: "Ben Patterson",      title: "Staffing Coordinator",         role: "resource_manager",   initials: "BP" },
+  {
+    id: "maria.santos", name: "Maria Santos", title: "Resource Manager",
+    role: "resource_manager", availableRoles: ["resource_manager", "consultant"],
+    initials: "MS", resourceId: 4,
+  },
+  {
+    id: "ben.patterson", name: "Ben Patterson", title: "Staffing Coordinator",
+    role: "resource_manager", availableRoles: ["resource_manager", "consultant"],
+    initials: "BP",
+  },
 
   // ── Finance Manager (2) ─────────────────────────────────────────────────
-  { id: "sandra.liu",      name: "Sandra Liu",         title: "Finance Director",             role: "finance_lead",       initials: "SL" },
-  { id: "brendan.walsh",   name: "Brendan Walsh",      title: "Finance Analyst",              role: "finance_lead",       initials: "BW", resourceId: 9 },
+  {
+    id: "sandra.liu", name: "Sandra Liu", title: "Finance Director",
+    role: "finance_lead", availableRoles: ["finance_lead", "consultant"],
+    initials: "SL",
+  },
+  {
+    id: "brendan.walsh", name: "Brendan Walsh", title: "Finance Analyst",
+    role: "finance_lead", availableRoles: ["finance_lead", "consultant"],
+    initials: "BW", resourceId: 9,
+  },
 
   // ── Business Development (2) ────────────────────────────────────────────
-  { id: "diana.flores",    name: "Diana Flores",       title: "Business Development Manager", role: "sales",              initials: "DF", resourceId: 10 },
-  { id: "chris.morgan",    name: "Chris Morgan",       title: "Senior Account Executive",     role: "sales",              initials: "CM" },
+  {
+    id: "diana.flores", name: "Diana Flores", title: "Business Development Manager",
+    role: "sales", availableRoles: ["sales", "consultant"],
+    initials: "DF", resourceId: 10,
+  },
+  {
+    id: "chris.morgan", name: "Chris Morgan", title: "Senior Account Executive",
+    role: "sales", availableRoles: ["sales", "consultant"],
+    initials: "CM",
+  },
 
   // ── Account Manager (2) ─────────────────────────────────────────────────
-  { id: "yuki.tanaka",     name: "Yuki Tanaka",        title: "Senior Account Manager",       role: "account_manager",    initials: "YT", resourceId: 6 },
-  { id: "carlos.rivera",   name: "Carlos Rivera",      title: "Account Manager",              role: "account_manager",    initials: "CR", resourceId: 7 },
+  {
+    id: "yuki.tanaka", name: "Yuki Tanaka", title: "Senior Account Manager",
+    role: "account_manager", availableRoles: ["account_manager", "consultant"],
+    initials: "YT", resourceId: 6,
+  },
+  {
+    id: "carlos.rivera", name: "Carlos Rivera", title: "Account Manager",
+    role: "account_manager", availableRoles: ["account_manager", "consultant"],
+    initials: "CR", resourceId: 7,
+  },
 
   // ── Client Stakeholder (2) ──────────────────────────────────────────────
-  { id: "robert.chen",     name: "Robert Chen",        title: "IT Director",                  role: "client_stakeholder", initials: "RC" },
-  { id: "angela.torres",   name: "Angela Torres",      title: "Supply Chain VP",              role: "client_stakeholder", initials: "AT" },
+  {
+    id: "robert.chen", name: "Robert Chen", title: "IT Director",
+    role: "client_stakeholder", availableRoles: ["client_stakeholder"],
+    initials: "RC",
+  },
+  {
+    id: "angela.torres", name: "Angela Torres", title: "Supply Chain VP",
+    role: "client_stakeholder", availableRoles: ["client_stakeholder"],
+    initials: "AT",
+  },
 ];
 
 // Demo resource mapping — IDs match the auto-seed insertion order (1-indexed).
@@ -167,6 +244,7 @@ export const PERMISSIONS = {
   executeProjectClosure:    ["admin","delivery_director","project_manager"],
   // Admin
   viewAdminPanel:           ["admin"],
+  manageUsers:              ["admin"],
   // Capacity
   viewCapacityForecast:     ["admin","delivery_director","resource_manager","project_manager"],
 } as const satisfies Record<string, readonly Role[]>;
@@ -213,9 +291,92 @@ export const ROUTE_ROLES: Record<string, readonly Role[]> = {
   "/resources/:id":       ["admin","delivery_director","resource_manager","project_manager"],
 };
 
-const ROLE_KEY = "otmnow_role";
-const USER_KEY  = "otmnow_user_id";
+// ─── Role priority (for display ordering in role switcher) ────────────────────
+export const ROLE_PRIORITY: Record<Role, number> = {
+  admin:              0,
+  executive:          1,
+  delivery_director:  2,
+  project_manager:    3,
+  resource_manager:   4,
+  finance_lead:       5,
+  sales:              6,
+  account_manager:    7,
+  client_stakeholder: 8,
+  consultant:         9,  // Employee (Self) mode — always last
+  external:           10,
+};
 
+// ─── Storage keys ─────────────────────────────────────────────────────────────
+
+const ROLE_KEY      = "otmnow_role";
+const USER_KEY      = "otmnow_user_id";
+const PREF_ROLE_KEY = "otmnow_pref_role";       // Per-user default role preference
+const REMEMBER_KEY  = "otmnow_remember_role";   // Remember last role toggle
+
+// ─── Per-user role overrides (for User Management demo) ─────────────────────
+// Stored as JSON: { [userId]: Role[] }
+const USER_ROLES_KEY = "otmnow_user_roles";
+
+export function getUserRoles(userId: string): Role[] | null {
+  try {
+    const raw = localStorage.getItem(USER_ROLES_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, Role[]>;
+    return map[userId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setUserRoles(userId: string, roles: Role[]) {
+  try {
+    const raw = localStorage.getItem(USER_ROLES_KEY);
+    const map = raw ? JSON.parse(raw) as Record<string, Role[]> : {};
+    map[userId] = roles;
+    localStorage.setItem(USER_ROLES_KEY, JSON.stringify(map));
+  } catch { }
+}
+
+export function getEffectiveRoles(user: DemoUser): Role[] {
+  const overrides = getUserRoles(user.id);
+  return overrides ?? user.availableRoles;
+}
+
+// ─── Default role preference ──────────────────────────────────────────────────
+
+export function getDefaultRole(userId: string): Role | null {
+  try {
+    const raw = localStorage.getItem(PREF_ROLE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, Role>;
+    return map[userId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setDefaultRole(userId: string, role: Role | null) {
+  try {
+    const raw = localStorage.getItem(PREF_ROLE_KEY);
+    const map = raw ? JSON.parse(raw) as Record<string, Role> : {};
+    if (role) {
+      map[userId] = role;
+    } else {
+      delete map[userId];
+    }
+    localStorage.setItem(PREF_ROLE_KEY, JSON.stringify(map));
+  } catch { }
+}
+
+export function getRememberRole(): boolean {
+  return localStorage.getItem(REMEMBER_KEY) === "true";
+}
+
+export function setRememberRole(val: boolean) {
+  localStorage.setItem(REMEMBER_KEY, val ? "true" : "false");
+}
+
+// ─── Global state ────────────────────────────────────────────────────────────
 
 function readRoleFromStorage(): Role | null {
   try {
@@ -257,16 +418,39 @@ export function setRoleGlobal(newRole: Role | null) {
 
 export function setUserGlobal(user: DemoUser | null) {
   _user = user;
-  _role = user?.role ?? null;
-  try {
-    if (user) {
-      localStorage.setItem(USER_KEY, user.id);
-      localStorage.setItem(ROLE_KEY, user.role);
+
+  if (user) {
+    // Determine which role to start with
+    let startingRole: Role = user.role;
+
+    if (getRememberRole()) {
+      // Restore last active role if it's still available
+      const lastRole = readRoleFromStorage();
+      const effectiveRoles = getEffectiveRoles(user);
+      if (lastRole && effectiveRoles.includes(lastRole)) {
+        startingRole = lastRole;
+      }
     } else {
+      // Check for user-set default role preference
+      const pref = getDefaultRole(user.id);
+      if (pref && getEffectiveRoles(user).includes(pref)) {
+        startingRole = pref;
+      }
+    }
+
+    _role = startingRole;
+    try {
+      localStorage.setItem(USER_KEY, user.id);
+      localStorage.setItem(ROLE_KEY, startingRole);
+    } catch { }
+  } else {
+    _role = null;
+    try {
       localStorage.removeItem(USER_KEY);
       localStorage.removeItem(ROLE_KEY);
-    }
-  } catch { }
+    } catch { }
+  }
+
   notifyAll();
 }
 

@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, AlertTriangle, CheckCircle2, Database, Activity, Users, DollarSign } from "lucide-react";
+import { RefreshCw, AlertTriangle, CheckCircle2, Database, Activity, Users, DollarSign, Shield, Settings2, ChevronRight } from "lucide-react";
+import { Link } from "wouter";
 
 const API = "/api";
 
@@ -112,6 +113,37 @@ export default function AdminPage() {
                   <MetricCard label="Paid" value={entities.invoices.paid} color="text-emerald-400" />
                   <MetricCard label="Overdue" value={entities.invoices.overdue} color={entities.invoices.overdue > 0 ? "text-red-400" : "text-emerald-400"} />
                   <MetricCard label="Total Invoice Value" value={`$${(entities.invoices.totalValue / 1000).toFixed(0)}K`} />
+                </div>
+              </div>
+
+              {/* System Management */}
+              <div>
+                <h3 className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide mb-3">System Management</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <Link href="/settings/user-management">
+                    <div className="bg-muted/50 rounded-lg px-4 py-3 flex items-center gap-3 hover:bg-muted cursor-pointer group transition-colors">
+                      <div className="rounded-md bg-violet-500/15 p-2">
+                        <Shield className="h-4 w-4 text-violet-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">User Management</p>
+                        <p className="text-xs text-muted-foreground/70">Assign roles and manage access</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </div>
+                  </Link>
+                  <Link href="/settings/pmo">
+                    <div className="bg-muted/50 rounded-lg px-4 py-3 flex items-center gap-3 hover:bg-muted cursor-pointer group transition-colors">
+                      <div className="rounded-md bg-blue-500/15 p-2">
+                        <Settings2 className="h-4 w-4 text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">PMO Settings</p>
+                        <p className="text-xs text-muted-foreground/70">Rate cards, categories, templates</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </div>
+                  </Link>
                 </div>
               </div>
 

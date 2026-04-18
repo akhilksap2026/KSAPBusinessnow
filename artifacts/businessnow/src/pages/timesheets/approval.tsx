@@ -13,8 +13,9 @@ import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import {
-  CheckCircle2, XCircle, ChevronLeft, Filter, RotateCcw, Clock, Users,
+  CheckCircle2, XCircle, ChevronLeft, Filter, RotateCcw, Clock, Users, ShieldAlert,
 } from "lucide-react";
+import { useAuthRole } from "@/lib/auth";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
 
@@ -27,6 +28,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function TimesheetApprovalPage() {
   const { toast } = useToast();
+  const { user } = useAuthRole();
+  const approverResourceId = user?.resourceId ?? null;
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -113,15 +116,34 @@ export default function TimesheetApprovalPage() {
     else setSelected(new Set(submittedIds));
   };
 
+  // Self-approval guard — returns true if the approver is the submitter of this entry
+  const isSelfEntry = (entry: any) =>
+    approverResourceId !== null && entry.resourceId === approverResourceId;
+
   const bulkApprove = async () => {
     if (selected.size === 0) return;
     setActing(true);
     try {
+      // Filter out any self-submitted entries before sending
+      const approvableIds = Array.from(selected).filter(id => {
+        const entry = entries.find(e => e.id === id);
+        return entry && !isSelfEntry(entry);
+      });
+      const blockedCount = selected.size - approvableIds.length;
+
+      if (approvableIds.length === 0) {
+        toast({ title: "Cannot self-approve", description: "You cannot approve your own timesheet submissions.", variant: "destructive" });
+        return;
+      }
+
       await fetch(`${API_BASE}/timesheets/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selected), approvedByName: "Manager" }),
+        body: JSON.stringify({ ids: approvableIds, approvedByName: user?.name ?? "Manager", approverResourceId }),
       });
-      toast({ title: `${selected.size} entries approved` });
+      const msg = blockedCount > 0
+        ? `${approvableIds.length} entries approved · ${blockedCount} skipped (self-approval blocked)`
+        : `${approvableIds.length} entries approved`;
+      toast({ title: msg });
       setSelected(new Set());
       load();
     } catch {
@@ -145,12 +167,16 @@ export default function TimesheetApprovalPage() {
     } finally { setActing(false); }
   };
 
-  const singleApprove = async (id: number) => {
+  const singleApprove = async (id: number, entry: any) => {
+    if (isSelfEntry(entry)) {
+      toast({ title: "Cannot self-approve", description: "You cannot approve your own timesheet submissions.", variant: "destructive" });
+      return;
+    }
     setActing(true);
     try {
       await fetch(`${API_BASE}/timesheets/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [id], approvedByName: "Manager" }),
+        body: JSON.stringify({ ids: [id], approvedByName: user?.name ?? "Manager", approverResourceId }),
       });
       toast({ title: "Entry approved" }); load();
     } catch { toast({ title: "Failed", variant: "destructive" }); }
@@ -358,16 +384,34 @@ export default function TimesheetApprovalPage() {
                       </td>
                       <td className="px-3 py-3 text-right">
                         {isSubmitted && (
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => singleApprove(entry.id)} disabled={acting} title="Approve"
-                              className="p-1 rounded hover:bg-emerald-500/10 text-emerald-500 disabled:opacity-40 transition-colors">
-                              <CheckCircle2 className="h-4 w-4" />
-                            </button>
-                            <button onClick={() => singleReject(entry.id)} disabled={acting} title="Reject"
-                              className="p-1 rounded hover:bg-red-500/10 text-red-500 disabled:opacity-40 transition-colors">
-                              <XCircle className="h-4 w-4" />
-                            </button>
-                          </div>
+                          isSelfEntry(entry) ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 px-1.5 py-1 rounded">
+                                      <ShieldAlert className="h-3 w-3 shrink-0" />
+                                      Own entry
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  <p className="text-xs">Self-approval is blocked — you cannot approve your own submissions under any role.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => singleApprove(entry.id, entry)} disabled={acting} title="Approve"
+                                className="p-1 rounded hover:bg-emerald-500/10 text-emerald-500 disabled:opacity-40 transition-colors">
+                                <CheckCircle2 className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => singleReject(entry.id)} disabled={acting} title="Reject"
+                                className="p-1 rounded hover:bg-red-500/10 text-red-500 disabled:opacity-40 transition-colors">
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )
                         )}
                       </td>
                     </tr>

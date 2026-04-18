@@ -30,7 +30,7 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 | Sprint 4 | Project/Task module (7-level hierarchy, ETC, comments, dependencies) | ✅ Complete |
 | Sprint 5 | CRM: Prospects module + milestone types + payment alerts + opportunity prospect link + customer kanban | ✅ Complete |
 | Sprint 6 | Timesheets + Rate Cards + Billing (admin project, collaboration, PM approval) | ✅ Complete |
-| Sprint 7 | Security middleware + polish (dark mode, virtual lists, empty states) | Pending |
+| Sprint 7 | RBAC Dual-Mode Identity (role switcher, multi-role users, self-approval prevention, delegation, user management) | ✅ Complete |
 
 ## Sprint 1 Schema Changes (April 2026)
 
@@ -71,6 +71,26 @@ Three critical bugs resolved so entries now appear correctly in the weekly grid:
 3. **All 68 existing DB rows had `entry_date = NULL`** — Backfilled with `UPDATE timesheets SET entry_date = week_start WHERE entry_date IS NULL`. Grid only populates cells when `e.entryDate` is truthy, so rows were invisible.
 
 Also added `"zod": "catalog:"` to `artifacts/api-server/package.json` (needed for inline schema import).
+
+## RBAC Dual-Mode Identity (Sprint 7)
+
+### Architecture
+- **Multi-role users** — `DemoUser.availableRoles[]` defines all roles a user can switch between. Base `Employee` role is always present. Elevated roles are stored in `localStorage` with key `otmnow_user_roles`.
+- **Role Switcher** — persists to `localStorage` (`otmnow_pref_role`, `otmnow_remember_role`). Active role shown in top-bar badge with dropdown to switch. Navigation redirects on role switch.
+- **Self-approval prevention** — backend enforces in `PATCH /timesheets/:id` and `POST /timesheets/approve` (403 if `approverResourceId === entry.resourceId`). Frontend shows disabled approve button + "Own entry" badge.
+- **My Profile page** (`/profile`) — role list, default role preference, "Remember last role" toggle, Delegation CRUD (given + received, active/expired, revoke, mandatory end date).
+- **User Management** (`/settings/user-management`) — admin-only; searchable user table; Edit Roles dialog (Employee locked, elevated roles toggleable); localStorage-backed override.
+- **Admin Panel** (`/admin`) — overview metrics + quick links to User Management and PMO Settings.
+- **Delegation API** — `GET/POST/DELETE /api/delegations` backed by `delegations` DB table.
+
+### Key Files
+- `artifacts/businessnow/src/lib/auth.ts` — DemoUser type, getEffectiveRoles, role prefs helpers
+- `artifacts/businessnow/src/components/layout/top-bar.tsx` — Role Switcher dropdown
+- `artifacts/businessnow/src/pages/profile/index.tsx` — My Profile + Delegation Settings
+- `artifacts/businessnow/src/pages/settings/user-management.tsx` — admin role assignment
+- `artifacts/businessnow/src/pages/timesheets/approval.tsx` — self-approval UI guard
+- `artifacts/api-server/src/routes/timesheets.ts` — self-approval backend enforcement
+- `artifacts/api-server/src/routes/delegations.ts` — delegation CRUD API
 
 ## Key PRD Gaps Still To Build
 

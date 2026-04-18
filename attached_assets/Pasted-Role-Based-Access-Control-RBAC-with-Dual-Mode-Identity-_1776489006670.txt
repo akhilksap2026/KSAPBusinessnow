@@ -1,0 +1,99 @@
+Role-Based Access Control (RBAC) with Dual-Mode Identity
+Feature: Dynamic Role Switching with Scoped Permissions per Active Role
+
+Context & Core Principle
+Every employee in the system has two layers of identity:
+
+Base Identity (Self/Employee Role) — Always assigned by default. Governs what they can do for themselves.
+Elevated Role(s) — One or more secondary roles (e.g., Approver, Project Manager, Finance Manager) that grant additional permissions beyond self-service.
+
+At any given session, the user actively selects which role context they are operating under via a role switcher in the UI (e.g., a top-bar dropdown or toggle). The system enforces permissions dynamically based on the currently active role — not the user's full role set.
+
+Role Switcher Behavior
+
+The role switcher is always visible at the top of the application.
+The default active role on login is the Employee (Self) role.
+Users can switch to any elevated role they have been assigned.
+When a role is switched, the entire UI, data scope, and allowed actions update immediately to reflect the guardrails of the selected role.
+A user cannot bypass self-role restrictions while in Employee mode, even if they hold an Approver or PM role simultaneously.
+
+
+Role Definitions & Permission Scopes
+1. Employee (Self) Role — Always Active as Base
+
+Timesheet: Can create, edit, and submit timesheets only for themselves. Cannot view or modify anyone else's timesheet.
+Project Visibility: Can only see projects where they are explicitly listed as a contributor/member. Projects they are not assigned to are hidden entirely.
+Approvals: Cannot approve their own timesheets, leave requests, or any self-submitted records. Approval actions are disabled/hidden in this mode.
+Data Scope: Strictly self-scoped. No team-level or org-level data is accessible.
+
+2. Approver Role — Elevated, Switchable
+
+Timesheet Approvals: Can view and approve/reject timesheets submitted by consultants or employees within their approval jurisdiction (e.g., their team or reporting chain).
+Project Visibility: Can see projects relevant to the employees they approve for.
+Self-Timesheet: When in Approver mode, they should still be blocked from approving their own submissions (system enforces this even in elevated mode).
+Data Scope: Team or group-scoped based on approval assignments.
+
+3. Project Manager (PM) Role — Elevated, Switchable
+
+Can view all timesheets, resource allocations, and project status for projects they manage.
+Can approve or flag time entries linked to their projects.
+Cannot access financial records or org-wide reporting unless also assigned a Finance role.
+
+4. Finance Role — Elevated, Switchable
+
+Access to invoicing, billing records, cost centers, and financial summaries.
+Can view timesheet data in aggregate for billing purposes.
+Cannot modify timesheets directly — read-only on time entries.
+
+(Additional roles follow the same pattern: each role card defines exactly what data is visible and what actions are permitted.)
+
+Example Scenario: Employee "Mr. E"
+Mr. E has been assigned: Employee (base) + Approver + Project Manager
+Active RoleWhat Mr. E Can SeeWhat Mr. E Can DoEmployeeOnly his own timesheets; only projects he's a member ofSubmit his own time; no approvalsApproverTimesheets of employees in his approval groupApprove/reject others' submissions; cannot approve his ownProject ManagerAll resources and time entries on his managed projectsReview allocations, flag entries, run project-level reports
+
+User Setup & Delegation Settings
+Where It Lives
+Role assignments and delegations are managed in User Setup, accessible via:
+
+Admin path: Settings → User Management → [Select User] → Roles & Delegations
+Self-service path (if permitted): My Profile → Delegation Settings
+
+Both views surface the same configuration panel, but admin view allows editing any user while self-service is scoped to the logged-in user's own delegations only.
+
+Role Assignment (Admin-Only)
+Admins can assign or revoke elevated roles for any user from the User Setup screen. The base Employee role is always present and cannot be removed.
+FieldDescriptionBase RoleEmployee — system-assigned, locked, non-removableElevated RolesMulti-select from available role cards (Approver, PM, Finance, etc.)Effective DateDate from which the role becomes activeExpiry DateOptional — role auto-revokes after this dateAssigned ByAuto-captured audit field
+
+Delegation Settings (Admin or Self-Service)
+A user with an elevated role can temporarily delegate that role to another eligible user — for example, during leave or a handover period.
+FieldDescriptionRole to DelegateDropdown of the user's currently active elevated rolesDelegate ToSearch and select an eligible user in the systemDelegation PeriodStart date and end date (mandatory — no open-ended delegations)Scope of DelegationFull role or limited scope (e.g., delegate Approver only for a specific team or project)Notify DelegateAuto-email/notification sent to the delegate on saveDelegation StatusActive / Upcoming / Expired — visible in both users' profiles
+Guardrails on Delegation:
+
+A user cannot delegate a role they do not currently hold.
+A user cannot delegate to themselves.
+Delegation does not remove the role from the original user — both can act under that role during the delegation window unless explicitly suspended.
+Delegated roles are visually marked in the delegate's role switcher (e.g., "Approver — Delegated from Mr. E until 30 Apr") for clarity.
+Delegation history is fully auditable — who delegated, to whom, for what period, and what actions the delegate took.
+
+
+Default Role on Login (User Preference)
+Users can set their preferred default role for login from their profile settings. If not set, the system defaults to the Employee (Self) role.
+FieldDescriptionDefault Login RoleDropdown of all roles assigned to the userRemember Last RoleToggle — if ON, system restores the role active at last logout
+
+Key Guardrails (Non-Negotiable System Rules)
+
+No self-approval under any role — The system must prevent a user from approving any record they themselves submitted, regardless of active role.
+Role switching does not persist data context — Switching roles resets the visible dataset to match the new role's scope.
+Principle of least privilege by default — Login always starts in Employee (Self) mode unless overridden by user preference.
+Role card = permission boundary — Every elevated role has an explicit "role card" defining its exact data visibility and action permissions. The UI renders only what the active role card permits.
+Delegations are time-boxed — No permanent open-ended delegations are allowed; expiry is mandatory.
+Audit trail — All actions are logged with the user identity, active role, and whether the role was delegated or native at the time of the action.
+
+
+Implementation Notes for the Dev Team
+
+The role switcher should be implemented as a session-level context — backend API calls must carry the active role as a parameter and the server must validate permissions against it server-side.
+Role cards should be configurable by admins, not hardcoded, so new roles can be added without code changes.
+UI elements (buttons, menu items, data tables) should be conditionally rendered based on active role — not just disabled — to reduce cognitive load.
+The delegation engine should run on a scheduled job that activates and expires delegations automatically at the configured dates, with no manual intervention required.
+User Setup screens must enforce field-level permissions — a non-admin user accessing the self-service delegation view should not see or be able to modify role assignments, only delegation targets and periods.

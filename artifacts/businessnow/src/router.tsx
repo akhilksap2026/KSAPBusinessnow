@@ -55,6 +55,8 @@ import TemplatesPage from "@/pages/templates/index";
 import PortfolioPage from "@/pages/portfolio/index";
 import AdminPage from "@/pages/admin/index";
 import PMOSettingsPage from "@/pages/settings/pmo";
+import UserManagementPage from "@/pages/settings/user-management";
+import ProfilePage from "@/pages/profile/index";
 
 // Portal
 import PortalPage from "@/pages/portal/index";
@@ -190,6 +192,12 @@ export function AppRouter() {
       </Route>
       <Route path="/settings/pmo">
         <Guard roles={["admin", "delivery_director", "project_manager"] as Role[]}><PMOSettingsPage /></Guard>
+      </Route>
+      <Route path="/settings/user-management">
+        <Guard roles={["admin"] as Role[]}><UserManagementPage /></Guard>
+      </Route>
+      <Route path="/profile">
+        {role ? <ProfilePage /> : <Redirect to="/login" />}
       </Route>
 
       {/* ── Project sub-routes (before /projects/:id) ──────────────────── */}
