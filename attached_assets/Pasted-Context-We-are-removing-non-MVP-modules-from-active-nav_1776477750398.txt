@@ -1,0 +1,18 @@
+Context: We are removing non-MVP modules from active navigation without deleting their database schema.
+
+1. Open client/src/components/layout/Sidebar.tsx (or equivalent nav component). Find all nav items and wrap Prospects, Opportunities, Proposals, Automations, and Forms in: {process.env.ENABLE_CRM_MODULES === 'true' && <NavItem .../>}
+
+2. Create .env.local and .env.production. In both, add: ENABLE_CRM_MODULES=false and ENABLE_AUTOMATIONS=false.
+
+3. Open server/routes/index.ts. Conditionally register prospect/opportunity/proposal/automation routes behind the same env flag. In production, these routes should return 404.
+
+4. Do NOT delete any database table definitions from shared/schema.ts. Only remove routes and nav links.
+
+5. In the System Admin page, remove the "Reseed Database" section entirely (already done in P0). Also remove the Entity Metrics dashboard and Data Health Checker components — these are dev debugging tools, not admin tools. The System Admin page should only expose: User Management, Role Assignment, Notification Config, FX Rates, and Audit Log. Delete the component files for EntityMetrics and DataHealthChecker; remove their imports and route registrations.
+
+6. // P1-T3: External Client Portal Simplification
+
+   Find the External Client Portal route tree (look for client/src/pages/portal/ or server/routes/portal.ts). Instead of maintaining a separate route tree, do the following: (a) Add an env flag ENABLE_STANDALONE_PORTAL=false. (b) In the existing app, find the task list component and ensure the customerVisible flag on tasks already filters the view correctly for the client_stakeholder role. (c) In the RBAC middleware, confirm that the client_stakeholder role only sees projects they are explicitly added to. (d) Remove all portal-specific page files and routes. The client stakeholder user simply logs into the main app at their scoped view — no separate portal subdomain or route tree is needed.
+
+
+Output expected: Nav renders 8 fewer items in production. All flagged routes return 404. DB schema unchanged. Admin module shows only 5 configuration sections. Client Portal route tree removed; client_stakeholder access flows through main app RBAC.

@@ -1,0 +1,27 @@
+// PHASE 0 — AUDIT & CLEANUP PROMPT
+Context: We are auditing the BUSINESSNow v7 PSA codebase before production hardening.
+
+1. Open the file server/routes/admin.ts (or equivalent). Find and DELETE any route handlers for "reseed", "seed", "demo", "reset-db" or similar. Remove their imports too.
+
+2. Open client/src/pages/admin/ and remove any UI component that renders a "Reseed Database", "Reset to Demo", or "Load Sample Data" button or modal.
+
+3. In shared/schema.ts (or wherever Drizzle schema lives), list every exported table. Cross-check against the migrations folder — flag any table that has no corresponding migration file.
+
+4. Run: npx eslint . --rule 'no-unused-vars: error' --ext .ts,.tsx 2>&1 | head -80
+
+5. // P0-T3: Gap Registry — create one GitHub issue per critical gap
+
+   In your GitHub repo, create 15 issues using this template for each: Title = "GAP [G-01]: Hierarchical Role-Switching", Body = "PSA Scorecard Req #X. Assessment finding: [description]. Milestone: Phase 2." Create issues for G-01 through G-11 and UX-01 through UX-04. Label each with gap and phase-2. Assign all to a "Phase 2 – Gap Closure" milestone.
+
+6. // P0-T5: Auth Gap Inventory
+
+   Run: grep -rn "requireAuth\|isAuthenticated\|session\|verifyToken" server/routes/ --include="*.ts" | grep -v "node_modules" | wc -l. Then run: grep -rn "router\.\(get\|post\|patch\|delete\)" server/routes/ --include="*.ts" | wc -l. Divide guarded routes by total routes — anything below 100% means unguarded API endpoints. List every unguarded route. Document which auth strategy is currently in use (check server/middleware/auth.ts or equivalent).
+
+7. // P0-T6: Branch Strategy
+
+   Run: git checkout -b phase/1-descope && git push -u origin phase/1-descope. Then: git checkout main && git checkout -b phase/2-gap-closure && git push -u origin phase/2-gap-closure. Repeat for phase/3-ux and phase/4-integrations. Switch back to main: git checkout main. All subsequent work in each phase must be done on its corresponding branch and merged via PR.
+
+8. List all files modified in this session. Do NOT commit yet — review first.
+
+
+Output expected: A summary of every file changed, every route deleted, every schema table flagged, 15 GitHub issues created, auth coverage percentage documented, and 4 phase branches created.
