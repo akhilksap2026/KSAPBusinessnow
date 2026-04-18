@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -23,6 +23,10 @@ export const invoicesTable = pgTable("invoices", {
   sgstAmount: numeric("sgst_amount", { precision: 14, scale: 2 }),
   igstAmount: numeric("igst_amount", { precision: 14, scale: 2 }),
   totalWithGst: numeric("total_with_gst", { precision: 14, scale: 2 }),
+  lineItems: jsonb("line_items"),
+  periodStart: text("period_start"),
+  periodEnd: text("period_end"),
+  billingType: text("billing_type").default("milestone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

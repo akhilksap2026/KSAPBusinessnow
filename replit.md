@@ -17,7 +17,7 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 | Project Management (CRUD, portfolio, WBS, milestones, tasks) | Built |
 | Customer Management (accounts + project linkage) | Built |
 | Time Tracking (weekly timesheets, approval workflow) | Built |
-| Finance (invoices, contracts, change orders, FX rates) | Built |
+| Finance (invoices, contracts, change orders, FX rates, T&M line item generation) | Built |
 | Templates (project blueprints) | Built |
 
 ## Executive Committee Sprint Status

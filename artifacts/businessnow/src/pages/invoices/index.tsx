@@ -6,9 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
-import { LayoutGrid, List, FileText, DollarSign, Rocket, Search, X } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { format, startOfMonth, subMonths, endOfMonth } from "date-fns";
+import { LayoutGrid, List, FileText, DollarSign, Search, X, Zap, Loader2, CheckCircle2, ChevronRight, Rocket } from "lucide-react";
 import { Link } from "wouter";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
 
 const COLUMNS = [
   { id: "draft",   label: "Draft",   color: "border-t-zinc-500",    dot: "bg-zinc-400",    cardBorder: "border-border" },
@@ -24,12 +27,348 @@ function fmt(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
-function fmtDate(d: string | null) {
-  if (!d) return "—";
-  try { return format(new Date(d), "MMM d, yyyy"); } catch { return d; }
+function fmtFull(v: number) {
+  if (!v || isNaN(v)) return "—";
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(v);
 }
 
-function InvoiceKanban({ invoices }: { invoices: any[] }) {
+function fmtDate(d: string | null) {
+  if (!d) return "—";
+  try { return format(new Date(d + "T12:00:00"), "MMM d, yyyy"); } catch { return d; }
+}
+
+function fmtDateShort(d: string | null) {
+  if (!d) return "—";
+  try { return format(new Date(d + "T12:00:00"), "MMM d"); } catch { return d; }
+}
+
+interface TMLineItem {
+  description: string;
+  resource: string;
+  task: string;
+  serviceDate: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
+interface TMPreviewData {
+  invoiceId: number;
+  periodStart: string;
+  periodEnd: string;
+  lines: TMLineItem[];
+  resourceSubtotals: Record<string, number>;
+  grandTotal: number;
+  totalHours: number;
+}
+
+function prevMonthStart() {
+  return format(startOfMonth(subMonths(new Date(), 1)), "yyyy-MM-dd");
+}
+function prevMonthEnd() {
+  return format(endOfMonth(subMonths(new Date(), 1)), "yyyy-MM-dd");
+}
+
+function TMPreviewPanel({
+  invoice,
+  open,
+  onClose,
+  onApplied,
+}: {
+  invoice: any;
+  open: boolean;
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  const [periodStart, setPeriodStart] = useState(prevMonthStart);
+  const [periodEnd, setPeriodEnd] = useState(prevMonthEnd);
+  const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [data, setData] = useState<TMPreviewData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [applied, setApplied] = useState(false);
+
+  async function handleGenerate() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setApplied(false);
+    try {
+      const res = await fetch(
+        `${API_BASE}/invoices/${invoice.id}/tm-lines?periodStart=${periodStart}&periodEnd=${periodEnd}`,
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to generate lines");
+      }
+      const json = await res.json();
+      setData(json);
+    } catch (e: any) {
+      setError(e.message ?? "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleApply() {
+    if (!data) return;
+    setApplying(true);
+    try {
+      const res = await fetch(`${API_BASE}/invoices/${invoice.id}/apply-tm-lines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          periodStart: data.periodStart,
+          periodEnd: data.periodEnd,
+          lines: data.lines,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to apply");
+      }
+      setApplied(true);
+      onApplied();
+    } catch (e: any) {
+      setError(e.message ?? "Unknown error");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const resourceGroups = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, TMLineItem[]>();
+    for (const line of data.lines) {
+      if (!map.has(line.resource)) map.set(line.resource, []);
+      map.get(line.resource)!.push(line);
+    }
+    return Array.from(map.entries()).map(([resource, lines]) => ({
+      resource,
+      lines,
+      subtotal: lines.reduce((s, l) => s + l.amount, 0),
+      hours: lines.reduce((s, l) => s + l.quantity, 0),
+    }));
+  }, [data]);
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-3xl flex flex-col p-0 overflow-hidden"
+      >
+        <SheetHeader className="px-6 py-4 border-b shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <SheetTitle className="text-base leading-tight">
+                Generate T&amp;M Lines — {invoice.invoiceNumber}
+              </SheetTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {invoice.projectName ?? "—"} · {invoice.accountName ?? "—"}
+              </p>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Period selector */}
+          <div className="px-6 py-4 border-b bg-muted/30">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Billing Period</p>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">From</label>
+                <Input
+                  type="date"
+                  value={periodStart}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground mt-5 shrink-0" />
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">To</label>
+                <Input
+                  type="date"
+                  value={periodEnd}
+                  onChange={(e) => setPeriodEnd(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <Button
+                onClick={handleGenerate}
+                disabled={loading || !periodStart || !periodEnd}
+                className="mt-5 shrink-0 h-8"
+                size="sm"
+              >
+                {loading ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Generating…</>
+                ) : (
+                  <><Zap className="h-3.5 w-3.5 mr-1.5" /> Generate</>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {data && data.lines.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+              <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No approved billable entries</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                No approved, billable timesheet entries found for this project in the selected period.
+              </p>
+            </div>
+          )}
+
+          {/* Line items table */}
+          {data && data.lines.length > 0 && (
+            <div className="px-6 py-4 space-y-4">
+              {/* Summary bar */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Total Hours", value: `${data.totalHours.toFixed(1)} hrs` },
+                  { label: "Line Items", value: `${data.lines.length}` },
+                  { label: "Grand Total", value: fmtFull(data.grandTotal), highlight: true },
+                ].map((k) => (
+                  <div key={k.label} className={`rounded-lg border p-3 text-center ${k.highlight ? "border-primary/30 bg-primary/5" : "bg-muted/30"}`}>
+                    <p className="text-xs text-muted-foreground">{k.label}</p>
+                    <p className={`text-sm font-bold mt-0.5 ${k.highlight ? "text-primary" : ""}`}>{k.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Resource groups */}
+              <div className="space-y-4">
+                {resourceGroups.map((group) => (
+                  <div key={group.resource} className="rounded-lg border overflow-hidden">
+                    {/* Resource header */}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <span className="text-sm font-semibold">{group.resource}</span>
+                        <span className="text-xs text-muted-foreground">· {group.hours.toFixed(1)} hrs</span>
+                      </div>
+                      <span className="text-sm font-bold">{fmtFull(group.subtotal)}</span>
+                    </div>
+                    {/* Lines for this resource */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-[10px] py-1.5 h-auto">Date</TableHead>
+                          <TableHead className="text-[10px] py-1.5 h-auto">Task / Description</TableHead>
+                          <TableHead className="text-[10px] py-1.5 h-auto text-right">Hrs</TableHead>
+                          <TableHead className="text-[10px] py-1.5 h-auto text-right">Rate</TableHead>
+                          <TableHead className="text-[10px] py-1.5 h-auto text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {group.lines.map((line, i) => (
+                          <TableRow key={i} className="hover:bg-muted/20">
+                            <TableCell className="py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">
+                              {fmtDateShort(line.serviceDate)}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs max-w-[240px]">
+                              <span className="font-medium">{line.task}</span>
+                              {line.description.includes(" — ") &&
+                                line.description.split(" — ").length > 2 && (
+                                  <span className="block text-muted-foreground truncate text-[10px] mt-0.5">
+                                    {line.description.split(" — ").slice(2).join(" — ")}
+                                  </span>
+                                )}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs text-right">{line.quantity.toFixed(1)}</TableCell>
+                            <TableCell className="py-2 text-xs text-right text-muted-foreground">
+                              {line.unitPrice > 0 ? `$${line.unitPrice.toFixed(0)}/hr` : "—"}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs text-right font-medium">
+                              {line.amount > 0 ? fmtFull(line.amount) : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Resource subtotal */}
+                        <TableRow className="bg-muted/30 hover:bg-muted/30 border-t">
+                          <TableCell colSpan={2} className="py-2 text-xs font-semibold text-right">
+                            Subtotal — {group.resource}
+                          </TableCell>
+                          <TableCell className="py-2 text-xs font-semibold text-right">{group.hours.toFixed(1)}</TableCell>
+                          <TableCell />
+                          <TableCell className="py-2 text-xs font-bold text-right">{fmtFull(group.subtotal)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+
+                {/* Grand total */}
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold">Grand Total</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fmtDateShort(data.periodStart)} – {fmtDateShort(data.periodEnd)} · {data.totalHours.toFixed(1)} hrs · {data.lines.length} line items
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-primary">{fmtFull(data.grandTotal)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Applied success */}
+          {applied && (
+            <div className="mx-6 mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-sm text-emerald-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Invoice updated — {data?.lines.length} line items applied, amount set to {fmtFull(data?.grandTotal ?? 0)}.
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        {data && data.lines.length > 0 && (
+          <div className="px-6 py-4 border-t bg-background shrink-0 flex items-center justify-between gap-3">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            {applied ? (
+              <Button size="sm" onClick={onClose} className="bg-emerald-600 hover:bg-emerald-700">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Done
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleApply}
+                disabled={applying}
+              >
+                {applying ? (
+                  <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Applying…</>
+                ) : (
+                  <>Apply {data.lines.length} lines to Invoice</>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function InvoiceKanban({
+  invoices,
+  onGenerateTM,
+}: {
+  invoices: any[];
+  onGenerateTM: (inv: any) => void;
+}) {
   const totalByCol = (id: string) =>
     invoices.filter(i => i.status === id).reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
 
@@ -89,6 +428,15 @@ function InvoiceKanban({ invoices }: { invoices: any[] }) {
                           Due {fmtDate(inv.dueDate)}
                         </span>
                       </div>
+                      {col.id === "draft" && (
+                        <button
+                          onClick={() => onGenerateTM(inv)}
+                          className="flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 transition-colors"
+                          title="Generate T&M Lines"
+                        >
+                          <Zap className="h-3 w-3" /> T&amp;M Lines
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -130,7 +478,13 @@ function TaxBreakdown({ inv }: { inv: any }) {
   );
 }
 
-function InvoiceTable({ invoices }: { invoices: any[] }) {
+function InvoiceTable({
+  invoices,
+  onGenerateTM,
+}: {
+  invoices: any[];
+  onGenerateTM: (inv: any) => void;
+}) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const hasTaxData = invoices.some(i =>
@@ -150,6 +504,7 @@ function InvoiceTable({ invoices }: { invoices: any[] }) {
               {hasTaxData && <><TableHead>Sales Tax</TableHead><TableHead>Total (incl. Tax)</TableHead></>}
               <TableHead>Status</TableHead>
               <TableHead>Due Date</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -198,12 +553,23 @@ function InvoiceTable({ invoices }: { invoices: any[] }) {
                     </Badge>
                   </TableCell>
                   <TableCell>{fmtDate(invoice.dueDate)}</TableCell>
+                  <TableCell>
+                    {invoice.status === "draft" && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onGenerateTM(invoice); }}
+                        className="flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 whitespace-nowrap transition-colors"
+                        title="Generate T&M Lines"
+                      >
+                        <Zap className="h-3 w-3" /> T&amp;M Lines
+                      </button>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}
             {invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={hasTaxData ? 8 : 6} className="text-center h-24 text-muted-foreground">No invoices found.</TableCell>
+                <TableCell colSpan={hasTaxData ? 9 : 7} className="text-center h-24 text-muted-foreground">No invoices found.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -250,10 +616,11 @@ const STATUS_PILLS = [
 ];
 
 export default function InvoicesList() {
-  const { data: invoices, isLoading } = useListInvoices();
+  const { data: invoices, isLoading, refetch } = useListInvoices();
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [filterStatus, setFilterStatus] = useState("all");
   const [search, setSearch] = useState("");
+  const [tmInvoice, setTmInvoice] = useState<any | null>(null);
 
   const data = invoices ?? [];
 
@@ -386,8 +753,20 @@ export default function InvoicesList() {
         )}
       </div>
 
-      {view === "kanban" ? <InvoiceKanban invoices={filtered} /> : <InvoiceTable invoices={filtered} />}
+      {view === "kanban"
+        ? <InvoiceKanban invoices={filtered} onGenerateTM={setTmInvoice} />
+        : <InvoiceTable invoices={filtered} onGenerateTM={setTmInvoice} />
+      }
       <TaxSummary invoices={filtered} />
+
+      {tmInvoice && (
+        <TMPreviewPanel
+          invoice={tmInvoice}
+          open={!!tmInvoice}
+          onClose={() => setTmInvoice(null)}
+          onApplied={() => refetch?.()}
+        />
+      )}
     </div>
   );
 }
