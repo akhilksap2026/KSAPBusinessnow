@@ -240,9 +240,9 @@ doc.font("Helvetica").fontSize(11).fillColor("#CBD5E1")
 // Stats row
 const stats = [
   { n: "11", label: "User Roles" },
-  { n: "28+", label: "Modules" },
+  { n: "30+", label: "Modules" },
   { n: "32", label: "DB Tables" },
-  { n: "30+", label: "API Routes" },
+  { n: "35+", label: "API Routes" },
 ];
 const statW = CONTENT_W / stats.length;
 stats.forEach((s, i) => {
@@ -280,7 +280,7 @@ doc.font("Helvetica").fontSize(9).fillColor("#64748B")
 doc.font("Helvetica").fontSize(9).fillColor("#64748B")
    .text(`Generated: ${new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}`, MARGIN, H - 80)
    .text("Confidential — Internal Use Only", MARGIN, H - 64)
-   .text("Version 1.0", W - MARGIN - 60, H - 80, { align: "right" });
+   .text("Version 7.0", W - MARGIN - 60, H - 80, { align: "right" });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TABLE OF CONTENTS
@@ -368,7 +368,7 @@ const techItems = [
   { label: "Backend", val: "Express 5 (TypeScript), REST API, role-based middleware" },
   { label: "Database", val: "PostgreSQL + Drizzle ORM (32 tables, full relational schema)" },
   { label: "Runtime", val: "Node 20 LTS, pnpm monorepo, KSAP-hosted infrastructure" },
-  { label: "Auth", val: "localStorage role simulation (demo); JWT for production" },
+  { label: "Security", val: "Rate limiting (100 req/15 min), requireRole RBAC middleware, morgan request logging, Sentry frontend monitoring" },
   { label: "Ports", val: "API :8080 · Web SPA :5173 · Preview proxy port-forwarding" },
 ];
 
@@ -1039,11 +1039,41 @@ schemaGroups.forEach(group => {
 //  API REFERENCE
 // ─────────────────────────────────────────────────────────────────────────────
 newPage();
-sectionHeader("29 · API Reference", "Express 5 REST API — 30+ routes — Port 8080");
+sectionHeader("29 · API Reference", "Express 5 REST API — 35+ routes — Port 8080 — Phase 5 Security Hardened");
 
 doc.font("Helvetica").fontSize(9.5).fillColor(C.subtext)
    .text("All routes are prefixed with /api. Role-based access is enforced via the X-User-Role header, which is injected by the frontend's fetch interceptor. No routes are publicly accessible without a role header.", MARGIN, doc.y, { width: CONTENT_W });
-doc.y += 16;
+doc.y += 14;
+
+// Phase 5 Security callout
+fillRect(MARGIN, doc.y, CONTENT_W, 22, "#1E3A5F");
+doc.save().rect(MARGIN, doc.y, 4, 22).fill(C.accent).restore();
+doc.font("Helvetica-Bold").fontSize(8).fillColor(C.accent)
+   .text("PHASE 5 — SECURITY HARDENING", MARGIN + 12, doc.y + 4, { lineBreak: false });
+doc.font("Helvetica").fontSize(8).fillColor("#93C5FD")
+   .text("  Rate limiting · RBAC middleware · Request logging · Sentry frontend monitoring", MARGIN + 12 + doc.widthOfString("PHASE 5 — SECURITY HARDENING", { fontSize: 8 }), doc.y + 4, { lineBreak: false });
+doc.y += 26;
+
+const secItems = [
+  { label: "Rate Limiting", val: "100 requests / 15-minute window per IP. Returns HTTP 429 when exceeded. Configured via express-rate-limit on all /api/* routes." },
+  { label: "Auth Middleware", val: "requireRole(...roles) guard on every route. Reads X-User-Role header; rejects with 401 if missing or 403 if role is not permitted." },
+  { label: "Request Logger", val: "morgan 'combined' format logs every request: method, path, status code, response time, and IP address to stdout." },
+  { label: "Sentry (Frontend)", val: "@sentry/react captures runtime exceptions, unhandled promise rejections, and React error boundaries in production. DSN configured via VITE_SENTRY_DSN." },
+  { label: "RBAC Field Access", val: "Finance fields (bill_rate, cost_rate, margin) filtered server-side based on role — consultants receive null for sensitive financial columns." },
+];
+
+secItems.forEach((item, i) => {
+  if (doc.y > H - 60) newPage();
+  const rowH = doc.heightOfString(item.val, { fontSize: 8, width: CONTENT_W - 120 }) + 14;
+  fillRect(MARGIN, doc.y, CONTENT_W, rowH, i % 2 === 0 ? C.white : C.lightGray);
+  doc.save().rect(MARGIN, doc.y, 3, rowH).fill("#1E3A5F").restore();
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(C.navy)
+     .text(item.label, MARGIN + 8, doc.y + 6, { width: 110, lineBreak: false });
+  doc.font("Helvetica").fontSize(8).fillColor(C.subtext)
+     .text(item.val, MARGIN + 124, doc.y + 6, { width: CONTENT_W - 128 });
+  doc.y += rowH;
+});
+doc.y += 12;
 
 const apiGroups = [
   {
@@ -1237,7 +1267,7 @@ doc.font("Helvetica").fontSize(9).fillColor("#64748B")
    .text("This document is confidential and intended for internal use only.\nAll rights reserved © KSAP Technologies.", MARGIN, H * 0.8, { align: "center", width: CONTENT_W });
 
 doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
-   .text("BUSINESSNow v1.0  ·  Generated April 2026  ·  ksaptechnologies.com", MARGIN, H * 0.88, { align: "center", width: CONTENT_W });
+   .text(`BUSINESSNow v7.0  ·  ${new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long" })}  ·  ksaptechnologies.com`, MARGIN, H * 0.88, { align: "center", width: CONTENT_W });
 
 // ── Finalize ─────────────────────────────────────────────────────────────────
 doc.end();

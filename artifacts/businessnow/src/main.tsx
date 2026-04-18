@@ -28,4 +28,39 @@ window.fetch = (input, init) => {
   return _origFetch(input, init);
 };
 
+// ── Dev-only auto-login — ?autoLogin=<role> sets localStorage and redirects ───
+if (import.meta.env.DEV) {
+  const _params = new URLSearchParams(window.location.search);
+  const _autoLogin = _params.get("autoLogin");
+  if (_autoLogin) {
+    const _USER_MAP: Record<string, [string, string]> = {
+      admin:              ["rachel.nguyen",   "admin"],
+      executive:          ["james.whitfield", "executive"],
+      delivery_director:  ["jana.kovac",      "delivery_director"],
+      project_manager:    ["alex.okafor",     "project_manager"],
+      consultant:         ["derek.tran",      "consultant"],
+      resource_manager:   ["maria.santos",    "resource_manager"],
+      finance_lead:       ["sandra.liu",      "finance_lead"],
+      sales:              ["diana.flores",    "sales"],
+      account_manager:    ["yuki.tanaka",     "account_manager"],
+      client_stakeholder: ["robert.chen",     "client_stakeholder"],
+    };
+    const _entry = _USER_MAP[_autoLogin];
+    if (_entry) {
+      localStorage.setItem("otmnow_user_id", _entry[0]);
+      localStorage.setItem("otmnow_role",    _entry[1]);
+      // Suppress the "Select your view" context modal for this session
+      sessionStorage.setItem(`otmnow_context_shown_${_entry[0]}`, "1");
+      // Reload so auth module re-initialises _role from fresh localStorage
+      _params.delete("autoLogin");
+      const _qs = _params.toString();
+      window.location.replace(window.location.pathname + (_qs ? "?" + _qs : ""));
+    } else {
+      _params.delete("autoLogin");
+      const _qs = _params.toString();
+      history.replaceState({}, "", window.location.pathname + (_qs ? "?" + _qs : ""));
+    }
+  }
+}
+
 createRoot(document.getElementById("root")!).render(<App />);
