@@ -514,9 +514,56 @@ router.put("/projects/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { id: _id, createdAt, updatedAt, ...updates } = req.body;
+
+  // ── Closure Gate guard ────────────────────────────────────────────────────
+  if (updates.status === "completed") {
+    const [existing] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
+    const actualDate = updates.actualCompletionDate ?? existing.actualCompletionDate;
+    const rating = updates.performanceRating ?? existing.performanceRating;
+
+    if (!actualDate) {
+      res.status(400).json({ error: "CLOSURE_GATE", message: "Actual completion date is required before marking a project complete." });
+      return;
+    }
+    if (!rating) {
+      res.status(400).json({ error: "CLOSURE_GATE", message: "Performance rating (1–5) is required before marking a project complete." });
+      return;
+    }
+
+    const pendingTs = await db.select({ id: timesheetsTable.id })
+      .from(timesheetsTable)
+      .where(and(eq(timesheetsTable.projectId, id), inArray(timesheetsTable.status, ["draft", "submitted"])));
+    if (pendingTs.length > 0) {
+      res.status(400).json({ error: "CLOSURE_GATE", message: `All time must be approved first. ${pendingTs.length} entry(s) still pending approval.` });
+      return;
+    }
+
+    // Capture profitability snapshot timestamp if not already set
+    if (!existing.profitabilitySnapshotAt) {
+      updates.profitabilitySnapshotAt = new Date();
+    }
+  }
+
   const [project] = await db.update(projectsTable).set({ ...updates, updatedAt: new Date() }).where(eq(projectsTable.id, id)).returning();
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
   res.json(parseProject(project));
+});
+
+// ── Phase PATCH — status + entry/exit criteria ────────────────────────────
+router.patch("/phases/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { status, entryCriteria, exitCriteria } = req.body;
+  const updates: Record<string, any> = {};
+  if (status !== undefined) updates.status = status;
+  if (entryCriteria !== undefined) updates.entryCriteria = entryCriteria;
+  if (exitCriteria !== undefined) updates.exitCriteria = exitCriteria;
+  if (!Object.keys(updates).length) { res.status(400).json({ error: "No fields to update" }); return; }
+  const [phase] = await db.update(phasesTable).set(updates).where(eq(phasesTable.id, id)).returning();
+  if (!phase) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(phase);
 });
 
 // Set Baseline — snapshot planned dates → baseline dates

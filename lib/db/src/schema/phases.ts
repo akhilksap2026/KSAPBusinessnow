@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,8 @@ export const phasesTable = pgTable("phases", {
   endDate: text("end_date"),
   status: text("status").notNull().default("not_started"),
   description: text("description"),
+  entryCriteria: jsonb("entry_criteria").default([]),
+  exitCriteria: jsonb("exit_criteria").default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -6,9 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Settings2, Tag, CreditCard, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X, Sun, Moon, Monitor } from "lucide-react";
+import { Plus, Trash2, Pencil, Settings2, Tag, CreditCard, GripVertical, Layout, ChevronRight, ChevronDown, Folder, Square, DollarSign, Check, X, Sun, Moon, Monitor, UserPlus, ArrowRightLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAuthRole, ROLE_DEMO_RESOURCE } from "@/lib/auth";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -982,6 +983,173 @@ function AppearanceTab() {
   );
 }
 
+// ── Approval Delegation Tab ───────────────────────────────────────────────────
+function DelegationTab() {
+  const { toast } = useToast();
+  const { role } = useAuthRole();
+  const meDb = ROLE_DEMO_RESOURCE[role as keyof typeof ROLE_DEMO_RESOURCE];
+  const meId = meDb?.id ?? null;
+
+  const [users, setUsers] = useState<any[]>([]);
+  const [outgoing, setOutgoing] = useState<any[]>([]);
+  const [incoming, setIncoming] = useState<any[]>([]);
+  const [delegateId, setDelegateId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    const [u, d] = await Promise.all([
+      fetch(`${API}/users`).then(r => r.json()),
+      meId
+        ? fetch(`${API}/delegations/mine?contextUserId=${meId}`).then(r => r.json())
+        : Promise.resolve([]),
+    ]);
+    setUsers(Array.isArray(u) ? u : []);
+    const all = Array.isArray(d) ? d : [];
+    setOutgoing(all.filter((x: any) => x.delegatorId === meId));
+    setIncoming(all.filter((x: any) => x.delegateId === meId));
+  };
+
+  useEffect(() => { load(); }, [meId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!delegateId || !startDate || !endDate) {
+      toast({ title: "Fill all fields", variant: "destructive" });
+      return;
+    }
+    if (!meId) {
+      toast({ title: "Your role does not map to a system user", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`${API}/delegations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delegatorId: meId, delegateId: Number(delegateId), startDate, endDate, scope: "timesheets" }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast({ title: "Delegation granted" });
+      setDelegateId(""); setStartDate(""); setEndDate("");
+      load();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  };
+
+  const revoke = async (id: number) => {
+    await fetch(`${API}/delegations/${id}`, { method: "DELETE" });
+    toast({ title: "Delegation revoked" });
+    load();
+  };
+
+  const userName = (u: any) => u?.name || u?.displayName || `#${u?.id}`;
+  const userById = (id: number) => users.find((x: any) => x.id === id);
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-violet-400" /> Grant Approval Delegation
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!meId && (
+            <p className="text-xs text-amber-400 mb-3">Your current role does not have an associated system user. Switch to a PM or admin role to manage delegations.</p>
+          )}
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Delegate To</label>
+                <select
+                  className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 text-foreground"
+                  value={delegateId}
+                  onChange={e => setDelegateId(e.target.value)}
+                  disabled={!meId}
+                >
+                  <option value="">— select user —</option>
+                  {users.filter((u: any) => u.id !== meId).map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.name || u.displayName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Scope</label>
+                <Input value="Timesheet Approvals" readOnly className="text-xs bg-muted/30 cursor-not-allowed" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Start Date</label>
+                <Input type="date" className="text-xs" value={startDate} onChange={e => setStartDate(e.target.value)} disabled={!meId} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">End Date</label>
+                <Input type="date" className="text-xs" value={endDate} onChange={e => setEndDate(e.target.value)} disabled={!meId} />
+              </div>
+            </div>
+            <Button type="submit" disabled={saving || !meId} size="sm" className="w-fit">
+              {saving ? "Saving…" : "Grant Delegation"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Delegations Granted by You</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {outgoing.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No active delegations.</p>
+          ) : (
+            <div className="space-y-2">
+              {outgoing.map((d: any) => (
+                <div key={d.id} className="flex items-center justify-between p-2 rounded border border-border bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ArrowRightLeft className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                    <span className="font-medium">{d.delegateName || userName(userById(d.delegateId))}</span>
+                    <span className="text-muted-foreground">{d.startDate} → {d.endDate}</span>
+                    <Badge variant="outline" className="text-[10px]">{d.scope ?? "timesheets"}</Badge>
+                    <Badge className="text-[10px] bg-emerald-600/20 text-emerald-400 border-emerald-700">Active</Badge>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs text-red-400 hover:text-red-300 shrink-0" onClick={() => revoke(d.id)}>
+                    Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {incoming.length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Delegations Granted to You</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {incoming.map((d: any) => (
+                <div key={d.id} className="flex items-center gap-2 p-2 rounded border border-border bg-muted/20 text-xs">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-muted-foreground">From</span>
+                  <span className="font-medium">{d.delegatorName || userName(userById(d.delegatorId))}</span>
+                  <span className="text-muted-foreground">{d.startDate} → {d.endDate}</span>
+                  <Badge className="text-[10px] bg-emerald-600/20 text-emerald-400 border-emerald-700">Active</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function PMOSettingsPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1013,12 +1181,16 @@ export default function PMOSettingsPage() {
             <TabsTrigger value="appearance" className="data-[state=active]:bg-muted text-xs gap-1.5">
               <Sun className="h-3.5 w-3.5" /> Appearance
             </TabsTrigger>
+            <TabsTrigger value="delegation" className="data-[state=active]:bg-muted text-xs gap-1.5">
+              <ArrowRightLeft className="h-3.5 w-3.5" /> Delegation
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="categories"><TimeEntryCategoriesTab /></TabsContent>
           <TabsContent value="rate-cards"><RateCardsTab /></TabsContent>
           <TabsContent value="templates"><TemplatesTab /></TabsContent>
           <TabsContent value="fx-rates"><FxRatesTab /></TabsContent>
           <TabsContent value="appearance"><AppearanceTab /></TabsContent>
+          <TabsContent value="delegation"><DelegationTab /></TabsContent>
         </Tabs>
       </div>
     </div>

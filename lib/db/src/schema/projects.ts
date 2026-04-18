@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -41,6 +41,9 @@ export const projectsTable = pgTable("projects", {
   healthRisks: text("health_risks").default("green"),
   burnStatus: text("burn_status"),
   templateId: integer("template_id"),
+  performanceRating: integer("performance_rating"),
+  actualCompletionDate: date("actual_completion_date"),
+  profitabilitySnapshotAt: timestamp("profitability_snapshot_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

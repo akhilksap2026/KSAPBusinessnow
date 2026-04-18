@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and, inArray } from "drizzle-orm";
-import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable } from "@workspace/db";
+import { eq, sql, and, inArray, or, lte, gte } from "drizzle-orm";
+import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable, approvalDelegationsTable, projectsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   ListTimesheetsQueryParams,
@@ -278,17 +278,69 @@ router.patch("/timesheets/:id", async (req, res): Promise<void> => {
   res.json(parseTimesheet(timesheet));
 });
 
-// ── Pending Approval — for managers/directors ────────────────────────────────
+// ── Pending Approval — for managers/directors (delegation-aware) ──────────────
 router.get("/timesheets/pending-approval", async (req, res): Promise<void> => {
   try {
-    const { projectId, resourceId, startDate, endDate } = req.query as Record<string, string>;
+    const { projectId, resourceId, startDate, endDate, contextUserId } = req.query as Record<string, string>;
     let rows = await db.select().from(timesheetsTable)
       .where(eq(timesheetsTable.status, "submitted"));
     if (projectId) rows = rows.filter(r => r.projectId === parseInt(projectId));
     if (resourceId) rows = rows.filter(r => r.resourceId === parseInt(resourceId));
     if (startDate) rows = rows.filter(r => !r.entryDate || r.entryDate >= startDate);
     if (endDate) rows = rows.filter(r => !r.entryDate || r.entryDate <= endDate);
-    res.json(rows.map(parseTimesheet));
+
+    // ── Delegation enrichment ────────────────────────────────────────────────
+    // If contextUserId is provided, find active delegations where the caller is
+    // the delegate. Surface those entries with a delegatedFrom tag.
+    const delegatedFromMap: Record<number, string> = {};
+    if (contextUserId) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const delegations = await db.select({
+        id: approvalDelegationsTable.id,
+        delegatorId: approvalDelegationsTable.delegatorId,
+        startDate: approvalDelegationsTable.startDate,
+        endDate: approvalDelegationsTable.endDate,
+      })
+        .from(approvalDelegationsTable)
+        .where(and(
+          eq(approvalDelegationsTable.delegateId, parseInt(contextUserId)),
+          eq(approvalDelegationsTable.isActive, true),
+          lte(approvalDelegationsTable.startDate, todayStr),
+          gte(approvalDelegationsTable.endDate, todayStr),
+        ));
+
+      if (delegations.length > 0) {
+        // Fetch delegator user names
+        const delegatorIds = [...new Set(delegations.map(d => d.delegatorId))];
+        const delegatorUsers = await db.select({ id: usersTable.id, name: usersTable.name })
+          .from(usersTable)
+          .where(or(...delegatorIds.map(uid => eq(usersTable.id, uid))));
+        const delegatorNameMap = Object.fromEntries(delegatorUsers.map(u => [u.id, u.name]));
+
+        // Fetch projects where delegators are PMs
+        const delegatorProjects = await db.select({ id: projectsTable.id, pmId: projectsTable.pmId })
+          .from(projectsTable)
+          .where(or(...delegatorIds.map(did => eq(projectsTable.pmId, did))));
+
+        const projectToDelegatorId: Record<number, number> = {};
+        for (const p of delegatorProjects) {
+          if (p.pmId != null) projectToDelegatorId[p.id] = p.pmId;
+        }
+
+        // Mark which timesheets are delegated
+        for (const r of rows) {
+          const delegatorId = projectToDelegatorId[r.projectId];
+          if (delegatorId) {
+            delegatedFromMap[r.id] = delegatorNameMap[delegatorId] ?? `PM #${delegatorId}`;
+          }
+        }
+      }
+    }
+
+    res.json(rows.map(r => ({
+      ...parseTimesheet(r),
+      ...(delegatedFromMap[r.id] ? { delegatedFrom: delegatedFromMap[r.id] } : {}),
+    })));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

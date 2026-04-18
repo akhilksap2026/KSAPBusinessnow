@@ -36,3 +36,4 @@ export * from "./task_comments";
 export * from "./task_assignments";
 export * from "./saved_filters";
 export * from "./project_baselines";
+export * from "./approval_delegations";

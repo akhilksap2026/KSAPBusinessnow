@@ -12,13 +12,14 @@ import {
   User, ExternalLink, RefreshCw, Circle, CheckSquare, Square,
   MessageSquare, PlusCircle, TrendingUp, Receipt, FileText,
   ThumbsUp, ThumbsDown, Info, ChevronDown, Plus, Pencil, Trash2,
-  Milestone, Layers, Grip, FolderOpen, CheckCheck, X,
+  Milestone, Layers, Grip, FolderOpen, CheckCheck, X, Star, Lock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useAuthRole } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 const API = import.meta.env.BASE_URL + "api";
 
@@ -40,8 +41,11 @@ interface Milestone {
   billableAmount?: number; invoiced?: boolean; approvalStatus?: string;
   clientAction?: string; sequence?: number; description?: string;
 }
+interface CriterionItem { id: string; label: string; isChecked?: boolean; checkedBy?: number; checkedAt?: string; }
 interface Phase {
   id: number; name: string; sequence: number; startDate?: string; endDate?: string; status: string;
+  entryCriteria?: CriterionItem[];
+  exitCriteria?: CriterionItem[];
 }
 interface Allocation {
   id: number; resourceId?: number; resourceName?: string; role?: string;
@@ -1357,10 +1361,85 @@ function MilestoneCommentsPanel({ milestoneId, projectId }: { milestoneId: numbe
   );
 }
 
+// ─── Phase Entry Gate Modal ───────────────────────────────────────────────────
+function PhaseEntryGateModal({ phase, targetStatus, onClose, onConfirm, userId }: {
+  phase: Phase;
+  targetStatus: string;
+  onClose: () => void;
+  onConfirm: (criteria: CriterionItem[]) => Promise<void>;
+  userId?: number;
+}) {
+  const criteria: CriterionItem[] = (phase.entryCriteria && phase.entryCriteria.length > 0)
+    ? phase.entryCriteria
+    : [{ id: "default-1", label: "All prerequisites reviewed and acknowledged" }];
+
+  const [items, setItems] = useState<CriterionItem[]>(criteria.map(c => ({ ...c })));
+  const [saving, setSaving] = useState(false);
+  const allChecked = items.every(c => c.isChecked);
+
+  const toggle = (id: string) => {
+    const now = new Date().toISOString();
+    setItems(prev => prev.map(c => c.id === id
+      ? { ...c, isChecked: !c.isChecked, checkedAt: !c.isChecked ? now : undefined, checkedBy: !c.isChecked ? userId : undefined }
+      : c
+    ));
+  };
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try { await onConfirm(items); onClose(); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="bg-card border-border max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            <CheckSquare size={16} className="text-blue-500" />
+            Phase Entry Gate: {phase.name}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Confirm all entry criteria are met before moving this phase to <strong>In Progress</strong>.
+        </p>
+        <div className="space-y-2 mt-2">
+          {items.map(c => (
+            <button
+              key={c.id}
+              onClick={() => toggle(c.id)}
+              className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all ${c.isChecked ? "bg-emerald-50 border-emerald-200" : "bg-muted/30 border-border hover:bg-muted/50"}`}
+            >
+              {c.isChecked
+                ? <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                : <Circle size={16} className="text-muted-foreground/50 shrink-0 mt-0.5" />}
+              <span className={`text-sm font-medium ${c.isChecked ? "text-emerald-700 line-through decoration-emerald-400/50" : "text-foreground"}`}>
+                {c.label}
+              </span>
+            </button>
+          ))}
+        </div>
+        {!allChecked && (
+          <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+            <AlertTriangle size={11} /> Check all criteria to proceed
+          </p>
+        )}
+        <DialogFooter className="mt-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleConfirm} disabled={!allChecked || saving}>
+            {saving ? "Saving…" : "Confirm & Start Phase"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Phase Board (Milestones tab) ───────────────────────────────────────────
-function PhaseBoardView({ phases, milestones, tasks, onMilestoneStatus, project, onDraftInvoice }: {
+function PhaseBoardView({ phases, milestones, tasks, onMilestoneStatus, onPhaseStatus, project, onDraftInvoice }: {
   phases:Phase[]; milestones:Milestone[]; tasks:Task[];
   onMilestoneStatus:(id:number,status:string)=>void;
+  onPhaseStatus?: (phase: Phase, newStatus: string) => void;
   project?: any; onDraftInvoice?: (ms: Milestone) => void;
 }) {
   const [expandedComments, setExpandedComments] = useState<number | null>(null);
@@ -1404,10 +1483,25 @@ function PhaseBoardView({ phases, milestones, tasks, onMilestoneStatus, project,
                   </p>
                 )}
               </div>
-              <div className="w-28 text-right">
-                <div className="text-sm font-bold">{pct}%</div>
-                <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                  <div className={`h-1.5 rounded-full ${pct===100?"bg-emerald-500":pct>50?"bg-blue-500":"bg-slate-400"}`} style={{width:`${pct}%`}} />
+              <div className="flex items-center gap-2">
+                {onPhaseStatus && ph.id !== 0 && (
+                  <select
+                    value={ph.status}
+                    onChange={e => onPhaseStatus(ph, e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs bg-background border border-border rounded px-2 py-1"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="on_hold">On Hold</option>
+                  </select>
+                )}
+                <div className="w-20 text-right">
+                  <div className="text-sm font-bold">{pct}%</div>
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                    <div className={`h-1.5 rounded-full ${pct===100?"bg-emerald-500":pct>50?"bg-blue-500":"bg-slate-400"}`} style={{width:`${pct}%`}} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -2865,19 +2959,180 @@ function UpdatesView({ projectId, onRefresh }: { projectId: number; onRefresh: (
   );
 }
 
-// ─── Close View ─────────────────────────────────────────────────────────────
-function CloseView({ project, onToggle }: { project: any; onToggle: (updates: Record<string,any>)=>void }) {
+// ─── Closure Gate Modal (3-step wizard) ─────────────────────────────────────
+function ClosureGateModal({ project, projectId, onClose, onComplete }: {
+  project: any; projectId: number; onClose: () => void; onComplete: () => void;
+}) {
+  const { toast } = useToast();
+  const [step, setStep] = useState(1);
+  const [actualDate, setActualDate] = useState(project.actualCompletionDate ?? "");
+  const [rating, setRating] = useState<number>(project.performanceRating ?? 0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [gateStatus, setGateStatus] = useState<null | { timesheetsPending: number }>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const checkGates = async () => {
+    setLoading(true);
+    try {
+      const ts = await fetch(`${API}/timesheets?projectId=${projectId}&status=submitted`).then(r => r.json()).catch(() => []);
+      const draft = await fetch(`${API}/timesheets?projectId=${projectId}&status=draft`).then(r => r.json()).catch(() => []);
+      const pending = (Array.isArray(ts) ? ts.length : 0) + (Array.isArray(draft) ? draft.length : 0);
+      setGateStatus({ timesheetsPending: pending });
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (step === 3) checkGates(); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const gatesPassed = gateStatus != null && gateStatus.timesheetsPending === 0 && !!actualDate && rating >= 1;
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const r = await fetch(`${API}/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed", actualCompletionDate: actualDate, performanceRating: rating }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        toast({ title: "Cannot close project", description: body.message || "Gate check failed.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Project closed", description: "Project marked as completed." });
+      onClose();
+      onComplete();
+    } finally { setSubmitting(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="bg-card border-border max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-foreground flex items-center gap-2">
+            <Lock size={16} className="text-emerald-500" />
+            Close Project — Step {step} of 3
+          </DialogTitle>
+        </DialogHeader>
+
+        {step === 1 && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Set the actual project completion date.</p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Actual Completion Date *</label>
+              <Input type="date" value={actualDate} onChange={e => setActualDate(e.target.value)} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={() => setStep(2)} disabled={!actualDate}>Next →</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Rate the overall project performance (1 = poor, 5 = excellent).</p>
+            <div className="flex items-center gap-2 justify-center py-4">
+              {[1,2,3,4,5].map(n => (
+                <button key={n}
+                  onMouseEnter={() => setHoverRating(n)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  onClick={() => setRating(n)}
+                  className="focus:outline-none"
+                >
+                  <Star size={32}
+                    className={`transition-colors ${n <= (hoverRating || rating) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`}
+                  />
+                </button>
+              ))}
+            </div>
+            {rating > 0 && (
+              <p className="text-center text-sm font-medium text-muted-foreground">
+                {["","Poor","Below Average","Average","Good","Excellent"][rating]} ({rating}/5)
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep(1)}>← Back</Button>
+              <Button onClick={() => setStep(3)} disabled={rating < 1}>Next →</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Review gate conditions before finalizing closure.</p>
+            {loading ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">Checking gate conditions…</div>
+            ) : (
+              <div className="space-y-2">
+                {[
+                  { label: "Actual completion date set", passed: !!actualDate, detail: actualDate || "Not set" },
+                  { label: "Performance rating provided", passed: rating >= 1, detail: rating >= 1 ? `${rating}/5 stars` : "Not set" },
+                  { label: "All time entries approved", passed: (gateStatus?.timesheetsPending ?? 1) === 0, detail: gateStatus?.timesheetsPending === 0 ? "All approved" : `${gateStatus?.timesheetsPending ?? "?"} pending` },
+                ].map(g => (
+                  <div key={g.label} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${g.passed ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                    {g.passed
+                      ? <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      : <AlertTriangle size={16} className="text-red-500 shrink-0" />}
+                    <div>
+                      <p className={`text-sm font-medium ${g.passed ? "text-emerald-700" : "text-red-700"}`}>{g.label}</p>
+                      <p className="text-xs text-muted-foreground">{g.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!gatesPassed && !loading && (
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle size={11} /> Resolve all failing gates before closing the project.
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep(2)}>← Back</Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={!gatesPassed || submitting || loading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {submitting ? "Closing…" : "Close Project"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CloseView({ project, onToggle, onMarkComplete }: { project: any; onToggle: (updates: Record<string,any>)=>void; onMarkComplete?: () => void }) {
   const checks = [
     {key:"kickoffComplete",label:"Kickoff completed"},
     {key:"billingReadiness",label:"All invoices sent"},
   ];
   const done = checks.filter(c=>!!project[c.key]).length;
   const pct = Math.round((done/checks.length)*100);
+  const alreadyComplete = project.status === "completed";
   return (
     <div className="p-6 max-w-2xl space-y-6">
-      <div>
-        <h2 className="font-semibold text-base mb-1">Close &amp; Handover Checklist</h2>
-        <p className="text-sm text-muted-foreground">Track all closure activities before marking the project complete</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-base mb-1">Close &amp; Handover Checklist</h2>
+          <p className="text-sm text-muted-foreground">Track all closure activities before marking the project complete</p>
+        </div>
+        {!alreadyComplete && onMarkComplete && (
+          <Button
+            onClick={onMarkComplete}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+            size="sm"
+          >
+            <Lock size={13} className="mr-1.5" /> Mark Complete
+          </Button>
+        )}
+        {alreadyComplete && (
+          <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+            <CheckCircle2 size={14} /> Completed{project.actualCompletionDate ? ` · ${project.actualCompletionDate}` : ""}
+          </span>
+        )}
       </div>
       <Card>
         <CardContent className="pt-4">
@@ -2902,11 +3157,15 @@ function CloseView({ project, onToggle }: { project: any; onToggle: (updates: Re
           );
         })}
       </div>
-      {pct===100&&(
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-          <CheckCircle2 className="h-8 w-8 text-emerald-600 mx-auto mb-2"/>
-          <p className="font-semibold text-emerald-700">Ready to close</p>
-          <p className="text-sm text-emerald-600 mt-1">All checklist items complete. This project is ready for final closure.</p>
+      {project.performanceRating && (
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Performance Rating:</p>
+          <div className="flex items-center gap-0.5">
+            {[1,2,3,4,5].map(n => (
+              <Star key={n} size={14} className={n <= project.performanceRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"} />
+            ))}
+          </div>
+          <span className="text-xs text-muted-foreground">{project.performanceRating}/5</span>
         </div>
       )}
     </div>
@@ -2941,6 +3200,8 @@ export default function ProjectDetail() {
   const [scheduleRecalculating, setScheduleRecalculating] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [recalcSaving, setRecalcSaving] = useState(false);
+  const [closureGateOpen, setClosureGateOpen] = useState(false);
+  const [phaseGate, setPhaseGate] = useState<{ phase: Phase; newStatus: string } | null>(null);
 
   const canApprove = ["admin","delivery_director","project_manager","resource_manager"].includes(role||"");
   const isPM = ["admin","delivery_director","project_manager"].includes(role||"");
@@ -3040,6 +3301,28 @@ export default function ProjectDetail() {
   };
   const updateProjectField = async (updates:Record<string,any>) => {
     await fetch(`${API}/projects/${projectId}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(updates) });
+    load();
+  };
+
+  const handlePhaseStatus = (phase: Phase, newStatus: string) => {
+    if (newStatus === "in_progress" && phase.status !== "in_progress") {
+      setPhaseGate({ phase, newStatus });
+    } else {
+      fetch(`${API}/phases/${phase.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      }).then(() => load());
+    }
+  };
+
+  const confirmPhaseGate = async (criteria: CriterionItem[]) => {
+    if (!phaseGate) return;
+    await fetch(`${API}/phases/${phaseGate.phase.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: phaseGate.newStatus, entryCriteria: criteria }),
+    });
     load();
   };
 
@@ -3318,6 +3601,7 @@ export default function ProjectDetail() {
           <PhaseBoardView
             phases={phases} milestones={milestones} tasks={tasks}
             onMilestoneStatus={updateMilestoneStatus}
+            onPhaseStatus={isPM ? handlePhaseStatus : undefined}
             project={project}
           />
         )}
@@ -3544,7 +3828,7 @@ export default function ProjectDetail() {
         )}
 
         {activeTab === "close" && (
-          <CloseView project={project} onToggle={updateProjectField} />
+          <CloseView project={project} onToggle={updateProjectField} onMarkComplete={isPM ? () => setClosureGateOpen(true) : undefined} />
         )}
 
         {activeTab === "details" && (
@@ -3552,6 +3836,23 @@ export default function ProjectDetail() {
         )}
       </div>
 
+      {closureGateOpen && (
+        <ClosureGateModal
+          project={project}
+          projectId={projectId}
+          onClose={() => setClosureGateOpen(false)}
+          onComplete={() => { setClosureGateOpen(false); load(); }}
+        />
+      )}
+
+      {phaseGate && (
+        <PhaseEntryGateModal
+          phase={phaseGate.phase}
+          targetStatus={phaseGate.newStatus}
+          onClose={() => setPhaseGate(null)}
+          onConfirm={confirmPhaseGate}
+        />
+      )}
     </div>
   );
 }
