@@ -372,6 +372,7 @@ function AllocationGrid({
         >
           <span className="text-white text-xs font-medium truncate leading-tight">
             {a.projectName || `#${a.projectId}`} · {a.allocationPct}%
+            {a.allocationType === "soft" && <span className="ml-1 opacity-90 text-[9px] border border-white/40 rounded px-0.5">SOFT</span>}
             {isConflict && <span className="ml-1 opacity-80">⚠</span>}
           </span>
         </div>

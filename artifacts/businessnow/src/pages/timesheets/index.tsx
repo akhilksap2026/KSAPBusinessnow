@@ -77,6 +77,7 @@ interface CellEntry {
   hours: string;
   status: string;
   notes?: string;
+  dailyComment?: string;
   isBillable?: boolean;
   categoryId?: number;
 }
@@ -547,7 +548,8 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
       if (e.entryDate) {
         row.byDay[e.entryDate] = {
           id: e.id, hours: String(e.hoursLogged ?? ""), status: e.status,
-          notes: e.notes ?? "", isBillable: e.isBillable ?? true,
+          notes: e.notes ?? "", dailyComment: e.dailyComment ?? undefined,
+          isBillable: e.isBillable ?? true,
           categoryId: e.categoryId ?? undefined,
         };
       }
@@ -850,6 +852,15 @@ function WeeklyGrid({ resourceId, resourceName, projects, categories, onRefetch,
                         ) : (
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-dashed border-border/40 text-muted-foreground/20 hover:border-primary/50 hover:text-primary/40 transition-colors">
                             <Plus className="h-3 w-3" />
+                          </span>
+                        )}
+                        {/* Comment indicator — shown when dailyComment or notes exist */}
+                        {hasHours && (cell?.dailyComment || cell?.notes) && (
+                          <span
+                            className="absolute bottom-0.5 left-0.5 text-[9px] leading-none text-primary/50"
+                            title={cell?.dailyComment || cell?.notes || ""}
+                          >
+                            💬
                           </span>
                         )}
                         {/* Billable toggle button — draft cells only, visible on row hover */}

@@ -23,12 +23,13 @@ export default function CapacityPage() {
   const [loading, setLoading] = useState(true);
   const [windowWeeks, setWindowWeeks] = useState(12);
   const [view, setView] = useState<"table" | "bars">("bars");
+  const [includeSoft, setIncludeSoft] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/resources/capacity?weeks=${windowWeeks}`)
+    fetch(`${API}/resources/capacity?weeks=${windowWeeks}&includeSoft=${includeSoft}`)
       .then(r => r.json()).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
-  }, [windowWeeks]);
+  }, [windowWeeks, includeSoft]);
 
   if (loading) return (
     <div className="p-6 space-y-4">
@@ -87,6 +88,11 @@ export default function CapacityPage() {
               </button>
             ))}
           </div>
+          <button onClick={() => setIncludeSoft(s => !s)}
+            className={`ml-2 flex items-center gap-1.5 px-3 py-1 text-xs rounded font-medium transition-colors border ${includeSoft ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700" : "bg-muted text-muted-foreground border-transparent"}`}
+            title="Toggle soft/pipeline allocations in utilization">
+            {includeSoft ? "● Soft included" : "○ Soft excluded"}
+          </button>
         </div>
       </div>
 
@@ -155,7 +161,7 @@ export default function CapacityPage() {
                           <div key={w.week} className="text-center" style={{ minWidth: "48px" }}>
                             <div className="h-16 bg-muted rounded-md flex flex-col-reverse overflow-hidden mb-1" title={`${format(new Date(w.week), "MMM d")}: ${Math.round(demH)}h hard, ${Math.round(softH)}h soft, ${Math.round(w.available)}h free`}>
                               {demPct > 0 && <div className={`${isOver ? "bg-red-400" : color} opacity-90`} style={{ height: `${demPct}%` }} />}
-                              {softPct > 0 && <div className="bg-amber-200" style={{ height: `${softPct}%` }} />}
+                              {includeSoft && softPct > 0 && <div style={{ height: `${softPct}%`, background: "repeating-linear-gradient(45deg, #f59e0b, #f59e0b 3px, transparent 3px, transparent 8px)", opacity: 0.65 }} />}
                             </div>
                             <p className="text-xs text-muted-foreground">{format(new Date(w.week), "M/d")}</p>
                           </div>
@@ -163,8 +169,8 @@ export default function CapacityPage() {
                       })}
                     </div>
                     <div className="flex gap-4 mt-2 text-xs">
-                      <div className="flex items-center gap-1"><div className={`w-3 h-2 rounded ${color} opacity-80`} /><span className="text-muted-foreground">Hard demand</span></div>
-                      <div className="flex items-center gap-1"><div className="w-3 h-2 rounded bg-amber-200" /><span className="text-muted-foreground">Soft demand (pipeline)</span></div>
+                      <div className="flex items-center gap-1"><div className={`w-3 h-2 rounded ${color} opacity-80`} /><span className="text-muted-foreground">Confirmed demand</span></div>
+                      <div className="flex items-center gap-1"><div className="w-3 h-2 rounded" style={{ background: "repeating-linear-gradient(45deg,#f59e0b,#f59e0b 3px,transparent 3px,transparent 8px)", opacity: 0.65 }} /><span className="text-muted-foreground">Pipeline (Soft)</span></div>
                     </div>
                   </div>
                 </div>

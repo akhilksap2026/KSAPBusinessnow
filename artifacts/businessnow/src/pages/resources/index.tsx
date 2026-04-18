@@ -26,6 +26,7 @@ interface Resource {
   isContractor?: boolean; availableFrom?: string; bio?: string;
   skillsWithYears?: Array<{ skill: string; years: number }>;
   defaultRole?: string; vacationAllocationDays?: number; hireDate?: string;
+  dailyHoursCapacity?: number;
 }
 
 interface ProjectBreakdown { projectId: number; projectName: string; hard: number; soft: number; }
@@ -623,6 +624,7 @@ function RosterView({ resources, onSelect }: { resources: Resource[]; onSelect: 
                     {/* Dual ring: hardPct = currentUtilization (hard allocs from DB), softPct=0 (not in list endpoint) */}
                     <UtilizationRing hardPct={util} softPct={0} size={52} />
                     {r.hourlyRate && <p className="text-xs text-muted-foreground">${r.hourlyRate}/hr</p>}
+                    <p className="text-xs text-muted-foreground">{r.dailyHoursCapacity ?? 8} hrs/day</p>
                   </div>
                 </div>
               );
@@ -694,6 +696,7 @@ type ResForm = {
   status: string; location: string; hourlyRate: string; costRate: string;
   utilizationTarget: string; skills: string; bio: string;
   defaultRole: string; vacationAllocationDays: string; hireDate: string;
+  hoursPerDay: string;
   skillsWithYears: SkillYear[];
 };
 
@@ -702,6 +705,7 @@ const defaultResForm = (): ResForm => ({
   status: "available", location: "", hourlyRate: "", costRate: "",
   utilizationTarget: "80", skills: "", bio: "",
   defaultRole: "", vacationAllocationDays: "15", hireDate: "",
+  hoursPerDay: "8",
   skillsWithYears: [],
 });
 
@@ -760,6 +764,7 @@ function AddResourceModal({ open, onClose, onCreated }: {
       if (form.defaultRole) payload.defaultRole = form.defaultRole.trim();
       if (form.vacationAllocationDays) payload.vacationAllocationDays = parseInt(form.vacationAllocationDays);
       if (form.hireDate)   payload.hireDate = form.hireDate;
+      payload.dailyHoursCapacity = parseFloat(form.hoursPerDay) || 8;
       if (skillsWithYearsArr.length > 0) payload.skillsWithYears = skillsWithYearsArr;
 
       const res = await fetch(`${API}/resources`, {
@@ -893,13 +898,21 @@ function AddResourceModal({ open, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Utilization Target */}
-          <div className="space-y-1.5">
-            <Label htmlFor="res-util">Utilization Target (%)</Label>
-            <Input id="res-util" placeholder="80" value={form.utilizationTarget}
-              onChange={e => set("utilizationTarget", e.target.value)}
-              className={errors.utilizationTarget ? "border-red-500" : ""} />
-            {errors.utilizationTarget && <p className="text-xs text-red-500">{errors.utilizationTarget}</p>}
+          {/* Utilization Target + Hours/Day */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="res-util">Utilization Target (%)</Label>
+              <Input id="res-util" placeholder="80" value={form.utilizationTarget}
+                onChange={e => set("utilizationTarget", e.target.value)}
+                className={errors.utilizationTarget ? "border-red-500" : ""} />
+              {errors.utilizationTarget && <p className="text-xs text-red-500">{errors.utilizationTarget}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="res-hours-day">Available Hrs/Day</Label>
+              <Input id="res-hours-day" type="number" min="1" max="24" step="0.5" placeholder="8"
+                value={form.hoursPerDay} onChange={e => set("hoursPerDay", e.target.value)} />
+              <p className="text-[10px] text-muted-foreground">Used for task duration estimates</p>
+            </div>
           </div>
 
           {/* Skills (flat list) */}

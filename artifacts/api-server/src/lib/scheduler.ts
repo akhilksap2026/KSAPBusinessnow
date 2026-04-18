@@ -1,4 +1,4 @@
-import { db, tasksTable, taskDependenciesTable } from "@workspace/db";
+import { db, tasksTable, taskDependenciesTable, resourcesTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
 
 function parseDate(s: string | null | undefined): Date | null {
@@ -41,6 +41,18 @@ export type ScheduleResult = { updated: number } | { type: "cycle"; message: str
 export async function scheduleProject(projectId: number): Promise<ScheduleResult> {
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.projectId, projectId));
   if (tasks.length === 0) return { updated: 0 };
+
+  // Build userId → dailyHoursCapacity map for tasks with an assigned user
+  const assignedUserIds = [...new Set(tasks.map(t => t.assignedToId).filter(Boolean) as number[])];
+  const resourceHours: Record<number, number> = {};
+  if (assignedUserIds.length > 0) {
+    const resources = await db.select({ userId: resourcesTable.userId, dailyHoursCapacity: resourcesTable.dailyHoursCapacity })
+      .from(resourcesTable)
+      .where(inArray(resourcesTable.userId as any, assignedUserIds));
+    resources.forEach(r => {
+      if (r.userId) resourceHours[r.userId] = parseFloat(String(r.dailyHoursCapacity ?? 8));
+    });
+  }
 
   const taskIds = tasks.map(t => t.id);
   const deps = await db.select().from(taskDependenciesTable)
@@ -93,7 +105,14 @@ export async function scheduleProject(projectId: number): Promise<ScheduleResult
     const e = parseDate(t.plannedEndDate);
     startMap[t.id] = s;
     endMap[t.id] = e;
-    durationMap[t.id] = s && e ? workingDaysBetween(s, e) : 5;
+    if (s && e) {
+      durationMap[t.id] = workingDaysBetween(s, e);
+    } else if (t.estimatedHours) {
+      const hpd = t.assignedToId ? (resourceHours[t.assignedToId] ?? 8) : 8;
+      durationMap[t.id] = Math.max(1, Math.ceil(parseFloat(String(t.estimatedHours)) / hpd));
+    } else {
+      durationMap[t.id] = 5;
+    }
   }
 
   for (const tid of sorted) {

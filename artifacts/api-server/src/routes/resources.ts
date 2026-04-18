@@ -164,13 +164,21 @@ router.get("/resources/capacity", async (req, res): Promise<void> => {
 
   const forecast = Object.entries(byPractice).map(([practiceArea, resources]) => {
     const weeklyForecast = weekDates.map(w => {
-      const totalCapacity = resources.length * 40;
+      const totalCapacity = resources.reduce((s, r) => s + parseFloat(String(r.dailyHoursCapacity ?? 8)) * 5, 0);
       const hardDemand = allAllocations
         .filter(a => a.allocationType !== "soft" && resources.some(r => r.id === a.resourceId))
-        .reduce((sum, a) => sum + (weekOverlap(w, a) / 100) * 40, 0);
+        .reduce((sum, a) => {
+          const res = resources.find(r => r.id === a.resourceId);
+          const weeklyHrs = parseFloat(String(res?.dailyHoursCapacity ?? 8)) * 5;
+          return sum + (weekOverlap(w, a) / 100) * weeklyHrs;
+        }, 0);
       const softDemand = allAllocations
         .filter(a => a.allocationType === "soft" && resources.some(r => r.id === a.resourceId))
-        .reduce((sum, a) => sum + (weekOverlap(w, a) / 100) * 40, 0);
+        .reduce((sum, a) => {
+          const res = resources.find(r => r.id === a.resourceId);
+          const weeklyHrs = parseFloat(String(res?.dailyHoursCapacity ?? 8)) * 5;
+          return sum + (weekOverlap(w, a) / 100) * weeklyHrs;
+        }, 0);
       const openRequests = allRequests
         .filter(r => r.status === "open" && r.requestedRole.toLowerCase().includes(practiceArea.split("_")[0]))
         .reduce((sum, r) => sum + (r.hoursPerWeek || 0), 0);

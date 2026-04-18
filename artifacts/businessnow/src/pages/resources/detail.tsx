@@ -305,6 +305,10 @@ export default function ResourceDetail() {
                   <span className="font-medium">{format(new Date(resource.availableFrom), "MMM d, yyyy")}</span>
                 </div>
               )}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Available hrs/day</span>
+                <span className="font-medium">{resource.dailyHoursCapacity ?? 8} hrs</span>
+              </div>
               {resource.hourlyRate && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Bill rate</span>

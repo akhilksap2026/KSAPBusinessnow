@@ -1,0 +1,15 @@
+// PHASE 4 — PROJECT-LEVEL RATE CARD OVERRIDE (Req #18)
+Context: The global rate card should serve as a template. Individual projects need to be able to override rates per role without modifying the global card.
+
+1. In shared/schema.ts, add a projectId field to the rateCards table (nullable, foreign key to projects): projectId: integer('project_id').references(() => projects.id). A rate card with projectId = null is a global card. A rate card with a projectId is a project-level override. Run migration.
+
+2. In the Rate Cards list page (client/src/pages/rate-cards/index.tsx), add a "Copy to Project" action button next to each global rate card. On click, open a modal: "Select Project" dropdown (list of active projects). On confirm, POST /api/rate-cards/:id/copy-to-project with the selected projectId. This creates a new rate card that is a full copy of the global one, but with projectId set.
+
+3. In the Project Detail page, add a "Rate Card" sub-section (inside the Finance or Settings tab). It shows: the currently active rate card for the project (either a project-specific one or the inherited global one). If a project-specific card exists, show an "Edit Overrides" button that takes the PM to that rate card. If none exists, show a "Create Project Override" button that does the same copy-to-project flow.
+
+4. In the billing rate resolution function (used by invoice generation and time entry rate lookup), update the lookup priority: first query SELECT * FROM rateCards WHERE projectId = :projectId AND roleId = :roleId. If found, use that rate. If null result, fall back to SELECT * FROM rateCards WHERE projectId IS NULL AND roleId = :roleId (global card). This waterfall must be used in every place billing rates are applied.
+
+5. In the Rate Card edit UI for project-specific cards, clearly label the page: "Rate Card — [Project Name] (Override)". Show a "Inherited from: [Global Card Name]" banner. Allow editing individual role rates. Unchanged roles should show the inherited global rate in greyed text.
+
+
+Output expected: Global rate cards can be copied per project. Project-specific overrides take precedence in all billing calculations. The rate resolution waterfall (project → global) is consistently applied everywhere.
