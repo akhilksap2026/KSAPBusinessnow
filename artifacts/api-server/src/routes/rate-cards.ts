@@ -64,4 +64,29 @@ router.delete("/rate-cards/:id", async (req, res) => {
   }
 });
 
+// POST /rate-cards/:id/copy-to-project — clone a global template as a project-level override
+router.post("/rate-cards/:id/copy-to-project", async (req, res) => {
+  try {
+    const sourceId = parseInt(req.params.id);
+    const { projectId, projectName } = req.body as { projectId: number; projectName?: string };
+    if (!projectId) return res.status(400).json({ error: "projectId is required" });
+
+    const [source] = await db.select().from(rateCardsTable).where(eq(rateCardsTable.id, sourceId));
+    if (!source) return res.status(404).json({ error: "Source rate card not found" });
+
+    const { id: _id, createdAt: _ca, ...rest } = source;
+    const [created] = await db.insert(rateCardsTable).values({
+      ...rest,
+      name: `${source.name} (${projectName ?? `Project #${projectId}`} Override)`,
+      projectId,
+      isTemplate: false,
+      notes: `Copied from global template: "${source.name}"`,
+    }).returning();
+
+    res.status(201).json(created);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 export default router;

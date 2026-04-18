@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   CreditCard, Plus, Pencil, Trash2, Search, X, Globe, FolderOpen,
-  DollarSign, RefreshCw, ChevronRight,
+  DollarSign, RefreshCw, ChevronRight, Copy, ArrowDownToLine,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -80,6 +80,9 @@ export default function RateCardsPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [copySource, setCopySource] = useState<RateCard | null>(null);
+  const [copyProjectId, setCopyProjectId] = useState("");
+  const [copying, setCopying] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -180,6 +183,26 @@ export default function RateCardsPage() {
     }
   };
 
+  const handleCopyToProject = async () => {
+    if (!copySource || !copyProjectId) return;
+    setCopying(true);
+    try {
+      const proj = projects.find(p => String(p.id) === copyProjectId);
+      const res = await fetch(`${API_BASE}/rate-cards/${copySource.id}/copy-to-project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: parseInt(copyProjectId), projectName: proj?.name }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? "Failed"); }
+      toast({ title: "Rate card copied to project" });
+      setCopySource(null);
+      setCopyProjectId("");
+      load();
+    } catch (err: any) {
+      toast({ title: err.message || "Failed to copy", variant: "destructive" });
+    } finally { setCopying(false); }
+  };
+
   const currencies = useMemo(() => [...new Set(cards.map(c => c.currency).filter(Boolean))], [cards]);
 
   return (
@@ -261,7 +284,7 @@ export default function RateCardsPage() {
                 <h2 className="text-sm font-semibold text-foreground">Global Templates</h2>
                 <Badge variant="secondary" className="text-xs">{grouped.templates.length}</Badge>
               </div>
-              <RateCardTable cards={grouped.templates} onEdit={openEdit} onDelete={setDeleteId} />
+              <RateCardTable cards={grouped.templates} onEdit={openEdit} onDelete={setDeleteId} onCopyToProject={setCopySource} />
             </section>
           )}
 
@@ -293,9 +316,25 @@ export default function RateCardsPage() {
       <Dialog open={dialogOpen} onOpenChange={o => { if (!o) setDialogOpen(false); }}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>{editCard ? "Edit Rate Card" : "New Rate Card"}</DialogTitle>
+            <DialogTitle>
+              {editCard
+                ? editCard.projectId
+                  ? `Rate Card — ${editCard.projectName ?? `Project #${editCard.projectId}`} (Override)`
+                  : "Edit Rate Card"
+                : "New Rate Card"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-1">
+            {/* Override banner for project-specific cards */}
+            {editCard?.projectId && editCard.notes?.startsWith("Copied from global template:") && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-amber-200 bg-amber-50/60 text-xs text-amber-800">
+                <FolderOpen className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <div>
+                  <span className="font-semibold">Project override</span> · {editCard.notes}. Rates set here take priority over the global template in all billing calculations.
+                </div>
+              </div>
+            )}
+
             {/* Template toggle */}
             <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/20">
               <div>
@@ -402,6 +441,46 @@ export default function RateCardsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Copy to Project Modal */}
+      <Dialog open={copySource !== null} onOpenChange={o => { if (!o) { setCopySource(null); setCopyProjectId(""); } }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowDownToLine className="h-4 w-4 text-primary" />
+              Copy to Project
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+              <p className="text-xs text-muted-foreground">Cloning global template:</p>
+              <p className="text-sm font-semibold mt-0.5 truncate">{copySource?.name}</p>
+              {copySource?.role && <p className="text-xs text-muted-foreground mt-0.5">{copySource.role} · {copySource.currency}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Select Project</label>
+              <Select value={copyProjectId || "__none__"} onValueChange={v => setCopyProjectId(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Choose a project…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Choose a project…</SelectItem>
+                  {projects.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A copy of this rate card will be created for the selected project.
+              Project-level rates take priority over global templates in all billing calculations.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCopySource(null); setCopyProjectId(""); }}>Cancel</Button>
+            <Button onClick={handleCopyToProject} disabled={copying || !copyProjectId} className="gap-2">
+              <Copy className="h-3.5 w-3.5" />
+              {copying ? "Copying…" : "Copy to Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirm */}
       <Dialog open={deleteId !== null} onOpenChange={o => { if (!o) setDeleteId(null); }}>
         <DialogContent className="sm:max-w-[380px]">
@@ -419,7 +498,12 @@ export default function RateCardsPage() {
   );
 }
 
-function RateCardTable({ cards, onEdit, onDelete }: { cards: RateCard[]; onEdit: (c: RateCard) => void; onDelete: (id: number) => void }) {
+function RateCardTable({ cards, onEdit, onDelete, onCopyToProject }: {
+  cards: RateCard[];
+  onEdit: (c: RateCard) => void;
+  onDelete: (id: number) => void;
+  onCopyToProject?: (c: RateCard) => void;
+}) {
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card">
       <table className="w-full text-sm">
@@ -442,9 +526,14 @@ function RateCardTable({ cards, onEdit, onDelete }: { cards: RateCard[]; onEdit:
             const marginColor = mNum === null ? "" : mNum >= 40 ? "text-emerald-500" : mNum >= 25 ? "text-amber-500" : "text-red-500";
             return (
               <tr key={card.id} className="border-b border-border/50 hover:bg-muted/10 transition-colors">
-                <td className="px-4 py-3 font-medium max-w-[180px]">
+                <td className="px-4 py-3 font-medium max-w-[220px]">
                   <div className="truncate">{card.name}</div>
                   {card.notes && <div className="text-[10px] text-muted-foreground truncate">{card.notes}</div>}
+                  {card.projectName && (
+                    <div className="text-[10px] text-amber-500 font-medium mt-0.5 flex items-center gap-0.5">
+                      <FolderOpen className="h-2.5 w-2.5" /> {card.projectName}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-muted-foreground text-xs">{card.role ?? <span className="text-muted-foreground/40">—</span>}</td>
                 <td className="px-3 py-3 text-right font-semibold">
@@ -463,6 +552,15 @@ function RateCardTable({ cards, onEdit, onDelete }: { cards: RateCard[]; onEdit:
                 </td>
                 <td className="px-3 py-3">
                   <div className="flex items-center justify-end gap-1">
+                    {onCopyToProject && card.isTemplate && (
+                      <button
+                        onClick={() => onCopyToProject(card)}
+                        className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                        title="Copy to Project"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button onClick={() => onEdit(card)} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>

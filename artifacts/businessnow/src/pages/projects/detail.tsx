@@ -2432,9 +2432,14 @@ function GanttTab({ projectId }: { projectId: number }) {
 // ─── Finance Tab ─────────────────────────────────────────────────────────────
 function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; invoices: any[]; revenue?: any; marginForecast?: any }) {
   const { project, changeRequests, allocations = [] } = data;
+  const { toast } = useToast();
   const [rateCards, setRateCards] = useState<any[]>([]);
+  const [globalCards, setGlobalCards] = useState<any[]>([]);
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [copySourceId, setCopySourceId] = useState<number | null>(null);
+  const [copying, setCopying] = useState(false);
 
-  useEffect(() => {
+  const loadRateCards = useCallback(() => {
     const params = new URLSearchParams();
     if (project.id) params.set("projectId", String(project.id));
     if (project.accountId) params.set("accountId", String(project.accountId));
@@ -2442,7 +2447,39 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
       .then(r => r.ok ? r.json() : [])
       .then(d => setRateCards(Array.isArray(d) ? d : []))
       .catch(() => {});
+    // Also fetch global templates for inheritance display
+    fetch(`${API}/rate-cards?isTemplate=true`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setGlobalCards(Array.isArray(d) ? d : []))
+      .catch(() => {});
   }, [project.id, project.accountId]);
+
+  useEffect(() => { loadRateCards(); }, [loadRateCards]);
+
+  const projectSpecificCards = rateCards.filter((rc: any) => rc.projectId === project.id);
+  const inheritedCards = globalCards.filter(gc =>
+    !projectSpecificCards.some((pc: any) => pc.role?.toLowerCase() === gc.role?.toLowerCase())
+  );
+  const hasProjectOverride = projectSpecificCards.length > 0;
+
+  const handleCreateOverride = async () => {
+    if (copySourceId === null) return;
+    setCopying(true);
+    try {
+      const res = await fetch(`${API}/rate-cards/${copySourceId}/copy-to-project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, projectName: project.name }),
+      });
+      if (!res.ok) throw new Error("Failed to copy");
+      toast({ title: "Project rate override created" });
+      setCopyModalOpen(false);
+      setCopySourceId(null);
+      loadRateCards();
+    } catch {
+      toast({ title: "Failed to create override", variant: "destructive" });
+    } finally { setCopying(false); }
+  };
 
   const budgetValue = parseFloat(project.budgetValue||0);
   const billedValue = parseFloat(project.billedValue||0);
@@ -2623,32 +2660,70 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
         </div>
       )}
 
-      {/* Rate Card Section */}
-      {rateCards.length > 0 && (
-        <div>
-          <p className="text-sm font-semibold mb-2 flex items-center gap-2">
+      {/* Rate Card Section — Req #18: project override awareness */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold flex items-center gap-2">
             <DollarSign size={14}/> Rate Card
           </p>
+          {hasProjectOverride ? (
+            <a href="/rate-cards" className="text-xs text-primary hover:underline flex items-center gap-1">
+              <Pencil size={12} /> Edit Overrides
+            </a>
+          ) : globalCards.length > 0 ? (
+            <button
+              onClick={() => { setCopySourceId(globalCards[0].id); setCopyModalOpen(true); }}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              <Plus size={12} /> Create Project Override
+            </button>
+          ) : null}
+        </div>
+
+        {hasProjectOverride && (
+          <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg border border-amber-200 bg-amber-50/50 text-xs text-amber-800">
+            <FolderOpen size={12} className="shrink-0" />
+            <span>This project has <strong>{projectSpecificCards.length}</strong> rate override{projectSpecificCards.length !== 1 ? "s" : ""} — these take priority over global templates in all billing calculations.</span>
+          </div>
+        )}
+
+        {(projectSpecificCards.length > 0 || inheritedCards.length > 0 || rateCards.length > 0) ? (
           <div className="rounded-xl border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Role</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Practice</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Source</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Billing Rate</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Cost Rate</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Margin</th>
                 </tr>
               </thead>
               <tbody>
-                {rateCards.map((rc: any, i: number) => {
+                {[
+                  ...projectSpecificCards.map((rc: any) => ({ rc, isOverride: true })),
+                  ...(projectSpecificCards.length > 0 ? inheritedCards : rateCards).map((rc: any) => ({ rc, isOverride: false })),
+                ].map(({ rc, isOverride }, i) => {
                   const billing = parseFloat(rc.billingRate || 0);
                   const cost = rc.costRate ? parseFloat(rc.costRate) : null;
                   const margin = cost && billing > 0 ? Math.round(((billing - cost) / billing) * 100) : null;
                   return (
                     <tr key={rc.id} className={`border-t hover:bg-muted/20 ${i%2===0?"":"bg-muted/10"}`}>
-                      <td className="px-4 py-2.5 font-medium text-sm">{rc.name || rc.role}</td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground hidden md:table-cell">{rc.practiceArea || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium text-sm">{rc.role || rc.name}</div>
+                        {rc.name && rc.role && <div className="text-[10px] text-muted-foreground truncate">{rc.name}</div>}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs hidden md:table-cell">
+                        {isOverride ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium text-[10px]">
+                            <FolderOpen size={10}/> Override
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-medium text-[10px]">
+                            Global
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-right font-medium text-emerald-600">{fmt$(billing)}</td>
                       <td className="px-4 py-2.5 text-right text-xs text-muted-foreground hidden md:table-cell">
                         {cost ? fmt$(cost) : "—"}
@@ -2666,8 +2741,58 @@ function FinanceTab({ data, invoices, revenue, marginForecast }: { data: any; in
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="rounded-xl border border-dashed border-border p-5 text-center">
+            <DollarSign className="h-7 w-7 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No rate cards configured</p>
+            {globalCards.length > 0 && (
+              <button
+                onClick={() => { setCopySourceId(globalCards[0].id); setCopyModalOpen(true); }}
+                className="mt-2 text-xs text-primary hover:underline"
+              >
+                + Create a project override from global template
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Create Project Override modal */}
+        {copyModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background rounded-xl border border-border shadow-xl w-full max-w-sm mx-4 p-5 space-y-4">
+              <div>
+                <h3 className="font-semibold text-sm">Create Project Rate Override</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select a global rate card to copy as a project-level override for <strong>{project.name}</strong>.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium">Global Template</label>
+                <select
+                  value={copySourceId ?? ""}
+                  onChange={e => setCopySourceId(parseInt(e.target.value))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {globalCards.map((gc: any) => (
+                    <option key={gc.id} value={gc.id}>{gc.name} ({gc.role})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setCopyModalOpen(false)}
+                  className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted/50"
+                >Cancel</button>
+                <button
+                  onClick={handleCreateOverride}
+                  disabled={copying}
+                  className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                >{copying ? "Creating…" : "Create Override"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Invoice summary cards */}
       <div className="grid grid-cols-3 gap-3">
