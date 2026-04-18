@@ -135,6 +135,10 @@ function CellContextModal({
   const [catId, setCatId] = useState("");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ hours?: string; notes?: string; task?: string }>({});
+  // TIME-06: "Who Helped You" collaborator state
+  const [collaboratorIds, setCollaboratorIds] = useState<number[]>([]);
+  const [projectResources, setProjectResources] = useState<{ id: number; name: string }[]>([]);
+  const [collabDropOpen, setCollabDropOpen] = useState(false);
 
   // Reset state when modal opens with fresh entry data
   useEffect(() => {
@@ -145,8 +149,35 @@ function CellContextModal({
       setIsBillable(entry?.isBillable ?? row.isBillable ?? true);
       setCatId(entry?.categoryId ? String(entry.categoryId) : row.categoryId ? String(row.categoryId) : "");
       setErrors({});
+      setCollaboratorIds([]);
+      setCollabDropOpen(false);
+      // Load project team members for Who Helped? selector
+      fetch(`${API_BASE}/allocations?projectId=${row.projectId}`)
+        .then(r => r.json())
+        .then((d: any[]) => {
+          if (!Array.isArray(d)) return;
+          const seen = new Set<number>();
+          const members: { id: number; name: string }[] = [];
+          d.forEach(a => {
+            if (a.resourceId && a.resourceId !== resourceId && !seen.has(a.resourceId)) {
+              seen.add(a.resourceId);
+              members.push({ id: a.resourceId, name: a.resourceName ?? `Resource #${a.resourceId}` });
+            }
+          });
+          setProjectResources(members);
+        })
+        .catch(() => {});
+      // Load existing collaborators if editing a saved entry
+      if (entry?.id) {
+        fetch(`${API_BASE}/timesheets/${entry.id}/collaborators`)
+          .then(r => r.json())
+          .then((d: any[]) => {
+            if (Array.isArray(d)) setCollaboratorIds(d.map(c => c.resourceId));
+          })
+          .catch(() => {});
+      }
     }
-  }, [open, entry, row]);
+  }, [open, entry, row, resourceId]);
 
   // Task remaining hours (approved entries only — draft not counted yet)
   const estimated = taskMeta?.estimatedHours ? parseFloat(taskMeta.estimatedHours) : null;
@@ -179,12 +210,36 @@ function CellContextModal({
     return Object.keys(errs).length === 0;
   };
 
+  const syncCollaborators = async (timesheetId: number, selectedIds: number[]) => {
+    try {
+      const existing = await fetch(`${API_BASE}/timesheets/${timesheetId}/collaborators`)
+        .then(r => r.json()).then(d => (Array.isArray(d) ? d : []) as any[]);
+      const existingIds = new Set<number>(existing.map((c: any) => c.resourceId));
+      const toAdd = selectedIds.filter(id => !existingIds.has(id));
+      const toRemove = Array.from(existingIds).filter(id => !selectedIds.includes(id));
+      await Promise.all([
+        ...toAdd.map(id => {
+          const r = projectResources.find(p => p.id === id);
+          return fetch(`${API_BASE}/timesheets/${timesheetId}/collaborators`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceId: id, resourceName: r?.name }),
+          });
+        }),
+        ...toRemove.map(id =>
+          fetch(`${API_BASE}/timesheets/${timesheetId}/collaborators/${id}`, { method: "DELETE" }),
+        ),
+      ]);
+    } catch { /* non-blocking */ }
+  };
+
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
     try {
       const h = parseFloat(hours);
       const categoryIdNum = catId ? parseInt(catId) : null;
+      let savedId: number | undefined = entry?.id;
       if (entry?.id) {
         await fetch(`${API_BASE}/timesheets/${entry.id}`, {
           method: "PUT",
@@ -192,7 +247,7 @@ function CellContextModal({
           body: JSON.stringify({ hoursLogged: h, notes: notes.trim(), isBillable, categoryId: categoryIdNum }),
         });
       } else {
-        await fetch(`${API_BASE}/timesheets`, {
+        const res = await fetch(`${API_BASE}/timesheets`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -203,6 +258,14 @@ function CellContextModal({
             notes: notes.trim(), dailyComment: notes.trim(), status: "draft",
           }),
         });
+        if (res.ok) {
+          const created = await res.json();
+          savedId = created?.id;
+        }
+      }
+      // Sync collaborators (TIME-06) — non-blocking, informational only
+      if (savedId && collaboratorIds.length >= 0) {
+        await syncCollaborators(savedId, collaboratorIds);
       }
       toast({ title: "Time entry saved" });
       onSaved();
@@ -277,6 +340,70 @@ function CellContextModal({
             />
             {errors.notes && <p className="text-xs text-destructive">{errors.notes}</p>}
           </div>
+
+          {/* TIME-06: Who Helped? — informational only, never billed */}
+          {projectResources.length > 0 && (
+            <div className="grid gap-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                Who helped?
+                <span className="text-[10px] font-normal text-muted-foreground">(informational only)</span>
+              </Label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setCollabDropOpen(v => !v)}
+                  className="w-full flex items-center justify-between gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm hover:bg-muted/30 transition-colors"
+                >
+                  <span className="text-muted-foreground">
+                    {collaboratorIds.length === 0
+                      ? "Tag a colleague…"
+                      : `${collaboratorIds.length} colleague${collaboratorIds.length > 1 ? "s" : ""} tagged`}
+                  </span>
+                  <span className="text-xs text-muted-foreground">▾</span>
+                </button>
+                {collabDropOpen && (
+                  <div className="absolute z-50 top-full mt-1 w-full rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto">
+                    {projectResources.map(r => {
+                      const selected = collaboratorIds.includes(r.id);
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setCollaboratorIds(prev =>
+                            selected ? prev.filter(id => id !== r.id) : [...prev, r.id]
+                          )}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-muted/50 ${selected ? "text-primary" : ""}`}
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selected ? "bg-primary border-primary" : "border-border"}`}>
+                            {selected && <span className="text-background text-[10px] font-bold">✓</span>}
+                          </div>
+                          {r.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {collaboratorIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-0.5">
+                  {collaboratorIds.map(id => {
+                    const r = projectResources.find(p => p.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 bg-muted rounded-full px-2.5 py-0.5 text-xs font-medium">
+                        👥 {r?.name ?? `Resource #${id}`}
+                        <button
+                          type="button"
+                          onClick={() => setCollaboratorIds(prev => prev.filter(i => i !== id))}
+                          className="ml-0.5 text-muted-foreground hover:text-foreground"
+                        >×</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Time Category */}
           <div className="grid gap-1.5">

@@ -27,6 +27,14 @@ function parseInvoice(i: typeof invoicesTable.$inferSelect) {
   };
 }
 
+// BILLING SAFETY GUARD (TIME-06):
+// generateTMLines queries timesheetsTable directly, filtering:
+//   isBillable=true, status='approved', projectId=X, date BETWEEN period.
+// It never touches timeEntryCollaboratorsTable — collaborator records
+// (isInformationalOnly=true) are completely separate and must NEVER appear
+// in any billing or invoice calculation. This constraint is enforced by the
+// data model separation: collaborators live in their own table and are
+// fetched only for informational display in the timesheet approval view.
 async function generateTMLines(
   projectId: number,
   accountId: number,

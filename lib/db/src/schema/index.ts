@@ -37,3 +37,4 @@ export * from "./task_assignments";
 export * from "./saved_filters";
 export * from "./project_baselines";
 export * from "./approval_delegations";
+export * from "./time_entry_collaborators";

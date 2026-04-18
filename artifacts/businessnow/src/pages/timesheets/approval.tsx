@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import {
-  CheckCircle2, XCircle, ChevronLeft, Filter, RotateCcw, Clock,
+  CheckCircle2, XCircle, ChevronLeft, Filter, RotateCcw, Clock, Users,
 } from "lucide-react";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
@@ -37,6 +38,7 @@ export default function TimesheetApprovalPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [acting, setActing] = useState(false);
+  const [collaboratorsMap, setCollaboratorsMap] = useState<Record<number, { resourceId: number; resourceName: string | null }[]>>({});
 
   const load = useCallback(() => {
     setLoading(true);
@@ -55,7 +57,20 @@ export default function TimesheetApprovalPage() {
 
     fetch(url)
       .then(r => r.json())
-      .then(d => setEntries(Array.isArray(d) ? d : []))
+      .then(d => {
+        const rows = Array.isArray(d) ? d : [];
+        setEntries(rows);
+        // TIME-06: Batch-fetch collaborators for all loaded entries
+        if (rows.length > 0) {
+          const ids = rows.map((r: any) => r.id).join(",");
+          fetch(`${API_BASE}/timesheets/collaborators-batch?ids=${ids}`)
+            .then(r => r.json())
+            .then(cmap => setCollaboratorsMap(cmap ?? {}))
+            .catch(() => {});
+        } else {
+          setCollaboratorsMap({});
+        }
+      })
       .catch(() => setEntries([]))
       .finally(() => setLoading(false));
   }, [filterProject, filterResource, filterStatus, filterStart, filterEnd]);
@@ -276,6 +291,7 @@ export default function TimesheetApprovalPage() {
                   <th className="text-center px-3 py-3">Billable</th>
                   <th className="text-left px-3 py-3 max-w-[200px]">Daily Comment</th>
                   <th className="text-left px-3 py-3">Billed Role</th>
+                  <th className="text-center px-3 py-3">Collaborators</th>
                   <th className="text-center px-3 py-3">Status</th>
                   <th className="text-right px-3 py-3">Actions</th>
                 </tr>
@@ -311,6 +327,30 @@ export default function TimesheetApprovalPage() {
                         <span className="text-xs text-muted-foreground truncate block">{entry.dailyComment || entry.notes || "—"}</span>
                       </td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{entry.billedRole ?? "—"}</td>
+                      <td className="px-3 py-3 text-center">
+                        {(() => {
+                          const collabs = collaboratorsMap[entry.id] ?? [];
+                          if (collabs.length === 0) return <span className="text-muted-foreground/40 text-xs">—</span>;
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button className="inline-flex items-center gap-1 text-xs font-medium text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full hover:bg-primary/20 transition-colors">
+                                    <Users className="h-3 w-3" />
+                                    +{collabs.length}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[180px]">
+                                  <p className="text-xs font-semibold mb-1">Collaborators (informational)</p>
+                                  {collabs.map((c, i) => (
+                                    <p key={i} className="text-xs text-muted-foreground">👥 {c.resourceName ?? `Resource #${c.resourceId}`}</p>
+                                  ))}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full border ${STATUS_COLORS[entry.status] ?? STATUS_COLORS.draft}`}>
                           {entry.status}

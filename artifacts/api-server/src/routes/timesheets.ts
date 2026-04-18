@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, inArray, or, lte, gte } from "drizzle-orm";
-import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable, approvalDelegationsTable, projectsTable } from "@workspace/db";
+import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable, approvalDelegationsTable, projectsTable, timeEntryCollaboratorsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   ListTimesheetsQueryParams,
@@ -411,6 +411,78 @@ router.delete("/timesheets/:id", async (req, res): Promise<void> => {
   }
 
   res.json({ ok: true });
+});
+
+// ── Collaborator sub-routes (TIME-06: "Who Helped You") ───────────────────────
+// IMPORTANT: These collaborator records are INFORMATIONAL ONLY.
+// They must NEVER be included in invoice generation or billing calculations.
+// The generateTMLines function in invoices.ts queries timesheetsTable directly
+// and filters isBillable=true, status='approved' — collaborator entries in
+// timeEntryCollaboratorsTable are completely separate and never affect billing.
+
+router.get("/timesheets/:id/collaborators", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const collabs = await db
+    .select()
+    .from(timeEntryCollaboratorsTable)
+    .where(eq(timeEntryCollaboratorsTable.timesheetId, id));
+  res.json(collabs);
+});
+
+router.post("/timesheets/:id/collaborators", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { resourceId, resourceName } = req.body as { resourceId: number; resourceName?: string };
+  if (!resourceId) { res.status(400).json({ error: "resourceId required" }); return; }
+  const existing = await db
+    .select()
+    .from(timeEntryCollaboratorsTable)
+    .where(and(
+      eq(timeEntryCollaboratorsTable.timesheetId, id),
+      eq(timeEntryCollaboratorsTable.resourceId, resourceId),
+    ));
+  if (existing.length > 0) {
+    res.status(409).json({ error: "Collaborator already added" });
+    return;
+  }
+  const [collab] = await db
+    .insert(timeEntryCollaboratorsTable)
+    .values({ timesheetId: id, resourceId, resourceName: resourceName ?? null, isInformationalOnly: true })
+    .returning();
+  res.status(201).json(collab);
+});
+
+router.delete("/timesheets/:id/collaborators/:resourceId", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  const resourceId = parseInt(req.params.resourceId, 10);
+  if (isNaN(id) || isNaN(resourceId)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db
+    .delete(timeEntryCollaboratorsTable)
+    .where(and(
+      eq(timeEntryCollaboratorsTable.timesheetId, id),
+      eq(timeEntryCollaboratorsTable.resourceId, resourceId),
+    ));
+  res.json({ ok: true });
+});
+
+// Batch collaborator fetch — returns { [timesheetId]: collaborator[] }
+// Used by the approval view to show 👥 badges without N+1 requests.
+router.get("/timesheets/collaborators-batch", async (req, res): Promise<void> => {
+  const raw = req.query.ids as string;
+  if (!raw) { res.json({}); return; }
+  const ids = raw.split(",").map(Number).filter(n => !isNaN(n) && n > 0);
+  if (ids.length === 0) { res.json({}); return; }
+  const rows = await db
+    .select()
+    .from(timeEntryCollaboratorsTable)
+    .where(inArray(timeEntryCollaboratorsTable.timesheetId, ids));
+  const result: Record<number, typeof rows> = {};
+  for (const row of rows) {
+    if (!result[row.timesheetId]) result[row.timesheetId] = [];
+    result[row.timesheetId].push(row);
+  }
+  res.json(result);
 });
 
 export default router;
