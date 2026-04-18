@@ -29,6 +29,11 @@ import savedFiltersRouter from "./saved-filters";
 import rateCardsRouter from "./rate-cards";
 import prospectsRouter from "./prospects";
 
+// Feature flag — CRM pipeline routes (prospects, opportunities)
+// Set ENABLE_CRM_MODULES=true in .env to enable during development.
+// In production (.env.production) this is false, so these routes return 404.
+const CRM_ENABLED = process.env.ENABLE_CRM_MODULES === "true";
+
 const router: IRouter = Router();
 
 router.use(healthRouter);
@@ -55,10 +60,13 @@ router.use(timeEntryCategoriesRouter);
 router.use(taskResourcesRouter);
 router.use(templateTasksRouter);
 router.use(fxRatesRouter);
-router.use(opportunitiesRouter);
 router.use(taskCommentsRouter);
 router.use(savedFiltersRouter);
 router.use(rateCardsRouter);
-router.use(prospectsRouter);
+
+if (CRM_ENABLED) {
+  router.use(opportunitiesRouter);
+  router.use(prospectsRouter);
+}
 
 export default router;

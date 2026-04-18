@@ -17,17 +17,6 @@ function MetricCard({ label, value, sub, color }: { label: string; value: string
   );
 }
 
-function EntityRow({ label, data }: { label: string; data: Record<string, number | string> }) {
-  return (
-    <tr className="border-b border-border hover:bg-muted/20">
-      <td className="p-3 text-sm text-foreground font-medium">{label}</td>
-      {Object.entries(data).map(([k, v]) => (
-        <td key={k} className="p-3 text-sm text-muted-foreground text-right">{typeof v === "number" ? v.toLocaleString() : v}</td>
-      ))}
-    </tr>
-  );
-}
-
 export default function AdminPage() {
   const [metrics, setMetrics] = useState<any>(null);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -89,7 +78,6 @@ export default function AdminPage() {
           <TabsList className="bg-card border border-border mb-6">
             <TabsTrigger value="overview" className="data-[state=active]:bg-muted">Overview</TabsTrigger>
             <TabsTrigger value="audit" className="data-[state=active]:bg-muted">Audit Log ({auditLog.length})</TabsTrigger>
-            <TabsTrigger value="datahealth" className="data-[state=active]:bg-muted">Data Health</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -127,32 +115,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Entity Summary Table */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Entity Counts</CardTitle></CardHeader>
-                <CardContent className="p-0">
-                  <table className="w-full text-sm">
-                    <thead><tr className="border-b border-border text-xs text-muted-foreground">
-                      <th className="text-left p-3">Entity</th>
-                      <th className="text-right p-3">Total</th>
-                      <th className="text-right p-3">Active / Open</th>
-                      <th className="text-right p-3">Issues</th>
-                    </tr></thead>
-                    <tbody>
-                      <EntityRow label="Projects" data={{ total: entities.projects.total, active: entities.projects.active, issues: entities.projects.atRisk }} />
-                      <EntityRow label="Accounts" data={{ total: entities.accounts.total, active: entities.accounts.active, issues: 0 }} />
-                      <EntityRow label="Resources" data={{ total: entities.resources.total, active: entities.resources.employees + entities.resources.contractors, issues: dataHealth.allocationsOverAllocated }} />
-                      <EntityRow label="Milestones" data={{ total: entities.milestones.total, active: entities.milestones.total - entities.milestones.completed, issues: entities.milestones.overdue }} />
-                      <EntityRow label="Tasks" data={{ total: entities.tasks.total, active: entities.tasks.total - entities.tasks.completed, issues: entities.tasks.blocked }} />
-                      <EntityRow label="Timesheets" data={{ total: entities.timesheets.total, active: entities.timesheets.pending, issues: 0 }} />
-                      <EntityRow label="Invoices" data={{ total: entities.invoices.total, active: entities.invoices.total - entities.invoices.paid, issues: entities.invoices.overdue }} />
-                      <EntityRow label="Change Requests" data={{ total: entities.changeRequests.total, active: entities.changeRequests.pending, issues: entities.changeRequests.leakageRisk }} />
-                      <EntityRow label="Contracts" data={{ total: entities.contracts.total, active: entities.contracts.active, issues: 0 }} />
-                      <EntityRow label="Forms" data={{ total: entities.forms.total, active: entities.forms.responses, issues: 0 }} />
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
             </div>
           </TabsContent>
 
@@ -197,47 +159,6 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="datahealth">
-            <div className="grid grid-cols-2 gap-6">
-              <Card className="bg-card border-border">
-                <CardHeader><CardTitle className="text-sm">Data Quality Checks</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  {Object.entries(dataHealth).map(([key, count]) => {
-                    const label = key.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase());
-                    const n = count as number;
-                    return (
-                      <div key={key} className={`flex items-center justify-between p-3 rounded-lg border ${n > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-border bg-muted/30"}`}>
-                        <div className="flex items-center gap-2">
-                          {n > 0 ? <AlertTriangle className="h-4 w-4 text-amber-400" /> : <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                          <span className="text-sm text-foreground">{label}</span>
-                        </div>
-                        <span className={`font-bold text-sm ${n > 0 ? "text-amber-400" : "text-emerald-400"}`}>{n}</span>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-card border-border">
-                <CardHeader><CardTitle className="text-sm">System Status</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  {[
-                    { label: "API Server", status: "Healthy", ok: true },
-                    { label: "Database", status: "Connected", ok: true },
-                    { label: "Automations Engine", status: "Running", ok: true },
-                  ].map(({ label, status, ok }) => (
-                    <div key={label} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
-                      <span className="text-sm text-foreground">{label}</span>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${ok ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
-                        <span className={`text-xs ${ok ? "text-emerald-400" : "text-red-400"}`}>{status}</span>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
     </div>

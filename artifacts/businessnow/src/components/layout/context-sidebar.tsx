@@ -15,6 +15,16 @@ import {
 interface NavItem { name: string; href: string; icon: React.ElementType; exact?: boolean; roles?: Role[] }
 interface NavSection { label: string; sublabel: string; items: NavItem[] }
 
+const CRM_ENABLED = import.meta.env.VITE_ENABLE_CRM_MODULES === "true";
+
+const PIPELINE_ITEMS: NavItem[] = [
+  { name: "Customers",     href: "/customers",     icon: Building2 },
+  ...(CRM_ENABLED ? [
+    { name: "Prospects",     href: "/prospects",     icon: Target },
+    { name: "Opportunities", href: "/opportunities", icon: Handshake },
+  ] as NavItem[] : []),
+];
+
 const SECTIONS: Record<string, NavSection> = {
   Home: {
     label: "Home",
@@ -24,11 +34,7 @@ const SECTIONS: Record<string, NavSection> = {
   Pipeline: {
     label: "Pipeline",
     sublabel: "Creates work",
-    items: [
-      { name: "Customers",     href: "/customers",     icon: Building2 },
-      { name: "Prospects",     href: "/prospects",     icon: Target },
-      { name: "Opportunities", href: "/opportunities", icon: Handshake },
-    ],
+    items: PIPELINE_ITEMS,
   },
   Projects: {
     label: "Projects",
