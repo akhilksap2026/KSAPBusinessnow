@@ -1,0 +1,33 @@
+// G-06 + G-08 + G-10: SOFT ALLOCATION · DAILY COMMENTS · PER-RESOURCE HOURS/DAY
+Context: Three schema additions and their corresponding UI changes — all touch the allocations, timesheets, and users/resources tables respectively.
+
+// ── G-06: SOFT ALLOCATION ──────────────────────────────────────
+
+1. In shared/schema.ts, on the allocations table add: isSoft: boolean('is_soft').notNull().default(false). Run npx drizzle-kit generate:pg then npx drizzle-kit push:pg.
+
+2. In the Allocations/Assignments list UI (client/src/pages/assignments/index.tsx or equivalent), add a "Soft" toggle switch to each allocation row. On toggle, PATCH /api/allocations/:id with { isSoft: true/false }.
+
+3. In the Capacity Heatmap component (client/src/components/capacity/CapacityHeatmap.tsx), find where allocation cells are coloured. Add a check: if allocation.isSoft === true, apply a CSS class cell-soft that renders with a repeating diagonal stripe pattern instead of a solid fill. Add this CSS: .cell-soft { background: repeating-linear-gradient(45deg, var(--accent-y), var(--accent-y) 3px, transparent 3px, transparent 8px); opacity: 0.6; }
+
+4. In capacity utilization calculations (server-side), add a ?includeSoft=true query param. When false (default), only count isSoft=false allocations toward confirmed utilization. When true, include soft allocations as pipeline demand. Update the heatmap legend to distinguish "Confirmed" vs "Pipeline (Soft)" demand.
+
+
+// ── G-08: DAILY CELL COMMENT (timesheet UI wire-up) ────────────
+
+5. The dailyComment field was already added to the timeEntries table in the G-02 migration. Now wire up the UI: in client/src/components/timesheets/WeeklyGrid.tsx, each cell (the intersection of a project/task row and a day column) needs an expand trigger. Add a small speech-bubble icon (💬) to the bottom-right of each cell that has hours > 0. On click, expand a textarea below the cell (not a modal — inline expansion keeps the grid scannable). Auto-save the comment on textarea blur via PATCH /api/time-entries/:id with { dailyComment: value }.
+
+6. In the timesheet approval view (PM's queue), render the daily comment as a tooltip on hover over each approved cell. This allows the PM to review comments before approving without navigating away.
+
+7. In the T&M invoice line generation function (server/services/invoiceGenerator.ts), update the line item description field: description: te.dailyComment || `${resource} — ${task}`. If a comment exists, prefer it as the invoice line description. If blank, fall back to the resource+task name format.
+
+
+// ── G-10: PER-RESOURCE HOURS/DAY ────────────────────────────────
+
+8. In shared/schema.ts, on the users (or resources) table add: hoursPerDay: decimal('hours_per_day', { precision: 4, scale: 2 }).notNull().default('8'). Run migration.
+
+9. In the Resource/Team member edit form (client/src/pages/team/[id].tsx or similar), add a "Available Hours/Day" number input field (min: 1, max: 24, step: 0.5) that saves to hoursPerDay. Display it on the resource card as "Availability: X hrs/day".
+
+10. In the task duration estimation utility (server/services/ganttService.ts or wherever estimated completion dates are computed), update the formula: instead of durationDays = estimatedHours / 8, query the assigned resource's hoursPerDay: durationDays = Math.ceil(estimatedHours / assignedResource.hoursPerDay). If no resource is assigned yet, default to 8. This affects both task creation and the cascade date recalculation from G-04.
+
+
+Output expected: Soft allocations render with stripe pattern in heatmap. Timesheet cells show inline comment expand on click. Per-resource hours/day editable in profile and applied to all task duration calculations.

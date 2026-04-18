@@ -271,21 +271,21 @@ export default function InvoicesList() {
   }, [data, filterStatus, search]);
 
   const kpis = useMemo(() => ({
-    outstanding: data.filter(i => i.status === "sent" || i.status === "overdue")
-      .reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
-    overdue: data.filter(i => i.status === "overdue")
-      .reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
-    overdueCount: data.filter(i => i.status === "overdue").length,
-    paid: data.filter(i => i.status === "paid")
-      .reduce((s, i) => s + (parseFloat(i.amount) || 0), 0),
-    draft: data.filter(i => i.status === "draft").length,
+    outstanding: (data as any[]).filter((i: any) => i.status === "sent" || i.status === "overdue")
+      .reduce((s: number, i: any) => s + (parseFloat(i.amount) || 0), 0),
+    overdue: (data as any[]).filter((i: any) => i.status === "overdue")
+      .reduce((s: number, i: any) => s + (parseFloat(i.amount) || 0), 0),
+    overdueCount: (data as any[]).filter((i: any) => i.status === "overdue").length,
+    paid: (data as any[]).filter((i: any) => i.status === "paid")
+      .reduce((s: number, i: any) => s + (parseFloat(i.amount) || 0), 0),
+    draft: (data as any[]).filter((i: any) => i.status === "draft").length,
   }), [data]);
 
   const counts = useMemo(() => ({
-    all: data.length, draft: data.filter(i => i.status === "draft").length,
-    sent: data.filter(i => i.status === "sent").length,
-    overdue: data.filter(i => i.status === "overdue").length,
-    paid: data.filter(i => i.status === "paid").length,
+    all: data.length, draft: (data as any[]).filter((i: any) => i.status === "draft").length,
+    sent: (data as any[]).filter((i: any) => i.status === "sent").length,
+    overdue: (data as any[]).filter((i: any) => i.status === "overdue").length,
+    paid: (data as any[]).filter((i: any) => i.status === "paid").length,
   }), [data]);
 
   if (isLoading) {

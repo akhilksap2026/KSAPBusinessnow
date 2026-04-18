@@ -298,7 +298,7 @@ export default function MilestonesList() {
   }
 
   const data = milestones ?? [];
-  const overdue = data.filter(m => m.status === "overdue" || (m.dueDate && m.dueDate < new Date().toISOString().split("T")[0] && m.status !== "completed")).length;
+  const overdue = (data as any[]).filter((m: any) => m.status === "overdue" || (m.dueDate && m.dueDate < new Date().toISOString().split("T")[0] && m.status !== "completed")).length;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">

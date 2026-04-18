@@ -59,6 +59,8 @@ import PMOSettingsPage from "@/pages/settings/pmo";
 // Portal
 import PortalPage from "@/pages/portal/index";
 
+const STANDALONE_PORTAL_ENABLED = import.meta.env.VITE_ENABLE_STANDALONE_PORTAL === "true";
+
 // ─── DashboardRedirect — role-appropriate home landing ───────────────────────
 
 function DashboardRedirect() {
@@ -103,9 +105,9 @@ export function AppRouter() {
     <Switch>
       <Route path="/login" component={Login} />
 
-      {/* ── External Portal ─────────────────────────────────────────────── */}
+      {/* ── External Portal (disabled by default; client_stakeholder uses main app RBAC) */}
       <Route path="/portal">
-        {role === "external"
+        {STANDALONE_PORTAL_ENABLED && role === "external"
           ? <ErrorBoundary><PortalPage /></ErrorBoundary>
           : role
             ? <Redirect to="/" />

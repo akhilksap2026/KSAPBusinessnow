@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useListTasks, useListProjects } from "@workspace/api-client-react";
+import { useAuthRole } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -275,6 +276,7 @@ function HierarchyRow({ node, depth, onStatusChange, updatingId }: {
 }
 
 export default function TasksPage() {
+  const { role } = useAuthRole();
   const { data: tasksData, isLoading, refetch } = useListTasks();
   const { data: projects } = useListProjects();
   const [localTasks, setLocalTasks] = useState<any[]>([]);
@@ -357,6 +359,7 @@ export default function TasksPage() {
   const filtered = useMemo(() => {
     if (!localTasks) return [];
     return localTasks.filter(t => {
+      if (role === "client_stakeholder" && t.visibility === "internal_only") return false;
       if (filterStatus !== "all" && t.status !== filterStatus) return false;
       if (filterPriority !== "all" && t.priority !== filterPriority) return false;
       if (filterProject !== "all" && String(t.projectId) !== filterProject) return false;
@@ -368,7 +371,7 @@ export default function TasksPage() {
       }
       return true;
     });
-  }, [localTasks, filterStatus, filterPriority, filterProject, debouncedSearch]);
+  }, [localTasks, filterStatus, filterPriority, filterProject, debouncedSearch, role]);
 
   // Virtualizer — declared here so it has access to filtered
   const taskVirtualizer = useVirtualizer({

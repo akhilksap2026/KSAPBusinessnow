@@ -27,8 +27,9 @@ function parseTask(t: typeof tasksTable.$inferSelect) {
 const router: IRouter = Router();
 
 router.get("/tasks", async (req, res): Promise<void> => {
-  const { projectId, milestoneId, assignedTo, status, phaseId, priority, parentTaskId } = req.query as Record<string, string>;
+  const { projectId, milestoneId, assignedTo, status, phaseId, priority, parentTaskId, onlyCustomerVisible } = req.query as Record<string, string>;
   let tasks = await db.select().from(tasksTable).orderBy(tasksTable.createdAt);
+  if (onlyCustomerVisible === "true") tasks = tasks.filter((t) => t.visibility !== "internal_only");
   if (projectId) tasks = tasks.filter((t) => t.projectId === parseInt(projectId));
   if (milestoneId) tasks = tasks.filter((t) => t.milestoneId === parseInt(milestoneId));
   if (assignedTo) tasks = tasks.filter((t) => t.assignedToId === parseInt(assignedTo));

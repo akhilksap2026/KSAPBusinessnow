@@ -1218,22 +1218,22 @@ export default function TimesheetsList() {
 
   const myEntries = useMemo(() => {
     if (!timesheets || !myResource) return timesheets ?? [];
-    return timesheets.filter(t => t.resourceId === myResource.id);
+    return (timesheets as any[]).filter((t: any) => t.resourceId === myResource.id);
   }, [timesheets, myResource]);
 
   const reviewEntries = useMemo(() => {
     if (!timesheets) return [];
-    return timesheets
-      .filter(t => filterStatus === "all" || t.status === filterStatus)
-      .filter(t => filterProject === "all" || t.projectName === filterProject);
+    return (timesheets as any[])
+      .filter((t: any) => filterStatus === "all" || t.status === filterStatus)
+      .filter((t: any) => filterProject === "all" || t.projectName === filterProject);
   }, [timesheets, filterStatus, filterProject]);
 
   // Finance billing queue: approved + billable, grouped by project
   const billingGroups = useMemo(() => {
     if (!timesheets) return [];
-    const approved = timesheets.filter(t => t.status === "approved" && t.isBillable);
-    const map = new Map<number, { projectId: number; projectName: string; entries: typeof approved; totalHours: number }>();
-    approved.forEach(t => {
+    const approved = (timesheets as any[]).filter((t: any) => t.status === "approved" && t.isBillable);
+    const map = new Map<number, { projectId: number; projectName: string; entries: any[]; totalHours: number }>();
+    approved.forEach((t: any) => {
       if (!map.has(t.projectId)) map.set(t.projectId, { projectId: t.projectId, projectName: t.projectName, entries: [], totalHours: 0 });
       const g = map.get(t.projectId)!;
       g.entries.push(t);
@@ -1244,20 +1244,20 @@ export default function TimesheetsList() {
 
   const displayEntries = activeTab === "mine" ? myEntries : reviewEntries;
 
-  const projectNames = useMemo(() => {
+  const projectNames = useMemo((): string[] => {
     if (!timesheets) return [];
-    return [...new Set(timesheets.map(t => t.projectName).filter(Boolean))];
+    return [...new Set((timesheets as any[]).map((t: any) => t.projectName as string).filter(Boolean))];
   }, [timesheets]);
 
   const stats = useMemo(() => {
-    const src = activeTab === "mine" ? myEntries : (timesheets ?? []);
+    const src = (activeTab === "mine" ? myEntries : (timesheets ?? [])) as any[];
     return {
       total:        src.length,
-      submitted:    src.filter(t => t.status === "submitted").length,
-      approved:     src.filter(t => t.status === "approved").length,
-      rejected:     src.filter(t => t.status === "rejected").length,
-      totalHours:   Math.round(src.reduce((s, t) => s + (t.hoursLogged || 0), 0)),
-      pendingHours: Math.round(src.filter(t => t.status === "submitted").reduce((s, t) => s + (t.hoursLogged || 0), 0)),
+      submitted:    src.filter((t: any) => t.status === "submitted").length,
+      approved:     src.filter((t: any) => t.status === "approved").length,
+      rejected:     src.filter((t: any) => t.status === "rejected").length,
+      totalHours:   Math.round(src.reduce((s: number, t: any) => s + (t.hoursLogged || 0), 0)),
+      pendingHours: Math.round(src.filter((t: any) => t.status === "submitted").reduce((s: number, t: any) => s + (t.hoursLogged || 0), 0)),
     };
   }, [timesheets, myEntries, activeTab]);
 
@@ -1640,7 +1640,7 @@ export default function TimesheetsList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayEntries.map(ts => {
+              {(displayEntries as any[]).map((ts: any) => {
                 const badgeCfg = STATUS_BADGE[ts.status] || STATUS_BADGE.draft;
                 const isBusy = actingId === ts.id;
                 const isMyOwn = myResource && ts.resourceId === myResource.id;

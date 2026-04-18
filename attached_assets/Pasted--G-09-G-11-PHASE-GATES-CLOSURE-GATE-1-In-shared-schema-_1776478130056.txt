@@ -1,0 +1,20 @@
+// G-09 + G-11: PHASE GATES + CLOSURE GATE
+1. In shared/schema.ts, on the phases table add: entryCriteria: jsonb('entry_criteria').default([]), exitCriteria: jsonb('exit_criteria').default([])
+
+2. On the projects table add: performanceRating: integer('performance_rating'), actualCompletionDate: date('actual_completion_date'), profitabilitySnapshotAt: timestamp('profitability_snapshot_at'). Run migrations.
+
+3. In the project status PATCH endpoint (server-side), add guard: if newStatus === 'completed', query: (a) count of pending/unapproved time entries > 0 → reject with 400 "All time must be approved first", (b) if actualCompletionDate null → reject, (c) if performanceRating null → reject. Only allow if all pass.
+
+4. In client/src/components/projects/StatusChanger.tsx, intercept the "Mark Complete" action. Open a modal: step 1 = set actual completion date, step 2 = enter performance rating (1-5 star selector), step 3 = confirmation with a checklist of gate conditions and their pass/fail status. Only enable Submit when all pass.
+
+5. For phase gate: on phase status change, if moving to "In Progress", open a checklist modal showing entryCriteria items. User must check each. On Save, PATCH the phase with the updated entryCriteria array (with isChecked=true, checkedBy=userId, checkedAt=now).
+
+// ── P2-T18: APPROVAL DELEGATION (UX-03) ──────────────────────────
+
+6. In shared/schema.ts, create a new table: export const approvalDelegations = pgTable('approval_delegations', { id: serial('id').primaryKey(), delegatorId: integer('delegator_id').notNull().references(() => users.id), delegateId: integer('delegate_id').notNull().references(() => users.id), startDate: date('start_date').notNull(), endDate: date('end_date').notNull(), scope: varchar('scope', { length: 20 }).notNull().default('timesheets'), isActive: boolean('is_active').notNull().default(true) }). Run migration.
+
+7. Create server route POST /api/delegations — creates a delegation record. GET /api/delegations/mine — returns delegations where delegatorId = currentUser OR delegateId = currentUser. DELETE /api/delegations/:id — deactivates a delegation.
+
+8. In the timesheet approval queue GET handler (server/routes/timesheets.ts, the endpoint that returns timesheets pending approval), update the WHERE clause: instead of only WHERE approverId = currentUserId, also include timesheets where a valid delegation exists for today's date: OR (approverId IN (SELECT delegatorId FROM approval_delegations WHERE delegateId = currentUserId AND isActive = true AND startDate <= NOW() AND endDate >= NOW())). Delegated timesheets should render with a "Delegated from [PM Name]" tag in the approval UI.
+
+9. In the user profile/settings page, add a "Delegate Approval" section: a form with fields — Delegate To (user search dropdown, scoped to same level or above in hierarchy), Start Date, End Date. On submit POST /api/delegations. Show currently active delegations with a Revoke button.

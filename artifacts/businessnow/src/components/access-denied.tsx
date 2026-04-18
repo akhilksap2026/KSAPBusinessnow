@@ -19,7 +19,7 @@ export function AccessDenied({ allowedRoles }: AccessDeniedProps) {
     finance_lead:       "/finance",
     sales:              "/dashboard/sales",
     account_manager:    "/dashboard/am",
-    client_stakeholder: "/portal",
+    client_stakeholder: "/projects",
     admin:              "/dashboard/admin",
     consultant:         "/dashboard/pm",
   };

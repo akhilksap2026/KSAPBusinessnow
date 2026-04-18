@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useListProjects } from "@workspace/api-client-react";
+import { useAuthRole } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -787,6 +788,7 @@ function SaveAsTemplateDialog({ projectId, projectName, open, onClose }: { proje
 }
 
 export default function ProjectsList() {
+  const { role } = useAuthRole();
   const { data: projectsData, isLoading, refetch } = useListProjects();
   const [localProjects, setLocalProjects] = useState<any[]>([]);
   const [view, setView] = useState<"kanban" | "table" | "gantt">("kanban");
@@ -825,6 +827,7 @@ export default function ProjectsList() {
 
   const filtered = useMemo(() => {
     return localProjects.filter(p => {
+      if (role === "client_stakeholder" && !p.isExternal) return false;
       if (filterStatus !== "all" && p.status !== filterStatus) return false;
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase();
@@ -834,7 +837,7 @@ export default function ProjectsList() {
       }
       return true;
     });
-  }, [localProjects, filterStatus, debouncedSearch]);
+  }, [localProjects, filterStatus, debouncedSearch, role]);
 
   const counts = useMemo(() => ({
     all:       localProjects.length,
