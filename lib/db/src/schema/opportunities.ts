@@ -2,7 +2,7 @@ import { pgTable, text, serial, timestamp, integer, numeric, boolean, jsonb } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const OPPORTUNITY_STAGES = ["lead", "qualified", "discovery", "proposal", "negotiation", "won", "lost", "parked"] as const;
+export const OPPORTUNITY_STAGES = ["pre_qualification", "lead", "qualified", "discovery", "proposal", "negotiation", "won", "lost", "parked"] as const;
 export type OpportunityStage = typeof OPPORTUNITY_STAGES[number];
 
 export const OPPORTUNITY_TYPES = ["implementation", "cloud_migration", "ams", "certification", "rate_maintenance", "custom_development", "data_services"] as const;

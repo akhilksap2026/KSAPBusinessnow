@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { StatCard, PageHeader, SectionCard, StatusBadge, HealthBar } from "@/components/workspace/ui";
+import { useAuthRole } from "@/lib/auth";
 import {
   AlertTriangle, ExternalLink, RefreshCw, BarChart3, DollarSign,
-  Users, Calendar, TrendingDown, XCircle
+  Users, Calendar, TrendingDown, XCircle, Activity, TrendingUp, Info
 } from "lucide-react";
 
 const API = "/api";
@@ -18,6 +19,8 @@ function fmt(v: number) {
 }
 
 export default function PortfolioPage() {
+  const { role } = useAuthRole();
+  const isOpsRole = role === "admin" || role === "delivery_director";
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [directorData, setDirectorData] = useState<any>(null);
@@ -41,12 +44,12 @@ export default function PortfolioPage() {
     </div>
   );
 
-  const { summary, projects, accounts, upcomingGoLives, atRiskProjects } = data;
+  const { summary, projects, accounts, upcomingGoLives, atRiskProjects, operations } = data;
 
   return (
     <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
       <PageHeader
-        title="Executive Portfolio"
+        title="Portfolio Command Center"
         description="All active projects · Health · Revenue · Utilization · Risk"
         actions={
           <Button size="sm" variant="outline" onClick={load} className="gap-1.5">
@@ -79,6 +82,7 @@ export default function PortfolioPage() {
               <span className="ml-1.5 bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 py-px">{atRiskProjects.length}</span>
             )}
           </TabsTrigger>
+          {isOpsRole && <TabsTrigger value="operations">Operations</TabsTrigger>}
           <TabsTrigger value="director">Director View</TabsTrigger>
         </TabsList>
 
@@ -229,6 +233,129 @@ export default function PortfolioPage() {
             </div>
           )}
         </TabsContent>
+
+        {/* Operations Tab — admin/delivery_director only */}
+        {isOpsRole && (
+          <TabsContent value="operations">
+            {!operations ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
+                <Activity className="h-4 w-4" />Operations data not available
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Revenue & Cash Flow */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                  <StatCard label="Total ARR" value={fmt(operations.totalARR)} icon={TrendingUp} iconColor="text-emerald-600" subtext="contracted revenue" />
+                  <StatCard label="Collected" value={fmt(operations.invoiceCashFlow.paid)} icon={DollarSign} iconColor="text-emerald-600" subtext={`${operations.invoiceCashFlow.collectionRate}% rate`} />
+                  <StatCard label="Outstanding" value={fmt(operations.invoiceCashFlow.outstanding)} icon={DollarSign} iconColor="text-blue-500" subtext="sent / pending" />
+                  <StatCard label="Overdue" value={fmt(operations.invoiceCashFlow.overdue)} icon={AlertTriangle} iconColor={operations.invoiceCashFlow.overdue > 0 ? "text-red-600" : "text-muted-foreground"} subtext="past due" />
+                  <StatCard label="Draft" value={fmt(operations.invoiceCashFlow.draft)} icon={DollarSign} iconColor="text-muted-foreground" subtext="not sent yet" />
+                  <StatCard label="Collection Rate" value={`${operations.invoiceCashFlow.collectionRate}%`} icon={BarChart3} iconColor={operations.invoiceCashFlow.collectionRate >= 80 ? "text-emerald-600" : "text-amber-600"} subtext="paid / total" />
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {/* Project Status Distribution */}
+                  <SectionCard title="Project Status Distribution" actions={<Activity className="h-4 w-4 text-muted-foreground" />}>
+                    <div className="space-y-3">
+                      {operations.statusDistribution.map((s: any) => {
+                        const total = operations.statusDistribution.reduce((acc: number, x: any) => acc + x.value, 0);
+                        const pct = total > 0 ? Math.round((s.value / total) * 100) : 0;
+                        return (
+                          <div key={s.name} className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground w-20 shrink-0">{s.name}</span>
+                            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: s.color }} />
+                            </div>
+                            <span className="text-sm font-medium w-10 text-right">{s.value}</span>
+                            <span className="text-xs text-muted-foreground w-8">{pct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </SectionCard>
+
+                  {/* Resource Capacity Pulse */}
+                  <SectionCard title="Resource Capacity Pulse" actions={<Users className="h-4 w-4 text-muted-foreground" />}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 p-3 text-center">
+                        <p className="text-2xl font-bold text-orange-600">{operations.resourceCapacity.overallocated}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Overallocated (&gt;100%)</p>
+                      </div>
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-3 text-center">
+                        <p className="text-2xl font-bold text-blue-600">{operations.resourceCapacity.softBooked}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Active Allocations</p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                        <p className="text-2xl font-bold text-foreground">{operations.resourceCapacity.bench}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">On Bench</p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                        <p className="text-2xl font-bold text-foreground">{operations.resourceCapacity.total}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Total Headcount</p>
+                      </div>
+                    </div>
+                  </SectionCard>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {/* Margin Watch */}
+                  <SectionCard title="Margin Watch (Active Projects)" noPadding actions={<TrendingDown className="h-4 w-4 text-muted-foreground" />}>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-xs text-muted-foreground bg-muted/30">
+                          <th className="text-left px-4 py-2.5 font-medium">Project</th>
+                          <th className="text-right px-4 py-2.5 font-medium">Budget</th>
+                          <th className="text-right px-4 py-2.5 font-medium">Consumed</th>
+                          <th className="text-right px-4 py-2.5 font-medium">Margin</th>
+                          <th className="px-4 py-2.5" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {operations.marginWatch.map((p: any) => (
+                          <tr key={p.id} className="hover:bg-muted/20">
+                            <td className="px-4 py-2.5 font-medium text-sm">{p.name}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{fmt(p.budget)}</td>
+                            <td className="px-4 py-2.5 text-right text-xs">{fmt(p.consumedCost)}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {p.margin === null ? <span className="text-xs text-muted-foreground">—</span> : (
+                                <span className={`text-xs font-semibold ${p.margin < 20 ? "text-red-600" : p.margin < 40 ? "text-amber-600" : "text-emerald-600"}`}>{p.margin}%</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <Link href={`/projects/${p.id}`}><ExternalLink className="h-3 w-3 text-muted-foreground/40 hover:text-primary" /></Link>
+                            </td>
+                          </tr>
+                        ))}
+                        {operations.marginWatch.length === 0 && (
+                          <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-xs">No active projects</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </SectionCard>
+
+                  {/* Data Health Alerts */}
+                  <SectionCard title="Data Health Alerts" actions={<Info className="h-4 w-4 text-muted-foreground" />}>
+                    {operations.dataHealthAlerts.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-2xl mb-1">✓</div>
+                        <p className="text-sm text-muted-foreground">All data health checks passed</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {operations.dataHealthAlerts.map((a: any, i: number) => (
+                          <div key={i} className={`flex items-start gap-2 p-2.5 rounded-lg text-xs border ${a.severity === "warn" ? "border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300" : "border-blue-200 bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-300"}`}>
+                            {a.severity === "warn" ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> : <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
+                            {a.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </SectionCard>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        )}
 
         {/* Director View */}
         <TabsContent value="director">

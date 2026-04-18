@@ -1,0 +1,75 @@
+Refactor and implement these 3 product changes cleanly, using shared components, shared APIs, and server-side role/business-rule enforcement. Do not build duplicate screens. Keep the app running after each step, remove deprecated UI paths cleanly, and wire everything end-to-end.
+
+1) Unify Admin Dashboard + Executive Portfolio into one shared screen called “Portfolio & Operations”.
+- Replace the two separate views with one route, one page component, and one shared backend endpoint: /api/portfolio.
+- Partners/Executives should see: active projects, at-risk count, revenue billed, revenue at risk, account health scores, go-lives.
+- System Admins should see all of that plus an extra “Operations” tab with: ARR, invoice collection rate, resource capacity pulse, margin watch, delivery risk heatmap, data health alerts.
+- Role filtering must happen server-side on /api/portfolio. Admins receive the full payload; Partners/Executives receive only the scoped subset. Do not send admin-only data to non-admins.
+- Redirect old duplicate routes to the new shared route.
+- Reuse the same components/data pipeline for all roles.
+
+2) Remove the Prospects module and merge it into Opportunity Pipeline.
+- Delete the separate Prospects module from navigation and workflow.
+- Extend Opportunity stages so Stage 0 is Pre-Qualification, then Lead, Qualified, Proposal, Negotiation, Won, Lost.
+- A former Prospect is now just an Opportunity in Pre-Qualification, using the same data model, card UI, list view, and Kanban board.
+- Preserve fields like ACV potential, industry, region, segment.
+- Replace “Convert Prospect to Customer” with “Mark Won”.
+- “Mark Won” should be allowed at any stage >= Qualified and must trigger the same downstream delivery/finance notifications as the old conversion/win flow.
+- Update the pipeline KPI header to show:
+  - Total pipeline value = all stages
+  - Active pipeline = Lead onward
+  - Probability-adjusted weighted value = Qualified onward
+- Migrate old Prospect data into Opportunity records in Pre-Qualification and remove redundant data-entry paths.
+
+3) Add timesheet non-compliance actions directly in Today’s Actions queue.
+Implement 3 escalating actions for overdue timesheets:
+
+A. Send Reminder
+- PM can click “Remind” next to a non-submitter.
+- Send in-app notification: “Your timesheet for week of [date] is overdue. Please submit by [cutoff date].”
+- Log the action timestamp and show “Reminder sent [date/time]” on the same row.
+- Prevent duplicate/spam reminders.
+
+B. Lock Prior Week
+- Available from Wednesday of the following week onward, with configurable cutoff.
+- PM clicks “Lock Week” for a specific resource/week.
+- That week becomes read-only for the consultant.
+- Show consultant banner: “Week of [date] has been locked by [PM name]. Contact your PM to unlock.”
+- Locked weeks must be excluded from WIP calculations and flagged in the Finance dashboard as unbillable.
+- Enforce this server-side, not just in UI.
+
+C. Escalate to Resource Manager
+- If a consultant misses >= 2 consecutive weeks, show “Escalate”.
+- Clicking it creates a flagged item in Resource Manager dashboard linked to the resource and missing weeks.
+- RM handles it as a staffing/capacity/compliance issue.
+
+Track these events:
+- timesheet_reminder_sent
+- timesheet_week_locked
+- timesheet_escalated_to_rm
+
+Implementation requirements:
+- Centralize enums/constants for roles, opportunity stages, timesheet compliance rules, and analytics event names.
+- Use explicit request/response types for APIs.
+- Add or refactor backend endpoints/services as needed.
+- Remove duplicate screen logic and deprecated module code where safe.
+- Add loading, empty, and error states.
+- Add tests for:
+  - /api/portfolio role scoping
+  - Operations tab visible only to admins
+  - Prospect migration into Pre-Qualification
+  - unified opportunity Kanban/list behavior
+  - Mark Won allowed from Qualified onward and triggering downstream flows
+  - reminder/lock/escalate rules
+  - locked weeks excluded from WIP
+  - analytics events firing correctly
+
+Deliverables:
+- working implementation
+- concise summary of architecture changes
+- list of files changed
+- migration notes
+- deprecated routes/modules removed or redirected
+- assumptions made if current codebase differs from requested behavior
+
+Prioritize maintainability, shared architecture, and server-enforced rules over quick UI-only changes.

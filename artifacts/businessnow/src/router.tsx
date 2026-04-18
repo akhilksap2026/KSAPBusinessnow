@@ -41,8 +41,6 @@ import ChangesPage from "@/pages/changes/index";
 // Opportunities
 import OpportunitiesPage from "@/pages/opportunities/index";
 
-import ProspectsPage from "@/pages/prospects/index";
-import ProspectDetail from "@/pages/prospects/detail";
 import RateCardsPage from "@/pages/rate-cards/index";
 
 // Resource Command extras
@@ -72,7 +70,7 @@ function DashboardRedirect() {
     case "finance_lead":       return <Redirect to="/finance" />;
     case "sales":              return <Redirect to="/customers" />;
     case "account_manager":    return <Redirect to="/customers" />;
-    case "admin":              return <Redirect to="/dashboard/admin" />;
+    case "admin":              return <Redirect to="/portfolio" />;
     case "consultant":         return <Redirect to="/timesheets" />;
     default:                   return <Redirect to="/dashboard/pm" />;
   }
@@ -126,7 +124,7 @@ export function AppRouter() {
       {/* ── Customer Management ────────────────────────────────────────── */}
       <Route path="/customers"><Guard><AccountsList /></Guard></Route>
       <Route path="/accounts"><Redirect to="/customers" /></Route>
-      <Route path="/prospects"><Guard><ProspectsPage /></Guard></Route>
+      <Route path="/prospects"><Redirect to="/opportunities" /></Route>
       <Route path="/opportunities"><Guard><OpportunitiesPage /></Guard></Route>
 
       {/* ── Resource Command ───────────────────────────────────────────── */}
@@ -194,9 +192,7 @@ export function AppRouter() {
       <Route path="/projects/:id"><Guard><ProjectDetail /></Guard></Route>
       <Route path="/customers/:id"><Guard><AccountDetail /></Guard></Route>
       <Route path="/accounts/:id">{(params) => <Redirect to={`/customers/${params.id}`} />}</Route>
-      <Route path="/prospects/:id">
-        <Guard roles={["account_manager", "delivery_director", "admin"] as Role[]}><ProspectDetail /></Guard>
-      </Route>
+      <Route path="/prospects/:id">{(params) => <Redirect to={`/opportunities`} />}</Route>
       <Route path="/resources/:id">
         <Guard roles={ROUTE_ROLES["/resources/:id"]}><ResourceDetail /></Guard>
       </Route>

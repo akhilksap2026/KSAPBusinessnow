@@ -51,7 +51,6 @@ const SECTIONS: NavSection[] = [
     items: [
       { name: "Customers", href: "/accounts", icon: Building2 },
       ...(CRM_ENABLED ? [
-        { name: "Prospects",     href: "/prospects",     icon: Target },
         { name: "Opportunities", href: "/opportunities", icon: Handshake },
       ] as NavItem[] : []),
     ],

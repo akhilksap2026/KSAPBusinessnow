@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, inArray, or, lte, gte } from "drizzle-orm";
-import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable, approvalDelegationsTable, projectsTable, timeEntryCollaboratorsTable } from "@workspace/db";
+import { db, timesheetsTable, resourcesTable, tasksTable, allocationsTable, rateCardsTable, usersTable, approvalDelegationsTable, projectsTable, timeEntryCollaboratorsTable, notificationsTable, timesheetComplianceEventsTable, timesheetWeekLocksTable } from "@workspace/db";
 import { z } from "zod";
 import {
   ListTimesheetsQueryParams,
@@ -60,13 +60,25 @@ router.get("/timesheets/missing", async (req, res): Promise<void> => {
   monday.setDate(today.getDate() + daysToMonday);
   const weekStart = monday.toISOString().split("T")[0];
 
-  const [allResources, weekTimesheets] = await Promise.all([
+  // Previous week (for consecutive miss detection)
+  const prevMonday = new Date(monday);
+  prevMonday.setDate(monday.getDate() - 7);
+  const prevWeekStart = prevMonday.toISOString().split("T")[0];
+
+  const [allResources, weekTimesheets, prevWeekTimesheets, complianceEvents, weekLocks] = await Promise.all([
     db.select({ id: resourcesTable.id, name: resourcesTable.name })
       .from(resourcesTable)
       .where(eq(resourcesTable.status, "available")),
     db.select({ resourceId: timesheetsTable.resourceId, status: timesheetsTable.status })
       .from(timesheetsTable)
       .where(eq(timesheetsTable.weekStart, weekStart)),
+    db.select({ resourceId: timesheetsTable.resourceId, status: timesheetsTable.status })
+      .from(timesheetsTable)
+      .where(eq(timesheetsTable.weekStart, prevWeekStart)),
+    db.select().from(timesheetComplianceEventsTable)
+      .where(eq(timesheetComplianceEventsTable.weekStart, weekStart)),
+    db.select().from(timesheetWeekLocksTable)
+      .where(and(eq(timesheetWeekLocksTable.weekStart, weekStart), eq(timesheetWeekLocksTable.isActive, true))),
   ]);
 
   const submittedResourceIds = new Set(
@@ -75,14 +87,174 @@ router.get("/timesheets/missing", async (req, res): Promise<void> => {
       .map(t => t.resourceId)
   );
 
-  const missingResources = allResources.filter(r => !submittedResourceIds.has(r.id));
+  const prevSubmittedResourceIds = new Set(
+    prevWeekTimesheets
+      .filter(t => t.status === "submitted" || t.status === "approved")
+      .map(t => t.resourceId)
+  );
+
+  const missingResources = allResources
+    .filter(r => !submittedResourceIds.has(r.id))
+    .map(r => {
+      const reminderEvent = complianceEvents
+        .filter(e => e.resourceId === r.id && e.actionType === "reminder_sent")
+        .sort((a, b) => b.performedAt.getTime() - a.performedAt.getTime())[0];
+      const escalateEvent = complianceEvents
+        .filter(e => e.resourceId === r.id && e.actionType === "escalated_to_rm")
+        .sort((a, b) => b.performedAt.getTime() - a.performedAt.getTime())[0];
+      const isLocked = weekLocks.some(l => l.resourceId === r.id);
+      const missedPrevWeek = !prevSubmittedResourceIds.has(r.id);
+      return {
+        id: r.id,
+        name: r.name,
+        missedPrevWeek,
+        reminderSentAt: reminderEvent ? reminderEvent.performedAt.toISOString() : null,
+        isLocked,
+        isEscalated: !!escalateEvent,
+        escalatedAt: escalateEvent ? escalateEvent.performedAt.toISOString() : null,
+      };
+    });
+
+  // Lock eligibility: Wednesday of following week (day 3) or later
+  const lockEligibleFromDate = new Date(monday);
+  lockEligibleFromDate.setDate(monday.getDate() + 9); // following Wednesday
+  const lockEligible = today >= lockEligibleFromDate;
 
   res.json({
     weekStart,
     missingCount: missingResources.length,
     totalResources: allResources.length,
     missingResources,
+    lockEligible,
   });
+});
+
+// ── Compliance: Send Reminder ─────────────────────────────────────────────────
+router.post("/timesheets/compliance/remind", async (req, res): Promise<void> => {
+  const { resourceId, resourceName, weekStart, performedByName } = req.body;
+  if (!resourceId || !weekStart) { res.status(400).json({ error: "resourceId and weekStart required" }); return; }
+
+  // Check for recent reminder (anti-spam: max 1 per day per resource/week)
+  const today = new Date().toISOString().split("T")[0];
+  const recentReminders = await db.select()
+    .from(timesheetComplianceEventsTable)
+    .where(and(
+      eq(timesheetComplianceEventsTable.resourceId, resourceId),
+      eq(timesheetComplianceEventsTable.weekStart, weekStart),
+      eq(timesheetComplianceEventsTable.actionType, "reminder_sent"),
+    ));
+
+  const sentToday = recentReminders.some(e => e.performedAt.toISOString().split("T")[0] === today);
+  if (sentToday) {
+    res.status(409).json({ error: "A reminder was already sent today for this resource and week" });
+    return;
+  }
+
+  // Create in-app notification for the resource
+  const cutoffDate = new Date(weekStart);
+  cutoffDate.setDate(cutoffDate.getDate() + 12); // Wednesday of following week
+  const cutoffStr = cutoffDate.toISOString().split("T")[0];
+
+  await Promise.all([
+    db.insert(timesheetComplianceEventsTable).values({
+      resourceId,
+      resourceName: resourceName ?? null,
+      weekStart,
+      actionType: "reminder_sent",
+      performedByName: performedByName ?? null,
+    }),
+    db.insert(notificationsTable).values({
+      userId: resourceId,
+      type: "timesheet_reminder",
+      title: "Timesheet Overdue",
+      message: `Your timesheet for week of ${weekStart} is overdue. Please submit by ${cutoffStr}.`,
+      entityType: "timesheet",
+    }).catch(() => null),
+  ]);
+
+  res.json({ success: true, sentAt: new Date().toISOString() });
+});
+
+// ── Compliance: Lock Prior Week ───────────────────────────────────────────────
+router.post("/timesheets/compliance/lock-week", async (req, res): Promise<void> => {
+  const { resourceId, resourceName, weekStart, performedByName } = req.body;
+  if (!resourceId || !weekStart) { res.status(400).json({ error: "resourceId and weekStart required" }); return; }
+
+  // Check lock eligibility: must be Wednesday of following week (9 days after weekStart) or later
+  const weekStartDate = new Date(weekStart);
+  const lockEligibleDate = new Date(weekStartDate);
+  lockEligibleDate.setDate(weekStartDate.getDate() + 9);
+  if (new Date() < lockEligibleDate) {
+    res.status(403).json({ error: "Lock is not available until Wednesday of the following week" });
+    return;
+  }
+
+  // Check if already locked
+  const existing = await db.select()
+    .from(timesheetWeekLocksTable)
+    .where(and(
+      eq(timesheetWeekLocksTable.resourceId, resourceId),
+      eq(timesheetWeekLocksTable.weekStart, weekStart),
+      eq(timesheetWeekLocksTable.isActive, true),
+    ));
+  if (existing.length > 0) {
+    res.status(409).json({ error: "This week is already locked for this resource" });
+    return;
+  }
+
+  await Promise.all([
+    db.insert(timesheetWeekLocksTable).values({
+      resourceId,
+      weekStart,
+      lockedByName: performedByName ?? null,
+      isActive: true,
+    }),
+    db.insert(timesheetComplianceEventsTable).values({
+      resourceId,
+      resourceName: resourceName ?? null,
+      weekStart,
+      actionType: "week_locked",
+      performedByName: performedByName ?? null,
+      notes: `Week locked by ${performedByName ?? "PM"}. Week becomes read-only for consultant.`,
+    }),
+    db.insert(notificationsTable).values({
+      userId: resourceId,
+      type: "timesheet_locked",
+      title: "Timesheet Week Locked",
+      message: `Week of ${weekStart} has been locked by ${performedByName ?? "your PM"}. Contact your PM to unlock.`,
+      entityType: "timesheet",
+    }).catch(() => null),
+  ]);
+
+  res.json({ success: true, lockedAt: new Date().toISOString() });
+});
+
+// ── Compliance: Escalate to Resource Manager ──────────────────────────────────
+router.post("/timesheets/compliance/escalate", async (req, res): Promise<void> => {
+  const { resourceId, resourceName, weekStart, performedByName, missingWeeks } = req.body;
+  if (!resourceId || !weekStart) { res.status(400).json({ error: "resourceId and weekStart required" }); return; }
+
+  // Log compliance event
+  await db.insert(timesheetComplianceEventsTable).values({
+    resourceId,
+    resourceName: resourceName ?? null,
+    weekStart,
+    actionType: "escalated_to_rm",
+    performedByName: performedByName ?? null,
+    notes: `Escalated due to ${missingWeeks ?? 2} consecutive missing weeks. Requires RM attention for staffing/compliance.`,
+  });
+
+  // Create RM notification
+  await db.insert(notificationsTable).values({
+    userId: 0, // broadcast to RM role — handled by RM dashboard filter
+    type: "timesheet_escalation",
+    title: "Timesheet Compliance Escalation",
+    message: `${resourceName ?? `Resource #${resourceId}`} has missed ${missingWeeks ?? "multiple"} consecutive timesheet submissions. Flagged for RM review.`,
+    entityType: "resource",
+    entityId: resourceId,
+  }).catch(() => null);
+
+  res.json({ success: true, escalatedAt: new Date().toISOString() });
 });
 
 async function resolveResourceIdForUser(dbUserId: number): Promise<number | null> {

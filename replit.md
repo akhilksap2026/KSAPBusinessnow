@@ -31,6 +31,29 @@ Internal PSA (Professional Services Automation) platform for an OTM consulting f
 | Sprint 5 | CRM: Prospects module + milestone types + payment alerts + opportunity prospect link + customer kanban | ✅ Complete |
 | Sprint 6 | Timesheets + Rate Cards + Billing (admin project, collaboration, PM approval) | ✅ Complete |
 | Sprint 7 | RBAC Dual-Mode Identity (role switcher, multi-role users, self-approval prevention, delegation, user management) | ✅ Complete |
+| Sprint 8 | Portfolio unification, Prospects→Opportunities merge, Timesheet compliance actions | ✅ Complete |
+
+## Sprint 8 Changes (April 2026)
+
+### T001 — Portfolio & Operations Unification
+- **Router**: Admin role now lands on `/portfolio` (was `/dashboard/admin`)
+- **Portfolio page** (`portfolio/index.tsx`): Renamed to "Portfolio Command Center"; added role-scoped **Operations tab** (admin/delivery_director only) showing ARR, cash flow breakdown, project status distribution, resource capacity pulse, margin watch table, and data health alerts
+- **API** (`account_health.ts`): `/api/portfolio` now returns an `operations` block for admin/delivery_director roles — includes totalARR, invoiceCashFlow, statusDistribution, resourceCapacity, marginWatch, dataHealthAlerts
+
+### T002 — Prospects → Opportunities Merge
+- **Schema**: Added `pre_qualification` as first stage in `OPPORTUNITY_STAGES` (lib/db/src/schema/opportunities.ts)
+- **Opportunities UI**: All stage maps (STAGES, STAGE_LABELS, STAGE_COLORS, STAGE_HEADER, STAGE_PROB) updated with pre_qualification at prob=5%
+- **Sidebar**: Prospects nav link removed; only Opportunities shown under Pipeline
+- **Router**: `/prospects` and `/prospects/:id` now redirect to `/opportunities`
+
+### T003 — Timesheet Compliance Actions
+- **New DB tables**: `timesheet_compliance_events`, `timesheet_week_locks` (lib/db/src/schema/timesheet_compliance.ts)
+- **API** (`timesheets.ts`): Three new POST endpoints:
+  - `POST /api/timesheets/compliance/remind` — sends in-app notification, anti-spam (1/day limit)
+  - `POST /api/timesheets/compliance/lock-week` — locks a resource's week (eligible from following Wednesday)
+  - `POST /api/timesheets/compliance/escalate` — logs RM escalation event + notification
+- **API** (`/timesheets/missing`): Extended response includes `reminderSentAt`, `isLocked`, `isEscalated`, `missedPrevWeek`, `lockEligible`
+- **PM Dashboard** (`pm.tsx`): Missing timesheets banner replaced with per-resource compliance action card showing Remind / Lock / Escalate buttons with inline state (inflight spinner, disabled state, status badges)
 
 ## Sprint 1 Schema Changes (April 2026)
 

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import {
   db, accountsTable, projectsTable, milestonesTable, tasksTable,
   invoicesTable, changeRequestsTable, formResponsesTable, renewalSignalsTable,
-  allocationsTable,
+  allocationsTable, resourcesTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -129,13 +129,16 @@ router.get("/accounts/:id/health", async (req, res): Promise<void> => {
 });
 
 router.get("/portfolio", async (req, res): Promise<void> => {
-  const [projects, accounts, milestones, invoices, changeRequests, allocations] = await Promise.all([
+  const isOpsRole = req.userRole === "admin" || req.userRole === "delivery_director";
+
+  const [projects, accounts, milestones, invoices, changeRequests, allocations, resources] = await Promise.all([
     db.select().from(projectsTable),
     db.select().from(accountsTable),
     db.select().from(milestonesTable),
     db.select().from(invoicesTable),
     db.select().from(changeRequestsTable),
     db.select().from(allocationsTable),
+    isOpsRole ? db.select().from(resourcesTable) : Promise.resolve([]),
   ]);
 
   const today = new Date().toISOString().split("T")[0];
@@ -181,6 +184,60 @@ router.get("/portfolio", async (req, res): Promise<void> => {
     };
   });
 
+  // ── Operations block (admin/delivery_director only) ─────────────────────────
+  let operations: Record<string, unknown> | null = null;
+  if (isOpsRole) {
+    const totalARR = accounts.reduce((s, a) => s + parseFloat(a.annualContractValue || "0"), 0);
+    const totalInvoiceValue = invoices.reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+    const paidValue = invoices.filter(i => i.status === "paid").reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+    const sentValue = invoices.filter(i => i.status === "sent").reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+    const overdueValue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+    const draftValue = invoices.filter(i => i.status === "draft").reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+    const collectionRate = totalInvoiceValue > 0 ? Math.round((paidValue / totalInvoiceValue) * 100) : 0;
+
+    // Project status distribution
+    const statusDistribution = [
+      { name: "Active", value: projects.filter(p => p.status === "active").length, color: "#3b82f6" },
+      { name: "At Risk", value: projects.filter(p => p.status === "at_risk" || ((p.healthScore || 75) < 65 && p.status === "active")).length, color: "#f59e0b" },
+      { name: "On Hold", value: projects.filter(p => p.status === "on_hold").length, color: "#6b7280" },
+      { name: "Completed", value: projects.filter(p => p.status === "completed").length, color: "#10b981" },
+    ].filter(s => s.value > 0);
+
+    // Resource capacity pulse
+    const todayStr = today;
+    const activeAllocs = allocations.filter(a => (!a.endDate || a.endDate >= todayStr) && (!a.startDate || a.startDate <= todayStr));
+    const resourceLoads: Record<number, number> = {};
+    activeAllocs.forEach(a => { resourceLoads[a.resourceId] = (resourceLoads[a.resourceId] || 0) + (a.allocationPct || 0); });
+    const overallocatedCount = Object.values(resourceLoads).filter(pct => pct > 100).length;
+    const softBookedCount = Math.max(0, Object.keys(resourceLoads).length - overallocatedCount);
+    const benchCount = Math.max(0, resources.length - Object.keys(resourceLoads).length);
+    const openRequestsCount = 0; // Would require staffing_requests table
+
+    // Margin watch: active projects sorted by lowest margin
+    const marginProjects = activeProjects.map(p => {
+      const pInvoices = invoices.filter(i => i.projectId === p.id);
+      const invoiced = pInvoices.reduce((s, i) => s + parseFloat(i.amount || "0"), 0);
+      const budget = parseFloat(p.budgetValue || "0");
+      const margin = budget > 0 ? Math.round(((budget - (parseFloat(p.consumedCost || "0") || 0)) / budget) * 100) : null;
+      return { id: p.id, name: p.name, budget, invoiced, consumedCost: parseFloat(p.consumedCost || "0"), margin };
+    }).sort((a, b) => (a.margin ?? 100) - (b.margin ?? 100)).slice(0, 8);
+
+    // Data health alerts
+    const dataHealthAlerts = [
+      ...(projects.filter(p => p.status === "active" && !p.pmName).map(p => ({ type: "missing_pm", message: `${p.name} has no PM assigned`, severity: "warn" as const }))),
+      ...(projects.filter(p => p.status === "active" && !p.goLiveDate).map(p => ({ type: "missing_golive", message: `${p.name} has no go-live date`, severity: "info" as const }))),
+    ].slice(0, 10);
+
+    operations = {
+      totalARR,
+      invoiceCashFlow: { paid: paidValue, outstanding: sentValue, overdue: overdueValue, draft: draftValue, collectionRate },
+      statusDistribution,
+      resourceCapacity: { overallocated: overallocatedCount, softBooked: softBookedCount, bench: benchCount, openRequests: openRequestsCount, total: resources.length },
+      marginWatch: marginProjects,
+      dataHealthAlerts,
+    };
+  }
+
   res.json({
     summary: {
       activeProjects: activeProjects.length, totalProjects: projects.length,
@@ -195,6 +252,7 @@ router.get("/portfolio", async (req, res): Promise<void> => {
     accounts: accountSummaries,
     upcomingGoLives: upcomingGoLives.map(p => ({ id: p.id, name: p.name, goLiveDate: p.goLiveDate, accountName: p.accountName, pmName: p.pmName })),
     atRiskProjects: atRiskProjects.map(p => ({ id: p.id, name: p.name, healthScore: p.healthScore, accountName: p.accountName, budgetValue: parseFloat(p.budgetValue || "0"), billedValue: parseFloat(p.billedValue || "0") })),
+    ...(operations !== null ? { operations } : {}),
   });
 });
 

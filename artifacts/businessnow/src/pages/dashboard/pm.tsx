@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   ClipboardList, AlertCircle, CheckCircle2, Clock, AlertTriangle,
   Flame, Calendar, ArrowRight, Users, FileText, PlusCircle, RefreshCw,
-  Rocket, ShieldAlert, ThumbsUp, AlarmClock, LayoutList,
+  Rocket, ShieldAlert, ThumbsUp, AlarmClock, LayoutList, Bell, Lock, TrendingUp,
 } from "lucide-react";
 import { format, isBefore, addDays } from "date-fns";
 
@@ -74,7 +74,9 @@ export default function PMDashboard() {
   const [milestones, setMilestones] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [timesheets, setTimesheets] = useState<any[]>([]);
-  const [missingTimesheets, setMissingTimesheets] = useState<{ missingCount: number; totalResources: number; weekStart: string; missingResources: { id: number; name: string }[] } | null>(null);
+  interface MissingResource { id: number; name: string; missedPrevWeek?: boolean; reminderSentAt?: string | null; isLocked?: boolean; isEscalated?: boolean; escalatedAt?: string | null; }
+  const [missingTimesheets, setMissingTimesheets] = useState<{ missingCount: number; totalResources: number; weekStart: string; missingResources: MissingResource[]; lockEligible?: boolean; } | null>(null);
+  const [complianceLoading, setComplianceLoading] = useState<Record<number, string>>({});
   const [digest, setDigest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [projectScope, setProjectScope] = useState<"mine" | "all">(
@@ -106,6 +108,32 @@ export default function PMDashboard() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const complianceAction = async (action: "remind" | "lock-week" | "escalate", resource: MissingResource) => {
+    const key = `${resource.id}-${action}`;
+    setComplianceLoading(p => ({ ...p, [resource.id]: action }));
+    try {
+      const res = await fetch(`${API}/timesheets/compliance/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceId: resource.id,
+          resourceName: resource.name,
+          weekStart: missingTimesheets?.weekStart,
+          performedByName: "PM",
+          missingWeeks: resource.missedPrevWeek ? 2 : 1,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }));
+        alert(err.error || "Action failed");
+      } else {
+        await load();
+      }
+    } finally {
+      setComplianceLoading(p => { const n = { ...p }; delete n[resource.id]; return n; });
+    }
+  };
 
   if (loading) {
     return (
@@ -171,24 +199,98 @@ export default function PMDashboard() {
         </div>
       </div>
 
-      {/* Missing timesheet reminder banner */}
+      {/* Missing Timesheets — Compliance Action Centre */}
       {missingTimesheets && missingTimesheets.missingCount > 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800/50 px-4 py-3">
-          <AlarmClock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-              {missingTimesheets.missingCount} team member{missingTimesheets.missingCount !== 1 ? "s have" : " has"} not submitted timesheets for this week.
-            </p>
-            {missingTimesheets.missingResources.length <= 5 && (
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                Missing: {missingTimesheets.missingResources.map(r => r.name).join(", ")}
+        <Card className="border-amber-200 dark:border-amber-800/50">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                <AlarmClock className="h-4 w-4" />
+                Timesheet Non-Compliance — Week of {missingTimesheets.weekStart}
+                <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200">
+                  {missingTimesheets.missingCount} missing
+                </Badge>
+              </CardTitle>
+              <button onClick={() => setLocation("/timesheets")} className="text-xs text-amber-600 underline underline-offset-2 hover:opacity-80">
+                View All →
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="space-y-2">
+              {missingTimesheets.missingResources.map(r => {
+                const inFlight = complianceLoading[r.id];
+                const canLock = missingTimesheets.lockEligible && !r.isLocked;
+                const canEscalate = r.missedPrevWeek && !r.isEscalated;
+                return (
+                  <div key={r.id} className="flex flex-wrap items-center gap-2 py-2 px-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{r.name}</span>
+                        {r.isEscalated && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">Escalated</span>
+                        )}
+                        {r.isLocked && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                            <Lock className="h-2.5 w-2.5" />Locked
+                          </span>
+                        )}
+                        {r.missedPrevWeek && !r.isEscalated && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">2nd miss</span>
+                        )}
+                      </div>
+                      {r.reminderSentAt && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Reminder sent {format(new Date(r.reminderSentAt), "MMM d, h:mm a")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-100"
+                        disabled={!!inFlight || !!r.reminderSentAt}
+                        onClick={() => complianceAction("remind", r)}
+                        title={r.reminderSentAt ? "Already reminded today" : "Send reminder notification"}
+                      >
+                        {inFlight === "remind" ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <Bell className="h-3 w-3" />}
+                        Remind
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={`h-7 text-xs gap-1 ${canLock ? "border-slate-400 text-slate-700 hover:bg-slate-100" : "opacity-40"}`}
+                        disabled={!!inFlight || !canLock}
+                        onClick={() => complianceAction("lock-week", r)}
+                        title={!missingTimesheets.lockEligible ? "Lock available from Wednesday of following week" : r.isLocked ? "Already locked" : "Lock this week for resource"}
+                      >
+                        {inFlight === "lock-week" ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <Lock className="h-3 w-3" />}
+                        Lock
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={`h-7 text-xs gap-1 ${canEscalate ? "border-red-400 text-red-700 hover:bg-red-50" : "opacity-40"}`}
+                        disabled={!!inFlight || !canEscalate}
+                        onClick={() => complianceAction("escalate", r)}
+                        title={r.isEscalated ? "Already escalated" : !r.missedPrevWeek ? "Escalation requires 2 consecutive misses" : "Escalate to Resource Manager"}
+                      >
+                        {inFlight === "escalate" ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+                        Escalate
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {!missingTimesheets.lockEligible && (
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Lock becomes available from Wednesday of the following week.
               </p>
             )}
-          </div>
-          <button onClick={() => setLocation("/timesheets")} className="text-xs font-medium text-amber-700 dark:text-amber-400 underline underline-offset-2 hover:opacity-80 whitespace-nowrap shrink-0">
-            View Timesheets →
-          </button>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Today's Actions */}

@@ -23,16 +23,18 @@ import {
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
 
-const STAGES = ["lead", "qualified", "discovery", "proposal", "negotiation", "won", "lost", "parked"] as const;
+const STAGES = ["pre_qualification", "lead", "qualified", "discovery", "proposal", "negotiation", "won", "lost", "parked"] as const;
 type Stage = typeof STAGES[number];
 
 const STAGE_LABELS: Record<Stage, string> = {
+  pre_qualification: "Pre-Qualification",
   lead: "Lead", qualified: "Qualified", discovery: "Discovery",
   proposal: "Proposal", negotiation: "Negotiation",
   won: "Won", lost: "Lost", parked: "Parked",
 };
 
 const STAGE_COLORS: Record<Stage, string> = {
+  pre_qualification: "bg-slate-800/60 text-slate-400 border-slate-600/30",
   lead:        "bg-muted/60 text-muted-foreground border-border",
   qualified:   "bg-blue-950/40 text-blue-300 border-blue-500/30",
   discovery:   "bg-violet-950/40 text-violet-300 border-violet-500/30",
@@ -44,6 +46,7 @@ const STAGE_COLORS: Record<Stage, string> = {
 };
 
 const STAGE_HEADER: Record<Stage, string> = {
+  pre_qualification: "border-t-slate-500",
   lead:        "border-t-slate-400",
   qualified:   "border-t-blue-400",
   discovery:   "border-t-violet-400",
@@ -55,6 +58,7 @@ const STAGE_HEADER: Record<Stage, string> = {
 };
 
 const STAGE_PROB: Record<Stage, number> = {
+  pre_qualification: 5,
   lead: 10, qualified: 30, discovery: 10, proposal: 50,
   negotiation: 70, won: 100, lost: 0, parked: 0,
 };
