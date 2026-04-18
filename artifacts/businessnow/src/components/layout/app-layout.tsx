@@ -33,6 +33,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (!user) return;
     const shownKey = `otmnow_context_shown_${user.id}`;
     if (sessionStorage.getItem(shownKey)) return;
+    if (new URLSearchParams(window.location.search).get("skipContext") === "1") {
+      sessionStorage.setItem(shownKey, "1");
+      return;
+    }
     const email = encodeURIComponent(`${user.id}@businessnow.com`);
     fetch(`/api/me/context?email=${email}`)
       .then(r => r.ok ? r.json() : null)
